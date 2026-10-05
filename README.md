@@ -7,8 +7,8 @@ Liapoldus Studio — отдельный клиент для обслуживан
 
 | Вариант | Entry point | Presentation | Привязка к Core |
 | --- | --- | --- | --- |
-| Desktop | корневой `main.go` | Wails bindings | целевой режим допускает direct и SSH bridge; сами подключения пока не реализованы |
-| Web | `cmd/studio-web/main.go` | HTTP + same-origin API | один `coreEndpoint` из внешнего JSON-конфига; переключения и SSH bridge нет |
+| Desktop | `cmd/desktop/main.go` | Wails bindings | целевой режим допускает direct и SSH bridge; сами подключения пока не реализованы |
+| Web | `cmd/web/main.go` | HTTP + same-origin API | один `coreEndpoint` из внешнего JSON-конфига; переключения и SSH bridge нет |
 
 React-приложение и основные компоненты общие. Тонкие адаптеры в
 `frontend/src/api/` направляют вызовы к Wails bindings либо к same-origin REST.
@@ -28,26 +28,30 @@ Core напрямую.
 - `internal/infrastructure` — конфигурация и технические адаптеры;
 - `internal/presentation/wails` и `internal/presentation/web` — отдельные
   presentation adapters;
-- корневой `main.go` и `cmd/studio-web/main.go` — независимые composition roots.
+- `cmd/desktop/main.go` и `cmd/web/main.go` — независимые composition roots.
+- Runtime-конфиги хранятся в `configs/`. Wails CLI требует `wails.json` в
+  каталоге запуска; Makefile временно формирует его из `configs/wails.json`
+  внутри `cmd/desktop/` и удаляет после завершения команды.
 
 ## Разработка
 
 Требуются Go, Node.js/npm и Wails v2 CLI для desktop-варианта.
 
 ```sh
-wails dev
-(cd frontend && npm ci && npm run build)     # Wails frontend
-(cd frontend && npm run build:web)           # web assets для Go embed
-cp configs/studio-web.example.json configs/studio-web.json
-go run ./cmd/studio-web -config configs/studio-web.json
+make install
+make desktop-dev
+make desktop-build
+make web-build
+make web-config
+make web-run
 ```
 
 Проверки:
 
 ```sh
-go build ./...
-go vet ./...
-(cd frontend && npm run build && npm run build:web)
+make check
 ```
 
 Открытые задачи и границы каркаса перечислены в [TODO.md](TODO.md).
+
+Лицензия проекта — GNU AGPL-3.0-only; полный текст находится в [LICENSE](LICENSE).

@@ -9,10 +9,10 @@ web без Wails. Это каркас, не готовый Core-клиент.
 - `internal/domain` содержит только `models/` и `interfaces/`.
 - `internal/application` содержит прикладные сценарии без вложенных слоёв.
 - `internal/infrastructure` содержит адаптеры и технические детали.
-- `internal/presentation/wails` — desktop presentation; корневой `main.go` —
-  её composition root.
-- `internal/presentation/web` — HTTP presentation для web; отдельный
-  `cmd/studio-web/main.go` — её composition root.
+- `internal/presentation/wails` — desktop presentation;
+  `cmd/desktop/main.go` — её composition root.
+- `internal/presentation/web` — HTTP presentation для web;
+  `cmd/web/main.go` — её composition root.
 - `frontend/src/App.tsx` и React-компоненты общие для обоих вариантов.
   Отличаются только адаптеры `frontend/src/api/wails.ts` и `http.ts`.
 
@@ -37,6 +37,8 @@ Plugin SDK или `pluginprotocol` из этого репозитория. До�
 ## Проверки и публикация
 
 Перед изменениями проверить `git status`; сохранять чужие изменения. Проверять
-`go build ./...`, `go vet ./...`, `cd frontend && npm run build` и
-`npm run build:web`. Не коммитить, не публиковать и не тегировать без явного
-запроса пользователя.
+`go build ./...`, `go vet ./...` и frontend сборки (предпочтительно через
+`make check`). Wails CLI требует `wails.json` в каталоге запуска; Makefile
+временно формирует его из `configs/wails.json` в `cmd/desktop/` и удаляет после
+команды. Runtime-конфиги хранить только в `configs/`. Не коммитить, не
+публиковать и не тегировать без явного запроса пользователя.

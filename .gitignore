@@ -3,3 +3,8 @@ node_modules
 frontend/dist
 internal/infrastructure/webassets/dist/*
 !internal/infrastructure/webassets/dist/.gitkeep
+internal/infrastructure/desktopassets/dist/*
+!internal/infrastructure/desktopassets/dist/.gitkeep
+configs/studio-web.json
+cmd/desktop/wails.json
+.DS_Store

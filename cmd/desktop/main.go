@@ -1,7 +1,6 @@
 package main
 
 import (
-	"embed"
 	"log"
 
 	"github.com/wailsapp/wails/v2"
@@ -10,12 +9,10 @@ import (
 
 	"github.com/Liapoldus/studio/internal/application"
 	"github.com/Liapoldus/studio/internal/domain/models"
+	"github.com/Liapoldus/studio/internal/infrastructure/desktopassets"
 	"github.com/Liapoldus/studio/internal/infrastructure/productinfo"
 	wailspresentation "github.com/Liapoldus/studio/internal/presentation/wails"
 )
-
-//go:embed all:frontend/dist
-var assets embed.FS
 
 func main() {
 	productInfo := productinfo.NewStaticReader(
@@ -30,7 +27,7 @@ func main() {
 		Width:  1024,
 		Height: 768,
 		AssetServer: &assetserver.Options{
-			Assets: assets,
+			Assets: desktopassets.Files,
 		},
 		BackgroundColour: &options.RGBA{R: 18, G: 24, B: 33, A: 1},
 		OnStartup:        app.Startup,

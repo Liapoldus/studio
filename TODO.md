@@ -5,7 +5,8 @@
 
 ## Каркас
 
-- [x] Desktop entrypoint на Wails и отдельный web entrypoint без Wails.
+- [x] Desktop entrypoint на Wails (`cmd/desktop`) и отдельный web entrypoint
+  без Wails (`cmd/web`).
 - [x] Отдельные Go presentation layers и composition roots для desktop/web.
 - [x] Общий React UI с раздельными Wails и same-origin HTTP API adapters.
 - [x] Web bootstrap-конфигурация с единственным фиксированным Core endpoint;

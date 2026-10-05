@@ -1,7 +1,15 @@
-import {defineConfig} from 'vite'
+import { dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
-// https://vitejs.dev/config/
+const root = dirname(fileURLToPath(import.meta.url))
+
 export default defineConfig({
-  plugins: [react()]
+  root,
+  plugins: [react()],
+  build: {
+    outDir: resolve(root, '../internal/infrastructure/desktopassets/dist'),
+    emptyOutDir: true,
+  },
 })
