@@ -2,11 +2,12 @@
 
 ## 1. Смысл operations
 
-Любое действие, которое может изменить Core desired state или вызвать внешний
-effect, должно иметь наблюдаемый operation lifecycle.
+Любое действие Studio, которое меняет project source или Git history, должно
+иметь локально наблюдаемый lifecycle. Core deploy operation принадлежит
+универсальному CLI и Core, а Studio показывает только импортированный report.
 
-Studio не объявляет operation успешной по факту принятия HTTP-запроса. Она
-показывает только состояние, которое вернул Core.
+Studio не объявляет deploy успешным по локальному действию. Она показывает
+только импортированный CLI/CI report.
 
 ## 2. Состояния
 
@@ -17,19 +18,17 @@ stateDiagram-v2
     Validating --> Invalid: "schema/reference error"
     Invalid --> Draft: "Fix source"
     Validating --> ReadyToApply: "valid"
-    ReadyToApply --> Pending: "Apply to Core"
-    Pending --> Running
-    Running --> Succeeded
-    Running --> Failed
-    Running --> Degraded
-    Degraded --> Reconcile: "operator action"
-    Reconcile --> Running
+    ReadyToApply --> Committed: "Commit"
+    Committed --> Report: "Import CLI report"
+    Report --> Succeeded
+    Report --> Failed
+    Report --> Degraded
     Failed --> Draft: "new correction"
     Succeeded --> Observed: "refresh observations"
     Observed --> Draft: "new local edit"
 ```
 
-Core terminal states `succeeded`, `failed` и `degraded` не должны называться
+CLI/Core terminal states `succeeded`, `failed` и `degraded` не должны называться
 одинаково в UI. Особенно важно не превращать `degraded` в «почти success».
 
 ## 3. Operations workspace
@@ -37,7 +36,7 @@ Core terminal states `succeeded`, `failed` и `degraded` не должны на�
 Фильтры:
 
 - project;
-- Core connection;
+- target/revision;
 - service;
 - operation kind;
 - state;
@@ -97,17 +96,17 @@ top bar.
 
 У каждой проблемы есть severity, owner, location и suggested next step.
 
-## 7. Apply flow
+## 7. Commit → CLI deploy flow
 
 ```mermaid
 flowchart LR
     A["Local draft"] --> B["Validate"]
     B -->|"invalid"| C["Problems panel"]
     C --> A
-    B -->|"valid"| D["Show diff"]
-    D --> E["Confirm Apply"]
-    E --> F["Core operation"]
-    F --> G["Generation + replica ACK"]
+    B -->|"valid"| D["Show Git diff"]
+    D --> E["Commit revision"]
+    E --> F["liapoldus plan/apply"]
+    F --> G["Generation + replica ACK report"]
     G --> H{ "State" }
     H -->|"succeeded"| I["Observed ready"]
     H -->|"failed"| C

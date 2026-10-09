@@ -3,12 +3,12 @@
 ## 1. Project как source workspace
 
 Project — это локальная root-папка с manifest и индексируемым деревом файлов.
-Он может быть открыт без доступного Core, но Apply требует явного Core
-connection.
+Он работает без доступного Core. Deploy не выполняется из Studio: commit
+передаётся универсальному `liapoldus` CLI для выбранного target.
 
-Project не хранит копию Core SQLite, credentials или secret values. Он содержит
-source references, modules, schemas и локальные metadata, необходимые для
-подготовки desired configuration.
+Project не хранит копию Core SQLite, Core credentials или secret values. Он
+содержит source references, modules, schemas и локальные metadata, необходимые
+для сборки config bundle универсальным `liapoldus` CLI.
 
 ## 2. Целевая структура
 
@@ -43,6 +43,9 @@ liapoldus-project/
 └── .studio/
     ├── index/                   # generated local index, не VCS source
     └── drafts/                  # локальные drafts без secrets
+
+Git repository является обязательной частью Project. Локальная история включена
+всегда; remote может быть подключён отдельно и объявлен источником истины.
 ```
 
 ## 3. Узлы дерева
@@ -79,7 +82,7 @@ Project navigator — dockable panel слева. Он поддерживает:
 - `Open`, `Reveal`, `Rename`, `Delete` с подтверждением;
 - `Open in plugin`, если тип файла принадлежит Studio plugin.
 
-Core service tree и project file tree могут быть двумя вкладками одной панели:
+Project service tree и project file tree могут быть двумя вкладками одной панели:
 
 ```text
 PROJECT
@@ -87,7 +90,7 @@ PROJECT
   modules/
   schemas/
 
-CORE SERVICES
+PROJECT SERVICES
   runtime-service        Ready · gen 42
   forms-db-service       Degraded · gen 41
   server-service         Ready · gen 42
@@ -100,35 +103,33 @@ CORE SERVICES
 - file tree отвечает «где находится source»;
 - canvas отвечает «как services связаны»;
 - inspector отвечает «что настроено у выбранного объекта»;
-- operations отвечает «что произошло после Apply».
+- operations отвечает «что произошло после CLI deploy».
 
 Выбор service в дереве центрирует node на canvas и открывает inspector. Выбор
 файла открывает preview/structured editor и показывает связанные services.
 
-## 6. Local source → Core
+## 6. Local source → CLI → Core
 
 ```mermaid
 sequenceDiagram
     actor Operator
     participant Studio
     participant Files as "Project files"
-    participant Core
-    participant Replica
+    participant Git
+    participant CLI as "liapoldus CLI"
+    participant CoreAPI as "Core Management API"
 
     Operator->>Studio: Открывает project
     Studio->>Files: Индексирует manifest и дерево
     Studio->>Files: Запускает local validation
-    Operator->>Studio: Выбирает Core connection
-    Studio->>Core: Читает service inventory и active state
-    Core-->>Studio: Services, schemas, generations, observations
     Operator->>Studio: Меняет settings/module reference
     Studio->>Files: Сохраняет draft
-    Operator->>Studio: Validate → Diff → Apply
-    Studio->>Core: Отправляет validated candidate
-    Core-->>Studio: operationId
-    Core->>Replica: Reload(target generation)
-    Replica-->>Core: ACK generation/digest
-    Core-->>Studio: succeeded / failed / degraded
+    Operator->>Studio: Validate → Git diff → Commit
+    Studio->>Git: Push approved revision
+    Operator->>CLI: plan/apply revision для target
+    CLI->>Files: Читает commit
+    CLI->>CoreAPI: Отправляет canonical bundle
+    CoreAPI-->>CLI: operationId и deploy report
 ```
 
 ## 7. Inspector и files
@@ -149,53 +150,60 @@ Action: Open in Logic Modules
 Base Studio не обязана быть полноценной code IDE. Редактор module/source должен
 принадлежать специализированному Studio plugin.
 
-## 8. Draft, validation и Apply
+## 8. Draft, validation и deploy handoff
 
 Inspector различает четыре действия:
 
 - `Save draft` — сохранить локальное изменение;
 - `Validate` — проверить schema и references;
-- `Diff` — показать отличие от Core desired/active state;
-- `Apply to Core` — создать durable Core operation.
+- `Diff` — показать отличие от выбранной Git revision;
+- `Commit` — создать immutable revision;
+- `Open deploy report` — открыть результат CLI/CI.
 
-`Apply to Core` disabled при:
+`Commit` disabled при:
 
 - невалидном manifest;
 - неизвестном field type;
 - отсутствующем обязательном module/file;
-- невыбранном Core connection;
-- stale revision/CAS;
-- неподтверждённом permission.
+- конфликте файлов;
+- невалидном project source;
+- незаполненном commit message.
 
-## 9. Project и connection switching
+Studio не имеет кнопки `Apply to Core`. Deploy запускается универсальным CLI:
 
-В верхней панели явно показываются оба контекста:
-
-```text
-Project: forms-platform       Core: production-eu       Target: production
+```bash
+liapoldus apply --project ./project --revision <commit> --target production
 ```
 
-При смене project или connection Studio предупреждает о:
+CLI обязан получить exact commit, собрать bundle и передать его Core API. Studio
+может открыть сохранённый report, но не является его источником.
+
+## 9. Project и target report switching
+
+В верхней панели явно показываются контексты проекта и последнего deploy report:
+
+```text
+Project: forms-platform       Revision: 0123456       Target report: production
+```
+
+При смене project, branch или report Studio предупреждает о:
 
 - dirty files;
 - inspector drafts;
-- незавершённых operations;
+- незавершённых Git operations;
 - недоступных plugin editors;
 - несоответствии target profile.
 
-## 10. Offline
+## 10. Offline и deploy handoff
 
-Без Core разрешены:
+Всегда доступны без Core:
 
 - открытие file tree;
 - preview source;
 - local validation;
 - draft;
-- plugin pages, не требующие Core.
+- plugin pages, не требующие Core;
+- commit, push/pull и другие Git operations.
 
-Без Core запрещены:
-
-- объявление settings применёнными;
-- новый Core operation;
-- свежий readiness state;
-- утверждение, что local source совпадает с active generation.
+Deploy state без CLI report не считается применённым. Studio не должна выдавать
+локальный source за active Core generation.

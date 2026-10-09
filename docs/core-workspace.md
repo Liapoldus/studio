@@ -2,7 +2,8 @@
 
 ## 1. Shell
 
-Core workspace — основной canvas-first экран Studio.
+Config workspace — основной canvas-first экран Studio. Он показывает структуру
+проектной конфигурации, а не live-подключение к Core.
 
 ```mermaid
 flowchart LR
@@ -11,14 +12,14 @@ flowchart LR
     C --> D["Selected service or link"]
     D --> E["Right inspector"]
     C --> F["Bottom operations panel"]
-    G["Top bar: project + Core + target"] --> C
+    G["Top bar: project + branch + revision"] --> C
     H["Workbench tabs"] --> C
 ```
 
 Зоны:
 
 - activity bar — переключение разделов;
-- top bar — project, Core connection, target, search, operation summary;
+- top bar — project, branch, commit/revision, validation summary, deploy report;
 - navigator — files и services;
 - canvas — nodes и links;
 - inspector — выбранный node/link;
@@ -30,26 +31,26 @@ flowchart LR
 
 ## 2. Страницы
 
-### Start / Connections
+### Start / Projects
 
-Показывает сохранённые desktop connections и состояние подключения. Для web
-показывает только bootstrap-bound Core и не предлагает сменить endpoint.
+Показывает открытые projects, repository status и последние CLI/CI reports.
 
 ### Project workspace
 
 Показывает file tree, project metadata, validation и drafts.
 
-### Core workspace
+### Config workspace
 
-Показывает canvas сервисов, links и inspector.
+Показывает canvas проектных services, Core-owned links и schema-driven inspector.
 
 ### Services
 
 Показывает inventory services в таблице с фильтрами и переходом в canvas.
 
-### Operations
+### Deploy reports
 
-Показывает durable operations, ACKs, errors и degraded states.
+Показывает импортированные CLI/CI reports, operations, ACKs, errors и degraded
+states. Live Core access из Studio отсутствует.
 
 ### Marketplace
 
@@ -63,14 +64,15 @@ flowchart LR
 
 На canvas отображаются:
 
-- Core service nodes;
-- Core-owned service links;
-- readiness/status badges;
-- generation/rollout indicators;
+- project service nodes;
+- Core-owned service link declarations;
+- schema/validation badges;
+- last known deploy report indicators;
 - project binding markers;
 - selection и focus.
 
-Сам Core, Core database, credentials и plugin internals на canvas не рисуются.
+Сам Core, Core database, live replicas, credentials и plugin internals на canvas
+не рисуются.
 
 ### Service node
 
@@ -79,8 +81,8 @@ flowchart LR
 - display name;
 - stable service id;
 - type/manifest version;
-- readiness;
-- active generation;
+- local validation state;
+- last known deploy state;
 - problem badge;
 - project binding.
 
@@ -94,8 +96,8 @@ Link создаётся drag-жестом между двумя service nodes. I
 - caller;
 - target;
 - link id;
-- observed state;
-- policy generation;
+- declared policy generation;
+- validation state;
 - generic contract/transport metadata, если оно доступно Core.
 
 Product-specific routing и payload editor в общий Studio inspector не входят.
@@ -113,10 +115,9 @@ tree/search и reset local layout.
 1. identity — name, id, manifest version;
 2. settings — schema-generated fields;
 3. source binding — project file/module references;
-4. replicas — health, lease, generation, incarnation;
-5. rollout — operation и ACK state;
-6. links — входящие и исходящие связи;
-7. context — безопасные timestamps и actor metadata.
+4. last deploy — commit, bundle digest, report state;
+5. links — входящие и исходящие связи;
+6. context — безопасные timestamps и actor metadata.
 
 Поддерживаемые UX-типы полей: string, number, boolean, select, multiselect,
 duration, size, code/reference, file, directory, array/object и secret
@@ -131,11 +132,11 @@ reference без возврата secret value.
 
 - caller и target;
 - link id;
-- policy generation;
-- eligibility;
+- policy generation source;
+- eligibility and validation;
 - contract compatibility;
-- transport/profile;
-- operation history.
+- transport/profile declaration;
+- last deploy report.
 
 Общий inspector не знает product-specific методы и payloads.
 
@@ -145,12 +146,11 @@ reference без возврата secret value.
 
 - service id/name;
 - manifest/schema version;
-- health/readiness;
-- active generation;
-- replica count;
-- lease state;
-- rollout/operation state;
+- local validation;
+- last known deploy generation;
+- last report state;
 - local project binding.
 
-Таблица и canvas используют один Core read model и не создают второй источник
-истины.
+Таблица и canvas используют один project config read model и не создают второй
+источник истины. Runtime observations принадлежат Core и доступны только в CLI
+reports.

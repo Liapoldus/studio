@@ -4,21 +4,20 @@
 
 ### Этап 0. Product shell
 
-- project/connection context model;
+- project/revision context model;
 - file tree shell;
 - canvas shell;
 - inspector shell;
 - operations shell;
 - loading/empty/error states.
 
-### Этап 1. Core read model
+### Этап 1. Project config read model
 
-- desktop connections;
-- Core service inventory;
+- project service inventory;
 - canvas nodes/links;
-- service observations;
-- operations list;
-- refresh/stale handling.
+- schema and validation diagnostics;
+- last known CLI/CI reports;
+- report import and stale handling.
 
 ### Этап 2. Project source model
 
@@ -27,18 +26,28 @@
 - file indexing;
 - local validation;
 - service/module references;
-- diff against Core desired state.
+- diff against selected Git revision and imported deploy report.
 
-### Этап 3. Apply workflow
+### Этап 3. Git и version control
+
+- local repository always enabled;
+- multiple remotes;
+- branch switching and history;
+- commit/push/pull;
+- merge/rebase/cherry-pick/stash;
+- conflict resolution;
+- version-management page.
+
+### Этап 4. CLI handoff
 
 - schema-driven settings inspector;
 - draft/save/validate;
-- explicit Apply;
-- operation polling;
-- degraded/failed diagnostics;
-- reconcile guidance.
+- commit-gated plan/apply handoff;
+- CLI/CI report import;
+- degraded/failed report diagnostics;
+- target/revision provenance.
 
-### Этап 4. Studio plugin host
+### Этап 5. Studio plugin host
 
 - extension manifest discovery;
 - commands/pages/panels;
@@ -46,7 +55,7 @@
 - failure isolation;
 - contextual file opening.
 
-### Этап 5. Marketplace
+### Этап 6. Marketplace
 
 - catalog;
 - details;
@@ -55,7 +64,7 @@
 - permissions;
 - lifecycle state machine.
 
-### Этап 6. Specialized editors
+### Этап 7. Specialized editors
 
 - Logic Modules plugin;
 - module/source editor;
@@ -69,13 +78,15 @@
 
 - у Studio есть project context и file tree;
 - project не смешан с Core connection;
-- Core остаётся runtime source of truth;
+- Git Project остаётся source of source configuration;
+- Core SQLite остаётся source of applied runtime state;
 - local source, desired state и observed state видны раздельно;
 - canvas показывает Core services, но не Core как node;
 - service settings открываются в schema-driven inspector;
 - service links не становятся product-specific routing editor;
-- operations показывают фактический rollout result;
+- deploy reports показывают фактический rollout result;
 - Core process lifecycle не выглядит управляемым из Studio;
+- Studio не имеет Core API adapter;
 - Studio plugins отделены от Core services;
 - marketplace управляет только Studio plugins;
 - module/code editor принадлежит специализированному plugin;

@@ -5,8 +5,9 @@
 - secrets не хранятся в project source без отдельного утверждённого механизма;
 - credentials не передаются Studio plugin напрямую;
 - plugin получает только declared capabilities;
-- Core API вызывается через Studio backend/adapter;
-- web frontend не получает Core credentials;
+- Studio не вызывает Core API;
+- CLI/CI получает target credentials через отдельный secure provider;
+- Studio не получает Core credentials;
 - Core service не регистрирует произвольный HTTP handler в Studio;
 - неизвестные field/page/action types отклоняются;
 - опасные действия требуют явного confirmation;
@@ -30,14 +31,15 @@ Studio может предупреждать о вероятном secret в н�
 
 Desktop — основной целевой режим:
 
-- несколько Core connections;
+- несколько CLI targets отображаются через импортированные reports;
 - локальные projects;
 - file system project tree;
 - dockable panels;
 - Studio plugin lifecycle;
 - будущие direct/SSH adapters после отдельного решения.
 
-Локальная Studio SQLite хранит только connection metadata и client state.
+Локальная Studio SQLite хранит только project/Git metadata, client state и
+импортированные безопасные CLI reports; Core settings туда не копируются.
 
 ## 4. Web
 
@@ -47,7 +49,7 @@ identity/auth/session модели.
 
 Ограничения web:
 
-- один фиксированный Core;
+- один фиксированный deploy context;
 - нет SSH bridge;
 - нет автоматического доступа к локальной файловой системе;
 - credentials остаются на server side;
@@ -74,8 +76,8 @@ Web не должен выдавать bootstrap binding за пользоват
 
 Особенно важно различать:
 
-- `No project` и `Project has no Core binding`;
-- `Core unavailable` и `Service degraded`;
+- `No project` и `Project has no Git repository`;
+- `No deploy report` и `Service degraded in last report`;
 - `No operation` и `Operation not loaded`;
 - `Plugin not installed` и `Plugin installed but stopped`;
 - `File missing` и `File intentionally untracked`.
@@ -91,14 +93,14 @@ Credentials не попадают в:
 - plugin page payload;
 - screenshot/export artifacts.
 
-Core settings и service settings не копируются в локальную Studio SQLite.
+Core settings и runtime observations не копируются в локальную Studio SQLite.
 
 ## 7. Failure boundaries
 
 | Сбой | Что остаётся доступным |
 | --- | --- |
-| Core unavailable | Project tree, local validation, drafts |
-| Service degraded | Canvas, inspector, operations и evidence |
+| Core unavailable | Project tree, local validation, drafts и Git |
+| Service degraded | Последний CLI report, canvas, inspector и evidence |
 | Studio plugin stopped | Core workspace и базовый inspector |
 | File editor unavailable | File preview и validation diagnostics |
 | Stale surface | Безопасный reload schema, без dispatch устаревшего action |
