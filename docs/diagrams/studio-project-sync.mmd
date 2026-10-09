@@ -1,0 +1,19 @@
+sequenceDiagram
+    actor Operator
+    participant Studio
+    participant Files as "Project files"
+    participant Core
+    participant Replica
+    Operator->>Studio: "Open project"
+    Studio->>Files: "Index and validate"
+    Operator->>Studio: "Select Core connection"
+    Studio->>Core: "Read services and observations"
+    Core-->>Studio: "Schemas, generations, replicas"
+    Operator->>Studio: "Edit draft"
+    Studio->>Files: "Save source"
+    Operator->>Studio: "Validate, diff, apply"
+    Studio->>Core: "Submit candidate"
+    Core-->>Studio: "operationId"
+    Core->>Replica: "Reload target generation"
+    Replica-->>Core: "ACK generation"
+    Core-->>Studio: "succeeded / failed / degraded"

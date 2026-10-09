@@ -125,4 +125,9 @@ UI редактирования подключений, Core transport и SSH br
 
 Открытые задачи и границы каркаса перечислены в [TODO.md](TODO.md).
 
+Целевая продуктовая модель Studio, project/file tree, Core workspace, Core
+services, Studio plugins, marketplace и Mermaid-схемы описаны в разделе
+[docs/](docs/index.md). Документ имеет статус проектной спецификации и не
+заменяет контракты Core или Plugin SDK.
+
 Лицензия проекта — GNU AGPL-3.0-only; полный текст находится в [LICENSE](LICENSE).

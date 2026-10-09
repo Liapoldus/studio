@@ -1,0 +1,21 @@
+stateDiagram-v2
+    [*] --> Available
+    Available --> Installing: "Install"
+    Installing --> Installed
+    Installing --> InstallFailed
+    InstallFailed --> Available
+    Installed --> Enabled: "Enable"
+    Enabled --> Starting: "Start"
+    Starting --> Running
+    Starting --> StartFailed
+    StartFailed --> Disabled
+    Running --> Stopping: "Stop"
+    Stopping --> Disabled
+    Disabled --> Starting: "Start"
+    Running --> UpdateAvailable
+    UpdateAvailable --> Updating: "Update"
+    Updating --> Running
+    Updating --> UpdateFailed
+    Running --> Removing: "Remove"
+    Disabled --> Removing: "Remove"
+    Removing --> [*]

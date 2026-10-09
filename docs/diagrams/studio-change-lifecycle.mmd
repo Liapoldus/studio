@@ -1,0 +1,12 @@
+flowchart LR
+    A["Open project"] --> B["Index file tree"]
+    B --> C["Validate manifest and schemas"]
+    C --> D["Select Core connection"]
+    D --> E["Compare with Core state"]
+    E --> F["Show diff"]
+    F --> G["Apply to Core"]
+    G --> H["Durable operation"]
+    H --> I["Generation and replica ACK"]
+    I --> J{"Result"}
+    J -->|"succeeded"| K["Observed ready"]
+    J -->|"failed / degraded"| L["Evidence and next step"]
