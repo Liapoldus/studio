@@ -31,31 +31,32 @@ Studio может предупреждать о вероятном secret в н�
 
 Desktop — основной целевой режим:
 
-- несколько CLI targets отображаются через импортированные reports;
+- несколько CLI targets отображаются через imported reports;
 - локальные projects;
 - file system project tree;
 - dockable panels;
 - Studio plugin lifecycle;
-- будущие direct/SSH adapters после отдельного решения.
+- CLI handoff и report import;
+- Git remotes через OS credential manager.
 
 Локальная Studio SQLite хранит только project/Git metadata, client state и
 импортированные безопасные CLI reports; Core settings туда не копируются.
 
 ## 4. Web
 
-Web получает один Core endpoint из `STUDIO_CORE_ENDPOINT`. Endpoint нельзя
-добавить, изменить или переключить через UI без отдельной server-side
-identity/auth/session модели.
+Web получает project workspace и Git/CLI report context. Core endpoint не
+передаётся в Studio и не настраивается через UI: deploy credentials и target
+connections принадлежат CLI/CI execution environment.
 
 Ограничения web:
 
-- один фиксированный deploy context;
-- нет SSH bridge;
+- нет Core API endpoint;
+- нет SSH bridge из Studio;
 - нет автоматического доступа к локальной файловой системе;
 - credentials остаются на server side;
 - desktop-only controls показываются только при наличии capability.
 
-Web не должен выдавать bootstrap binding за пользовательский connection manager.
+Web не должен выдавать imported deploy report за live Core connection.
 
 ## 5. Состояния страниц
 
@@ -101,6 +102,6 @@ Core settings и runtime observations не копируются в локаль�
 | --- | --- |
 | Core unavailable | Project tree, local validation, drafts и Git |
 | Service degraded | Последний CLI report, canvas, inspector и evidence |
-| Studio plugin stopped | Core workspace и базовый inspector |
+| Studio plugin stopped | Config workspace и базовый inspector |
 | File editor unavailable | File preview и validation diagnostics |
 | Stale surface | Безопасный reload schema, без dispatch устаревшего action |

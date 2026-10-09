@@ -56,9 +56,9 @@ HTML/CSS/remote JavaScript не должен автоматически попа
 - read project metadata;
 - read selected files;
 - write selected project files;
-- read Core observations;
-- read service settings schema;
-- request Core operation through Studio adapter;
+- read imported CLI/CI reports;
+- read project service settings schemas;
+- open CLI deploy handoff or report import surface;
 - register commands/pages/panels.
 
 Capability видна до установки и до первого использования. Raw Core token,
@@ -127,10 +127,10 @@ capabilities.
 
 Если Studio plugin недоступен:
 
-- Core canvas остаётся рабочим;
+- project config canvas остаётся рабочим;
 - plugin panels переходят в unavailable;
 - project files не удаляются;
-- Core service inspector остаётся доступен;
+- schema-driven project inspector остаётся доступен;
 - operations продолжают отображаться;
 - показывается plugin-specific diagnostic.
 
@@ -147,18 +147,18 @@ sequenceDiagram
     participant Studio
     participant Files as "Project files"
     participant Logic as "Logic Modules plugin"
-    participant Core
-    participant Service as "Core service"
+    participant CLI as "liapoldus CLI"
 
     Operator->>Studio: Выбирает service на canvas
-    Studio->>Core: Читает settings schema и observations
-    Core-->>Studio: Поля inspector + active generation
+    Studio->>Files: Читает settings schema и project declarations
+    Files-->>Studio: Поля inspector + source revision
     Operator->>Studio: Выбирает Module reference
     Studio->>Files: Показывает modules
     Operator->>Studio: Открывает module
     Studio->>Logic: Передаёт module context
     Logic-->>Studio: Открывает declarative editor page
     Logic->>Files: Сохраняет source
-    Studio->>Core: Apply validated candidate
-    Core-->>Studio: operationId и итоговое состояние
+    Operator->>Studio: Создаёт commit
+    Operator->>CLI: Запускает plan/apply для commit
+    CLI-->>Studio: Импортирует deploy report
 ```

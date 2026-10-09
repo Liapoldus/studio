@@ -1,4 +1,4 @@
-# Core workspace
+# Config workspace
 
 ## 1. Shell
 
@@ -24,7 +24,7 @@ flowchart LR
 - canvas — nodes и links;
 - inspector — выбранный node/link;
 - bottom panel — operations, problems, events;
-- workbench tabs — Core workspace и Studio plugin pages.
+- workbench tabs — Config workspace и Studio plugin pages.
 
 По умолчанию виден canvas. Navigator и bottom panel скрываемы. Inspector
 открывается при выборе объекта.

@@ -1,19 +1,15 @@
 sequenceDiagram
     actor Operator
     participant Studio
-    participant Files as "Project files"
-    participant Core
-    participant Replica
+    participant Git as "Git repository"
+    participant CLI as "liapoldus CLI"
+    participant Core as "Core API"
     Operator->>Studio: "Open project"
-    Studio->>Files: "Index and validate"
-    Operator->>Studio: "Select Core connection"
-    Studio->>Core: "Read services and observations"
-    Core-->>Studio: "Schemas, generations, replicas"
+    Studio->>Git: "Index and validate"
     Operator->>Studio: "Edit draft"
-    Studio->>Files: "Save source"
-    Operator->>Studio: "Validate, diff, apply"
-    Studio->>Core: "Submit candidate"
-    Core-->>Studio: "operationId"
-    Core->>Replica: "Reload target generation"
-    Replica-->>Core: "ACK generation"
-    Core-->>Studio: "succeeded / failed / degraded"
+    Studio->>Git: "Save source and create commit"
+    Operator->>CLI: "Plan/apply commit for target"
+    CLI->>Git: "Read immutable revision"
+    CLI->>Core: "Submit canonical bundle"
+    Core-->>CLI: "operationId and generation"
+    CLI-->>Studio: "Import deploy report"

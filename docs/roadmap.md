@@ -47,6 +47,14 @@
 - degraded/failed report diagnostics;
 - target/revision provenance.
 
+### Этап 4a. V2 boundary conformance
+
+- Studio has no Core API adapter or Core credential store;
+- `Apply` is absent from Studio and replaced by CLI handoff;
+- imported reports cannot be presented as live observations;
+- project schema and bundle fixtures match the standalone CLI contract;
+- local bootstrap/target configuration is owned by CLI, not Studio.
+
 ### Этап 5. Studio plugin host
 
 - extension manifest discovery;
@@ -77,7 +85,7 @@
 Целевая модель считается согласованной, если:
 
 - у Studio есть project context и file tree;
-- project не смешан с Core connection;
+- project не смешан с deploy target или Core runtime;
 - Git Project остаётся source of source configuration;
 - Core SQLite остаётся source of applied runtime state;
 - local source, desired state и observed state видны раздельно;
@@ -98,7 +106,7 @@
 ## 3. Вопросы, которые нужно утвердить
 
 1. Точный формат project manifest и его владелец.
-2. Может ли один project иметь несколько `environment → Core` mappings.
+2. Может ли один project иметь несколько environment profiles.
 3. Какие типы файлов являются базовыми, а какие полностью принадлежат Studio
    plugins.
 4. Где физически запускаются Studio plugin services.
@@ -107,12 +115,12 @@
 7. Capability consent и authorization model для Studio plugins.
 8. Безопасный способ работы web с project files.
 9. Связь local source с plugin-owned settings schemas.
-10. Допустимый уровень bidirectional sync между project и Core.
-11. Как показывать v1 Core state до полного v2 rollout API.
-12. Нужна ли отдельная audit page или достаточно Operations workspace.
+10. Допустимый уровень bidirectional sync между project и CLI reports.
+11. Формат подписанного/machine-readable deploy report.
+12. Нужна ли отдельная audit page или достаточно Reports workspace.
 
 ## 4. Документный статус
 
-До утверждения вопросов выше этот раздел является target UX/product model. Он
-не добавляет runtime API, SQLite tables, plugin SDK endpoints или process
-control в текущую Studio.
+Этот раздел описывает Studio v2 target UX/product model. Он не добавляет Core
+runtime API, SQLite tables или process control в Studio; cross-repository
+contracts принадлежат CLI и Core API owners.
