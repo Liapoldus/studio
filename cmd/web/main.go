@@ -1,35 +1,35 @@
 package main
 
 import (
-	"flag"
 	"io/fs"
 	"log"
 	"net/http"
+	"os"
 	"time"
 
-	"github.com/Liapoldus/studio/internal/application"
+	"github.com/Liapoldus/studio/internal/application/product"
 	"github.com/Liapoldus/studio/internal/domain/models"
+	"github.com/Liapoldus/studio/internal/infrastructure/assets/web"
 	"github.com/Liapoldus/studio/internal/infrastructure/config"
-	"github.com/Liapoldus/studio/internal/infrastructure/productinfo"
-	"github.com/Liapoldus/studio/internal/infrastructure/webassets"
+	productdata "github.com/Liapoldus/studio/internal/infrastructure/product"
 	webpresentation "github.com/Liapoldus/studio/internal/presentation/web"
 )
 
 func main() {
-	configPath := flag.String("config", "configs/studio-web.json", "path to the Studio web configuration")
-	flag.Parse()
-
-	webConfig, err := config.LoadWeb(*configPath)
+	if len(os.Args) != 1 {
+		log.Fatal("Studio web accepts ENV bootstrap only; command-line arguments are unsupported")
+	}
+	webConfig, err := config.LoadWeb(os.LookupEnv)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	assets, err := fs.Sub(webassets.Files, "dist")
+	assets, err := fs.Sub(web.Files, "dist")
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	productInfo := application.NewProductInfo(productinfo.NewStaticReader(
+	productInfo := product.NewProductInfo(productdata.NewStaticReader(
 		true,
 		models.CoreAccessDirect,
 	))

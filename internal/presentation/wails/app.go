@@ -1,18 +1,19 @@
+// Package wails exposes Studio use cases to the desktop frontend.
 package wails
 
 import (
 	"context"
 
-	"github.com/Liapoldus/studio/internal/application"
+	"github.com/Liapoldus/studio/internal/application/product"
 	"github.com/Liapoldus/studio/internal/domain/models"
 )
 
 type App struct {
 	ctx         context.Context
-	productInfo *application.ProductInfo
+	productInfo *product.ProductInfo
 }
 
-func NewApp(productInfo *application.ProductInfo) *App {
+func NewApp(productInfo *product.ProductInfo) *App {
 	return &App{productInfo: productInfo}
 }
 

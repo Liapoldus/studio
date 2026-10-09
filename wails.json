@@ -1,0 +1,15 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "Liapoldus Studio",
+  "outputfilename": "studio",
+  "build:dir": "build",
+  "frontend:dir": "frontend",
+  "frontend:install": "npm ci",
+  "frontend:build": "npm run bindings:prepare && npm run build",
+  "frontend:dev:watcher": "npm run bindings:prepare && npm run dev",
+  "frontend:dev:serverUrl": "auto",
+  "wailsjsdir": "frontend",
+  "author": {
+    "name": "Liapoldus"
+  }
+}

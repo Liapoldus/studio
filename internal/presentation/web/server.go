@@ -1,21 +1,23 @@
+// Package web serves the Studio shell and its read-only local API.
 package web
 
 import (
 	"encoding/json"
 	"io/fs"
+	"log"
 	"net/http"
 	"path"
 	"strings"
 
-	"github.com/Liapoldus/studio/internal/application"
+	"github.com/Liapoldus/studio/internal/application/product"
 )
 
 type Server struct {
-	productInfo *application.ProductInfo
+	productInfo *product.ProductInfo
 	static      http.Handler
 }
 
-func NewServer(productInfo *application.ProductInfo, assets fs.FS) http.Handler {
+func NewServer(productInfo *product.ProductInfo, assets fs.FS) http.Handler {
 	return &Server{
 		productInfo: productInfo,
 		static:      http.FileServer(http.FS(assets)),
@@ -37,7 +39,9 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		w.Header().Set("Cache-Control", "no-store")
-		_ = json.NewEncoder(w).Encode(value)
+		if err := json.NewEncoder(w).Encode(value); err != nil {
+			log.Print("Studio product information response failed")
+		}
 		return
 	case "/healthz":
 		w.WriteHeader(http.StatusNoContent)

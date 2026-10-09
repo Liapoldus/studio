@@ -1,4 +1,5 @@
-import type { ProductInfo, StudioAPI } from './types'
+import { ProductInfo } from './info'
+import type { StudioAPI } from './types'
 
 export function createHTTPStudioAPI(): StudioAPI {
   return {
@@ -8,7 +9,7 @@ export function createHTTPStudioAPI(): StudioAPI {
         credentials: 'same-origin',
       })
       if (!response.ok) throw new Error('Не удалось загрузить состояние Studio')
-      return (await response.json()) as ProductInfo
+      return new ProductInfo(await response.json())
     },
   }
 }

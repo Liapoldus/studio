@@ -5,8 +5,9 @@ import App from './App'
 import { createWailsStudioAPI } from './api/wails'
 
 const container = document.getElementById('root')
+if (!container) throw new Error('Studio root element is missing')
 
-const root = createRoot(container!)
+const root = createRoot(container)
 
 root.render(
     <React.StrictMode>

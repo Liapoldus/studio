@@ -9,7 +9,7 @@ export default defineConfig({
   root,
   plugins: [react()],
   build: {
-    outDir: resolve(root, '../internal/infrastructure/desktopassets/dist'),
+    outDir: resolve(root, '../internal/infrastructure/assets/desktop/dist'),
     emptyOutDir: true,
   },
 })

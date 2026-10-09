@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "composite": false,
+    "allowImportingTsExtensions": true
+  },
+  "include": ["src", "vite.config.ts", "vite.web.config.ts", "wailsjs/**/*.ts", "../scripts/**/*.ts", "../scripts/**/*.mts", "../tests/**/*.ts", "../tests/**/*.mts"],
+  "references": []
+}

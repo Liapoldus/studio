@@ -9,7 +9,7 @@ export default defineConfig({
   root,
   plugins: [react()],
   build: {
-    outDir: resolve(root, '../internal/infrastructure/webassets/dist'),
+    outDir: resolve(root, '../internal/infrastructure/assets/web/dist'),
     emptyOutDir: true,
     rollupOptions: {
       input: resolve(root, 'index.web.html'),
