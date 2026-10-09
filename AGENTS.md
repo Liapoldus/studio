@@ -23,25 +23,20 @@ web без Wails. Это каркас, не готовый Core-клиент.
 
 ## Режимы Studio
 
-- Desktop может в будущем поддержать прямое подключение или SSH bridge и
-  несколько Core connections. Пока эти действия не реализованы.
-- Web получает ровно один Core endpoint из `STUDIO_CORE_ENDPOINT`.
-  Endpoint нельзя добавить, изменить или переключить из UI или публичного API.
-  Web-вариант не содержит SSH bridge.
+- Studio не подключается к Core и не содержит Core endpoint, Core credentials
+  или SSH bridge. Deployment выполняется standalone `liapoldus` CLI.
 - Bootstrap задаётся только ENV: без runtime JSON loaders и config flags.
-  Web использует `STUDIO_WEB_LISTEN_ADDRESS` (default `127.0.0.1:8080`) и
-  обязательный HTTPS `STUDIO_CORE_ENDPOINT`; desktop — `STUDIO_DESKTOP_DB_PATH`
-  (абсолютный путь, default `os.UserConfigDir()/Liapoldus/Studio/client.sqlite`).
-- SQLite Studio хранит только сохранённые desktop connections и локальное
-  состояние клиента (selected connection). Не копировать Core/plugin settings
-  или credentials. Адаптер пока не подключён к UI; открытие БД не означает
-  доступность Core connection или SSH bridge.
+  Web использует `STUDIO_WEB_LISTEN_ADDRESS` (default `127.0.0.1:8080`),
+  desktop — `STUDIO_DESKTOP_DB_PATH` (абсолютный путь, default
+  `os.UserConfigDir()/Liapoldus/Studio/client.sqlite`).
+- SQLite Studio хранит project/Git metadata, локальные drafts, imported CLI/CI
+  reports и client state. Не копировать Core/plugin settings или credentials.
 - Web bootstrap задаётся оператором при развёртывании; не встраивать
   credentials в frontend, конфиг, логи или ответы API.
-- До проектирования server-side identity, authorization, CSRF и secret handling
-  не добавлять управляющие Core API endpoints. Текущий web endpoint возвращает
-  только информацию о каркасе и health.
-- Не изображать несуществующие Core API, подключения или авторизацию как готовые.
+- Web API может обслуживать только project workspace, file tree, Git metadata,
+  validation и imported reports; не добавлять управляющие Core API endpoints.
+- Не изображать Core connections, live Core observations или Core authorization
+  как готовые возможности Studio.
 
 Не добавлять plugin lifecycle и product contracts в Studio. Не менять Core,
 Plugin SDK или `pluginprotocol` из этого репозитория. Документация описывает

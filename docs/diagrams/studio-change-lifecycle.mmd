@@ -6,7 +6,7 @@ flowchart LR
     E --> F["Push / remote approval"]
     F --> G["liapoldus plan/apply"]
     G --> H["Core API operation"]
-    H --> I["CLI deploy report"]
+    H --> I["Import CLI deploy report"]
     I --> J{"Result"}
-    J -->|"succeeded"| K["Observed ready"]
+    J -->|"succeeded"| K["Imported succeeded report"]
     J -->|"failed / degraded"| L["Evidence and next step"]
