@@ -89,6 +89,13 @@ PRAGMA user_version = 1;`)
 		if err != nil {
 			return err
 		}
+	} else {
+		var table string
+		if err := tx.QueryRowContext(ctx, "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'projects'").Scan(&table); err != nil || table != "projects" {
+			// The former connection schema used the same user_version. Reject it
+			// instead of carrying Core metadata into the project-only store.
+			return ErrStorage
+		}
 	}
 	return tx.Commit()
 }
