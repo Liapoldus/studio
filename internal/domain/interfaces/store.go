@@ -8,9 +8,9 @@ import (
 )
 
 type DesktopStore interface {
-	SaveConnection(context.Context, models.CoreConnection) error
-	ListConnections(context.Context) ([]models.CoreConnection, error)
-	DeleteConnection(context.Context, string) error
+	SaveProject(context.Context, models.Project) error
+	ListProjects(context.Context) ([]models.Project, error)
+	DeleteProject(context.Context, string) error
 	SaveClientState(context.Context, models.ClientState) error
 	ReadClientState(context.Context) (models.ClientState, error)
 }

@@ -1,8 +1,7 @@
 export interface ProductInfo {
   name: string
   description: string
-  coreAccessModes: string[]
-  singleCoreBinding: boolean
+  workspaceFeatures: string[]
 }
 
 export interface StudioAPI {

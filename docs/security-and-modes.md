@@ -46,7 +46,7 @@ Desktop — основной целевой режим:
 
 Web получает project workspace и Git/CLI report context. Core endpoint не
 передаётся в Studio и не настраивается через UI: deploy credentials и target
-connections принадлежат CLI/CI execution environment.
+target connections принадлежат CLI/CI execution environment.
 
 Ограничения web:
 
@@ -56,7 +56,7 @@ connections принадлежат CLI/CI execution environment.
 - credentials остаются на server side;
 - desktop-only controls показываются только при наличии capability.
 
-Web не должен выдавать imported deploy report за live Core connection.
+Web не должен выдавать imported deploy report за live runtime state.
 
 ## 5. Состояния страниц
 

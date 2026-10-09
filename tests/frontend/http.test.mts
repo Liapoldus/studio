@@ -3,7 +3,7 @@ import { test } from 'node:test'
 import { createHTTPStudioAPI } from '../../frontend/src/api/http.ts'
 
 await test('HTTP adapter validates same-origin product information', async (context) => {
-  const value = { name: 'Studio', description: 'Shell', coreAccessModes: ['direct'], singleCoreBinding: true }
+  const value = { name: 'Studio', description: 'Shell', workspaceFeatures: ['project'] }
   context.mock.method(globalThis, 'fetch', (url: string, options: RequestInit) => {
     assert.equal(url, '/api/v1/product-info')
     assert.equal(options.credentials, 'same-origin')

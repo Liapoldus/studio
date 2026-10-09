@@ -10,7 +10,6 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
 
 	"github.com/Liapoldus/studio/internal/application/product"
-	"github.com/Liapoldus/studio/internal/domain/models"
 	"github.com/Liapoldus/studio/internal/infrastructure/assets/desktop"
 	"github.com/Liapoldus/studio/internal/infrastructure/config"
 	productdata "github.com/Liapoldus/studio/internal/infrastructure/product"
@@ -38,9 +37,10 @@ func run() (runErr error) {
 	}
 	defer func() { runErr = errors.Join(runErr, store.Close()) }()
 	productInfo := productdata.NewStaticReader(
-		false,
-		models.CoreAccessDirect,
-		models.CoreAccessSSHBridge,
+		"project",
+		"file-tree",
+		"git",
+		"cli-reports",
 	)
 	app := wailspresentation.NewApp(product.NewProductInfo(productInfo))
 

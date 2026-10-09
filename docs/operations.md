@@ -87,7 +87,7 @@ top bar.
 
 - project validation;
 - schema validation;
-- connection/authentication;
+- target authentication;
 - conflict/CAS;
 - Core operation;
 - replica/lease/readiness;

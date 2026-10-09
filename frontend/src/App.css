@@ -27,7 +27,7 @@
 
 .studio-header h1,
 .welcome-card h2,
-.connections-card h2 { margin: 0; }
+.workspace-card h2 { margin: 0; }
 
 .eyebrow {
   margin: 0 0 8px;
@@ -38,7 +38,7 @@
 }
 
 .welcome-card,
-.connections-card {
+.workspace-card {
   border: 1px solid #2b3949;
   border-radius: 18px;
   background: #18222e;
@@ -46,16 +46,16 @@
 }
 
 .welcome-card p:last-child,
-.connections-card p:last-child { max-width: 620px; color: #b3c0ce; line-height: 1.65; }
+.workspace-card p:last-child { max-width: 620px; color: #b3c0ce; line-height: 1.65; }
 
-.connections-card {
+.workspace-card {
   display: grid;
   grid-template-columns: 1fr auto;
   align-items: center;
   gap: 16px;
 }
 
-.connections-card small { grid-column: 1 / -1; color: #8497aa; }
+.workspace-card small { grid-column: 1 / -1; color: #8497aa; }
 
 button {
   border: 1px solid #405168;
@@ -71,6 +71,6 @@ footer { margin-top: auto; color: #8497aa; font-size: 12px; }
 
 @media (max-width: 640px) {
   .studio-shell { padding: 28px 18px; }
-  .connections-card { grid-template-columns: 1fr; }
-  .connections-card small { grid-column: auto; }
+  .workspace-card { grid-template-columns: 1fr; }
+  .workspace-card small { grid-column: auto; }
 }

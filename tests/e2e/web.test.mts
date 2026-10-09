@@ -17,9 +17,9 @@ await test('independent web binary serves embedded UI and ENV-only shell', { tim
     const binary = join(sandbox, 'studio-web')
     const env = { ...process.env, GOWORK: 'off', GOFLAGS: '-p=1' }
     execFileSync('go', ['build', '-o', binary, './cmd/web'], { cwd: root, env, stdio: 'inherit' })
-    for (const [endpoint, args] of [['http://core.test', []], ['https://core.test', ['-config', 'removed.json']]] as const) {
+    for (const args of [[], ['-config', 'removed.json']] as const) {
       assert.throws(() => execFileSync(binary, args, {
-        cwd: sandbox, env: { ...env, STUDIO_CORE_ENDPOINT: endpoint }, stdio: 'pipe',
+        cwd: sandbox, env, stdio: 'pipe',
       }))
     }
     const reservation = createServer()
@@ -33,7 +33,7 @@ await test('independent web binary serves embedded UI and ENV-only shell', { tim
     await closed
     const child = spawn(binary, [], {
       cwd: sandbox,
-      env: { ...env, STUDIO_CORE_ENDPOINT: 'https://core.example.test', STUDIO_WEB_LISTEN_ADDRESS: listener },
+      env: { ...env, STUDIO_WEB_LISTEN_ADDRESS: listener },
       stdio: 'ignore',
     })
     const exited = new Promise<void>((resolveExit, rejectExit) => {
@@ -60,8 +60,7 @@ await test('independent web binary serves embedded UI and ENV-only shell', { tim
       assert.equal(response.headers.get('cache-control'), 'no-store')
       const info = new ProductInfo(await response.json())
       assert.equal(info.name, 'Liapoldus Studio')
-      assert.equal(info.singleCoreBinding, true)
-      assert.deepEqual(info.coreAccessModes, ['direct'])
+      assert.deepEqual(info.workspaceFeatures, ['project', 'file-tree', 'git', 'cli-reports'])
       const page = await fetch(base)
       assert.equal(page.status, 200)
       const html = await page.text()

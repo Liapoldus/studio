@@ -10,18 +10,12 @@ func lookup(values map[string]string) LookupEnv {
 }
 
 func TestWebENV(t *testing.T) {
-	value, err := LoadWeb(lookup(map[string]string{"STUDIO_CORE_ENDPOINT": " https://core.example.test/api "}))
-	if err != nil || value.ListenAddress != "127.0.0.1:8080" || value.CoreEndpoint != "https://core.example.test/api" {
+	value, err := LoadWeb(lookup(nil))
+	if err != nil || value.ListenAddress != "127.0.0.1:8080" {
 		t.Fatalf("unexpected bootstrap: %+v, %v", value, err)
 	}
-	for _, endpoint := range []string{"", "http://core.test", "https://user:secret@core.test", "https://core.test?token=secret", "https://core.test/#secret", "https://core.test:bad"} {
-		_, err := LoadWeb(lookup(map[string]string{"STUDIO_CORE_ENDPOINT": endpoint}))
-		if !errors.Is(err, ErrInvalidBootstrap) || err.Error() != ErrInvalidBootstrap.Error() {
-			t.Fatalf("endpoint validation must return a sanitized error: %v", err)
-		}
-	}
 	for _, address := range []string{"", "localhost", "127.0.0.1:bad", "127.0.0.1:0", "127.0.0.1:65536"} {
-		_, err := LoadWeb(lookup(map[string]string{"STUDIO_CORE_ENDPOINT": "https://core.test", "STUDIO_WEB_LISTEN_ADDRESS": address}))
+		_, err := LoadWeb(lookup(map[string]string{"STUDIO_WEB_LISTEN_ADDRESS": address}))
 		if !errors.Is(err, ErrInvalidBootstrap) {
 			t.Fatalf("accepted listen address %q", address)
 		}

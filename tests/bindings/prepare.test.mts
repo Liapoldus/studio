@@ -7,8 +7,7 @@ const generated = `export namespace models {
   export class ProductInfo {
     name: string;
     description: string;
-    coreAccessModes: string[];
-    singleCoreBinding: boolean;
+    workspaceFeatures: string[];
     constructor(source: any = {}) {}
   }
 }`

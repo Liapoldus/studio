@@ -8,8 +8,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-
-	"github.com/Liapoldus/studio/internal/domain/models"
 )
 
 var ErrInvalidBootstrap = errors.New("invalid Studio ENV bootstrap")
@@ -18,7 +16,6 @@ type LookupEnv func(string) (string, bool)
 
 type Web struct {
 	ListenAddress string
-	CoreEndpoint  string
 }
 
 type Desktop struct{ DatabasePath string }
@@ -36,12 +33,7 @@ func LoadWeb(lookup LookupEnv) (Web, error) {
 	if err != nil || number < 1 || number > 65535 {
 		return Web{}, ErrInvalidBootstrap
 	}
-	endpoint, _ := lookup("STUDIO_CORE_ENDPOINT")
-	connection, err := models.NewCoreConnection("web", "Web Core", endpoint, models.CoreAccessDirect)
-	if err != nil {
-		return Web{}, ErrInvalidBootstrap
-	}
-	return Web{ListenAddress: address, CoreEndpoint: connection.Endpoint}, nil
+	return Web{ListenAddress: address}, nil
 }
 
 func LoadDesktop(lookup LookupEnv, defaultPath string) (Desktop, error) {

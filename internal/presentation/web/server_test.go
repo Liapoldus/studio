@@ -6,7 +6,6 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
-	"reflect"
 	"testing"
 	"testing/fstest"
 
@@ -16,7 +15,7 @@ import (
 )
 
 func TestReadOnlyShell(t *testing.T) {
-	server := NewServer(product.NewProductInfo(productdata.NewStaticReader(true, models.CoreAccessDirect)),
+	server := NewServer(product.NewProductInfo(productdata.NewStaticReader("project", "file-tree", "git", "cli-reports")),
 		fstest.MapFS{"index.web.html": {Data: []byte("Studio shell")}})
 	for _, test := range []struct {
 		method string
@@ -26,7 +25,7 @@ func TestReadOnlyShell(t *testing.T) {
 		{http.MethodGet, "/api/v1/product-info", http.StatusOK},
 		{http.MethodPost, "/api/v1/product-info", http.StatusMethodNotAllowed},
 		{http.MethodGet, "/healthz", http.StatusNoContent},
-		{http.MethodGet, "/api/v1/connections", http.StatusNotFound},
+		{http.MethodGet, "/api/v1/projects", http.StatusNotFound},
 		{http.MethodGet, "/", http.StatusOK},
 		{http.MethodGet, "/connections", http.StatusOK},
 		{http.MethodGet, "/missing.js", http.StatusNotFound},
@@ -42,7 +41,7 @@ func TestReadOnlyShell(t *testing.T) {
 				if err := json.Unmarshal(response.Body.Bytes(), &value); err != nil {
 					t.Fatal(err)
 				}
-				if value.Name != "Liapoldus Studio" || !value.SingleCoreBinding || !reflect.DeepEqual(value.CoreAccessModes, []string{"direct"}) {
+				if value.Name != "Liapoldus Studio" || len(value.WorkspaceFeatures) != 4 {
 					t.Fatalf("web contract: %+v", value)
 				}
 				if response.Header().Get("Cache-Control") != "no-store" {

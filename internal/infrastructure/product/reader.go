@@ -8,27 +8,17 @@ import (
 )
 
 type StaticReader struct {
-	accessModes       []models.CoreAccessMode
-	singleCoreBinding bool
+	features []string
 }
 
-func NewStaticReader(singleCoreBinding bool, accessModes ...models.CoreAccessMode) StaticReader {
-	return StaticReader{accessModes: append([]models.CoreAccessMode(nil), accessModes...), singleCoreBinding: singleCoreBinding}
+func NewStaticReader(features ...string) StaticReader {
+	return StaticReader{features: append([]string(nil), features...)}
 }
 
 func (r StaticReader) Read(context.Context) (models.ProductInfo, error) {
 	return models.NewProductInfo(
 		"Liapoldus Studio",
-		"Клиент для обслуживания экосистемы Liapoldus.",
-		modeNames(r.accessModes),
-		r.singleCoreBinding,
+		"Среда разработки проектов, конфигураций и Git-версий Liapoldus.",
+		r.features,
 	)
-}
-
-func modeNames(modes []models.CoreAccessMode) []string {
-	result := make([]string, 0, len(modes))
-	for _, mode := range modes {
-		result = append(result, string(mode))
-	}
-	return result
 }

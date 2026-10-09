@@ -21,7 +21,7 @@ type Store struct{ db *sql.DB }
 
 var _ interfaces.DesktopStore = (*Store)(nil)
 
-// Open owns only Studio connection metadata and client selection. It never stores credentials.
+// Open owns only Studio project metadata and client selection. It never stores credentials.
 func Open(path string) (*Store, error) {
 	if !filepath.IsAbs(path) || strings.ContainsRune(path, '\x00') {
 		return nil, ErrStorage
@@ -75,15 +75,14 @@ func (s *Store) initialize() (initErr error) {
 	}
 	if version == 0 {
 		_, err := tx.ExecContext(ctx, `
-CREATE TABLE connections (
+CREATE TABLE projects (
  id TEXT PRIMARY KEY NOT NULL CHECK(length(id) > 0),
  name TEXT NOT NULL CHECK(length(name) > 0),
- endpoint TEXT NOT NULL,
- access_mode TEXT NOT NULL CHECK(access_mode IN ('direct', 'ssh-bridge'))
+ root_path TEXT NOT NULL CHECK(length(root_path) > 0)
 );
 CREATE TABLE client_state (
  singleton INTEGER PRIMARY KEY CHECK(singleton = 1),
- selected_connection_id TEXT REFERENCES connections(id) ON DELETE SET NULL
+ selected_project_id TEXT REFERENCES projects(id) ON DELETE SET NULL
 );
 INSERT INTO client_state(singleton) VALUES (1);
 PRAGMA user_version = 1;`)
@@ -106,29 +105,29 @@ func storageError(ctx context.Context, err error) error {
 	return ErrStorage
 }
 
-func (s *Store) SaveConnection(ctx context.Context, connection models.CoreConnection) error {
-	value, err := models.NewCoreConnection(connection.ID, connection.Name, connection.Endpoint, connection.AccessMode)
+func (s *Store) SaveProject(ctx context.Context, project models.Project) error {
+	value, err := models.NewProject(project.ID, project.Name, project.RootPath)
 	if err != nil {
 		return err
 	}
-	_, err = s.db.ExecContext(ctx, `INSERT INTO connections(id, name, endpoint, access_mode) VALUES (?, ?, ?, ?)
-ON CONFLICT(id) DO UPDATE SET name=excluded.name, endpoint=excluded.endpoint, access_mode=excluded.access_mode`, value.ID, value.Name, value.Endpoint, value.AccessMode)
+	_, err = s.db.ExecContext(ctx, `INSERT INTO projects(id, name, root_path) VALUES (?, ?, ?)
+ON CONFLICT(id) DO UPDATE SET name=excluded.name, root_path=excluded.root_path`, value.ID, value.Name, value.RootPath)
 	return storageError(ctx, err)
 }
 
-func (s *Store) ListConnections(ctx context.Context) (values []models.CoreConnection, readErr error) {
-	rows, err := s.db.QueryContext(ctx, "SELECT id, name, endpoint, access_mode FROM connections ORDER BY id")
+func (s *Store) ListProjects(ctx context.Context) (values []models.Project, readErr error) {
+	rows, err := s.db.QueryContext(ctx, "SELECT id, name, root_path FROM projects ORDER BY id")
 	if err != nil {
 		return nil, storageError(ctx, err)
 	}
 	defer func() { readErr = errors.Join(readErr, storageError(ctx, rows.Close())) }()
-	values = make([]models.CoreConnection, 0)
+	values = make([]models.Project, 0)
 	for rows.Next() {
-		var value models.CoreConnection
-		if err = rows.Scan(&value.ID, &value.Name, &value.Endpoint, &value.AccessMode); err != nil {
+		var value models.Project
+		if err = rows.Scan(&value.ID, &value.Name, &value.RootPath); err != nil {
 			return nil, storageError(ctx, err)
 		}
-		value, err = models.NewCoreConnection(value.ID, value.Name, value.Endpoint, value.AccessMode)
+		value, err = models.NewProject(value.ID, value.Name, value.RootPath)
 		if err != nil {
 			return nil, ErrStorage
 		}
@@ -140,25 +139,25 @@ func (s *Store) ListConnections(ctx context.Context) (values []models.CoreConnec
 	return values, nil
 }
 
-func (s *Store) DeleteConnection(ctx context.Context, id string) error {
-	_, err := s.db.ExecContext(ctx, "DELETE FROM connections WHERE id = ?", id)
+func (s *Store) DeleteProject(ctx context.Context, id string) error {
+	_, err := s.db.ExecContext(ctx, "DELETE FROM projects WHERE id = ?", id)
 	return storageError(ctx, err)
 }
 
 func (s *Store) SaveClientState(ctx context.Context, state models.ClientState) error {
 	var selected any
-	if state.SelectedConnectionID != "" {
-		selected = state.SelectedConnectionID
+	if state.SelectedProjectID != "" {
+		selected = state.SelectedProjectID
 	}
-	_, err := s.db.ExecContext(ctx, "UPDATE client_state SET selected_connection_id = ? WHERE singleton = 1", selected)
+	_, err := s.db.ExecContext(ctx, "UPDATE client_state SET selected_project_id = ? WHERE singleton = 1", selected)
 	return storageError(ctx, err)
 }
 
 func (s *Store) ReadClientState(ctx context.Context) (models.ClientState, error) {
 	var selected sql.NullString
-	err := s.db.QueryRowContext(ctx, "SELECT selected_connection_id FROM client_state WHERE singleton = 1").Scan(&selected)
+	err := s.db.QueryRowContext(ctx, "SELECT selected_project_id FROM client_state WHERE singleton = 1").Scan(&selected)
 	if err != nil {
 		return models.ClientState{}, storageError(ctx, err)
 	}
-	return models.ClientState{SelectedConnectionID: selected.String}, nil
+	return models.ClientState{SelectedProjectID: selected.String}, nil
 }

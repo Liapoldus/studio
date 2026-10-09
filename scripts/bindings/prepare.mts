@@ -15,7 +15,7 @@ export function prepareModels(source: string): string {
   if (!source.startsWith('export namespace models {') ||
     JSON.stringify(classes) !== JSON.stringify(['ProductInfo']) ||
     JSON.stringify(exports) !== JSON.stringify(['namespace:models', 'class:ProductInfo']) ||
-    JSON.stringify(fields) !== JSON.stringify(['name:string', 'description:string', 'coreAccessModes:string[]', 'singleCoreBinding:boolean'])) {
+    JSON.stringify(fields) !== JSON.stringify(['name:string', 'description:string', 'workspaceFeatures:string[]'])) {
     throw new Error('Unsupported Wails model schema; update the Studio adapter and its tests')
   }
   return modelModule

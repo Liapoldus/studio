@@ -1,8 +1,8 @@
 # Инструкции проекта Liapoldus Studio
 
-Studio — отдельный клиент экосистемы Liapoldus: TypeScript/React UI и Go
-backend. Продукт имеет два способа доставки одного frontend: desktop на Wails и
-web без Wails. Это каркас, не готовый Core-клиент.
+Studio — отдельная среда разработки экосистемы Liapoldus: TypeScript/React UI и
+Go backend. Продукт имеет два способа доставки одного frontend: desktop на Wails
+и web без Wails. Studio — workspace для файлов, Git и отчётов CLI, не Core-клиент.
 
 ## Архитектура
 
@@ -18,8 +18,8 @@ web без Wails. Это каркас, не готовый Core-клиент.
   Отличаются только адаптеры `frontend/src/api/wails.ts` и `http.ts`.
 - Frontend assets находятся в `internal/infrastructure/assets/{desktop,web}`;
   product metadata — typed Go definitions в `infrastructure/product/reader.go`.
-  Не создавать runtime parsers для внутренних констант или reserved-пакеты
-  будущих Core/SSH adapters; планы остаются в TODO.md.
+  Не создавать Core transport, SSH adapters или runtime parsers для внутренних
+  констант; планы остаются в TODO.md.
 
 ## Режимы Studio
 
@@ -35,8 +35,8 @@ web без Wails. Это каркас, не готовый Core-клиент.
   credentials в frontend, конфиг, логи или ответы API.
 - Web API может обслуживать только project workspace, file tree, Git metadata,
   validation и imported reports; не добавлять управляющие Core API endpoints.
-- Не изображать Core connections, live Core observations или Core authorization
-  как готовые возможности Studio.
+- Не изображать live Core observations или Core authorization как возможности
+  Studio.
 
 Не добавлять plugin lifecycle и product contracts в Studio. Не менять Core,
 Plugin SDK или `pluginprotocol` из этого репозитория. Документация описывает

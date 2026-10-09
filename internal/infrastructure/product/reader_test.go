@@ -11,26 +11,23 @@ import (
 
 func TestProductInfoParity(t *testing.T) {
 	for _, test := range []struct {
-		name   string
-		modes  []models.CoreAccessMode
-		want   []string
-		single bool
+		name     string
+		features []string
 	}{
-		{"desktop", []models.CoreAccessMode{models.CoreAccessDirect, models.CoreAccessSSHBridge}, []string{"direct", "ssh-bridge"}, false},
-		{"web", []models.CoreAccessMode{models.CoreAccessDirect}, []string{"direct"}, true},
+		{"desktop", []string{"project", "file-tree", "git", "cli-reports"}},
+		{"web", []string{"project", "file-tree", "git", "cli-reports"}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			reader := NewStaticReader(test.single, test.modes...)
-			test.modes[0] = models.CoreAccessSSHBridge
+			reader := NewStaticReader(test.features...)
 			want := models.ProductInfo{
-				Name: "Liapoldus Studio", Description: "Клиент для обслуживания экосистемы Liapoldus.",
-				CoreAccessModes: test.want, SingleCoreBinding: test.single,
+				Name: "Liapoldus Studio", Description: "Среда разработки проектов, конфигураций и Git-версий Liapoldus.",
+				WorkspaceFeatures: test.features,
 			}
 			value, err := reader.Read(context.Background())
 			if err != nil || !reflect.DeepEqual(value, want) {
 				t.Fatalf("product information: %+v, %v; want %+v", value, err, want)
 			}
-			value.CoreAccessModes[0] = "changed"
+			value.WorkspaceFeatures[0] = "changed"
 			value, err = reader.Read(context.Background())
 			if err != nil || !reflect.DeepEqual(value, want) {
 				t.Fatalf("caller mutated code-owned information: %+v, %v", value, err)
@@ -39,8 +36,8 @@ func TestProductInfoParity(t *testing.T) {
 	}
 }
 
-func TestProductInfoRequiresModes(t *testing.T) {
-	if _, err := NewStaticReader(false).Read(context.Background()); !errors.Is(err, models.ErrInvalidProductInfo) {
-		t.Fatalf("missing modes: %v", err)
+func TestProductInfoRequiresFeatures(t *testing.T) {
+	if _, err := NewStaticReader().Read(context.Background()); !errors.Is(err, models.ErrInvalidProductInfo) {
+		t.Fatalf("missing features: %v", err)
 	}
 }

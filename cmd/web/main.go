@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/Liapoldus/studio/internal/application/product"
-	"github.com/Liapoldus/studio/internal/domain/models"
 	"github.com/Liapoldus/studio/internal/infrastructure/assets/web"
 	"github.com/Liapoldus/studio/internal/infrastructure/config"
 	productdata "github.com/Liapoldus/studio/internal/infrastructure/product"
@@ -30,8 +29,10 @@ func main() {
 	}
 
 	productInfo := product.NewProductInfo(productdata.NewStaticReader(
-		true,
-		models.CoreAccessDirect,
+		"project",
+		"file-tree",
+		"git",
+		"cli-reports",
 	))
 	server := &http.Server{
 		Addr:              webConfig.ListenAddress,
@@ -39,7 +40,7 @@ func main() {
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
-	log.Printf("Liapoldus Studio web listening on %s with one fixed Core binding", webConfig.ListenAddress)
+	log.Printf("Liapoldus Studio web listening on %s", webConfig.ListenAddress)
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Fatal(err)
 	}

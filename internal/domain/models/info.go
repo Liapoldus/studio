@@ -3,20 +3,18 @@ package models
 type ProductInfo struct {
 	Name              string   `json:"name"`
 	Description       string   `json:"description"`
-	CoreAccessModes   []string `json:"coreAccessModes"`
-	SingleCoreBinding bool     `json:"singleCoreBinding"`
+	WorkspaceFeatures []string `json:"workspaceFeatures"`
 }
 
-func NewProductInfo(name, description string, accessModes []string, singleCoreBinding bool) (ProductInfo, error) {
-	if name == "" || description == "" || len(accessModes) == 0 {
+func NewProductInfo(name, description string, features []string) (ProductInfo, error) {
+	if name == "" || description == "" || len(features) == 0 {
 		return ProductInfo{}, ErrInvalidProductInfo
 	}
 
-	modes := append([]string(nil), accessModes...)
+	workspaceFeatures := append([]string(nil), features...)
 	return ProductInfo{
 		Name:              name,
 		Description:       description,
-		CoreAccessModes:   modes,
-		SingleCoreBinding: singleCoreBinding,
+		WorkspaceFeatures: workspaceFeatures,
 	}, nil
 }

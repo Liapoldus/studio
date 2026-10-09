@@ -1,25 +1,24 @@
 # Liapoldus Studio
 
-Liapoldus Studio — отдельный клиент для обслуживания экосистемы Liapoldus.
-Это начальный каркас, а не готовая система управления Core.
+Liapoldus Studio — отдельная среда разработки проектов Liapoldus. Она управляет
+файлами проекта, локальным состоянием, Git-версиями и импортированными отчётами
+универсального `liapoldus` CLI. Studio не запускает Core и не обращается к Core API.
 
 ## Варианты запуска
 
-| Вариант | Entry point | Presentation | Привязка к Core |
+| Вариант | Entry point | Presentation | Ответственность |
 | --- | --- | --- | --- |
-| Desktop | `main.go` | Wails bindings | целевой режим допускает direct и SSH bridge; сами подключения пока не реализованы |
-| Web | `cmd/web/main.go` | HTTP + same-origin API | один Core endpoint из ENV; переключения и SSH bridge нет |
+| Desktop | `main.go` | Wails bindings | проект, дерево файлов, локальные Git-операции и отчёты CLI |
+| Web | `cmd/web/main.go` | HTTP + same-origin API | тот же workspace-shell без Core transport |
 
 React-приложение и основные компоненты общие. Тонкие адаптеры в
 `frontend/src/api/` направляют вызовы к Wails bindings либо к same-origin REST.
 Сборки используют отдельные Vite entrypoints, но общий `App.tsx`.
 
-Web endpoint намеренно ограничен health и информацией о каркасе. Хотя один
-Core endpoint уже задаётся в bootstrap-конфиге, подключение к Core и операции
-управления ещё не реализованы. Перед их добавлением нужно спроектировать
-server-side аутентификацию/авторизацию, управление credentials, CSRF, проверку
-Origin и аудит. Браузер не должен получать Core credentials или обращаться к
-Core напрямую.
+Web endpoint намеренно ограничен health, product-info и workspace-shell. Core
+credentials, Core endpoint и управляющие операции отсутствуют. Deployment и
+изменение runtime выполняются standalone `liapoldus` CLI локально, вручную или
+в GitHub CI.
 
 ## Слои Go
 
@@ -36,8 +35,8 @@ Core напрямую.
 Frontend embeds сгруппированы в `internal/infrastructure/assets/{desktop,web}`.
 Product metadata хранится в Go (`internal/infrastructure/product/reader.go`),
 без JSON asset/parser; native parity tests фиксируют desktop/web значения и
-защиту от изменения slices вызывающим кодом. Пакеты-заглушки будущих Core/SSH
-adapters удалены, направление разработки остаётся в TODO.md.
+защиту от изменения slices вызывающим кодом. Runtime-адаптер Core намеренно
+отсутствует: единственный исполнительный контур — standalone CLI.
 
 ## Разработка
 
@@ -49,7 +48,7 @@ make install
 make desktop-dev
 make desktop-build
 make web-build
-STUDIO_CORE_ENDPOINT=https://core.example.test make web-run
+make web-run
 ```
 
 Проверки:
@@ -108,20 +107,18 @@ health/product-info и раздачу embedded HTML/JS из посторонне
 
 | ENV | Назначение | Default |
 | --- | --- | --- |
-| `STUDIO_CORE_ENDPOINT` | Единственная server-side web привязка к Core, HTTPS без credentials/query/fragment | обязательна для web |
 | `STUDIO_WEB_LISTEN_ADDRESS` | HTTP listener Studio web, host:port | `127.0.0.1:8080` |
 | `STUDIO_DESKTOP_DB_PATH` | Абсолютный путь к файлу SQLite Studio | `os.UserConfigDir()/Liapoldus/Studio/client.sqlite` |
 
 Изменение bootstrap требует перезапуска. Значения не публикуются в product-info.
-Web сейчас не обращается к заданному Core endpoint.
+Web не имеет Core endpoint и не выполняет runtime-запросы.
 
 Desktop открывает собственную SQLite БД с транзакционной schema v1, сохранёнными
-connection metadata (ID, имя, HTTPS endpoint, direct/SSH mode) и selected connection.
-Адаптер поддерживает upsert/list/delete и чтение/запись selection; удаление выбранного
-connection атомарно очищает selection. Данные сохраняются после reopen; неизвестная
+project metadata (ID, имя, абсолютный root path) и selected project. Адаптер
+поддерживает upsert/list/delete и чтение/запись selection; удаление выбранного
+project атомарно очищает selection. Данные сохраняются после reopen; неизвестная
 новая версия schema отклоняется. Файл БД имеет права `0600`, новые каталоги — `0700`.
-Credentials, operational settings Core и plugin settings здесь не хранятся.
-UI редактирования подключений, Core transport и SSH bridge пока не реализованы.
+Core settings, credentials и plugin settings здесь не хранятся.
 
 Открытые задачи и границы каркаса перечислены в [TODO.md](TODO.md).
 

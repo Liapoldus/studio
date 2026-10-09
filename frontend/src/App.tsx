@@ -24,28 +24,25 @@ function App({ api }: Props) {
       <section className="welcome-card">
         <p className="eyebrow">Desktop control client</p>
         <h2>Управление экосистемой Liapoldus</h2>
-        <p>{info?.description ?? 'Десктопное приложение для подключения к Core и управления сервисами Liapoldus.'}</p>
+        <p>{info?.description ?? 'Среда разработки проектов, конфигураций и Git-версий Liapoldus.'}</p>
       </section>
 
-      <section className="connections-card">
+      <section className="workspace-card">
         <div>
-          <p className="eyebrow">Подключения</p>
-          <h2>Core API</h2>
-          <p>{info?.singleCoreBinding
-            ? 'Эта web-инсталляция работает только с одним Core, заданным при запуске сервера.'
-            : 'Desktop-версия сможет подключаться напрямую или через SSH-мост.'}</p>
+          <p className="eyebrow">Project workspace</p>
+          <h2>Проект и дерево файлов</h2>
+          <p>Studio открывает локальный проект, индексирует файлы конфигурации и показывает Git-версию источника.</p>
         </div>
-        {!info?.singleCoreBinding && (
-          <button type="button" disabled title="Каркас интерфейса: подключение будет реализовано позже">
-            Добавить подключение
-          </button>
-        )}
-        <small>{info?.singleCoreBinding
-          ? 'В web-версии нет SSH-моста и выбора другой Core-системы.'
-          : 'Каркас: фактические Core API и SSH-подключения пока не реализованы.'}</small>
+        <div className="workspace-list" role="list">
+          <span role="listitem">project.yaml</span>
+          <span role="listitem">services/</span>
+          <span role="listitem">modules/</span>
+          <span role="listitem">.git/</span>
+        </div>
+        <small>Deploy и runtime наблюдения выполняются standalone CLI; Studio импортирует только безопасные reports.</small>
       </section>
 
-      <footer>Слой доступа: {info?.coreAccessModes.join(' · ') ?? 'direct · ssh-bridge'}</footer>
+      <footer>Возможности: {info?.workspaceFeatures.join(' · ') ?? 'project · file-tree · git · cli-reports'}</footer>
     </main>
   )
 }

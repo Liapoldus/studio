@@ -58,7 +58,8 @@ states. Live Core access из Studio отсутствует.
 
 ### Settings
 
-Показывает Studio connections, project preferences, layout и plugin permissions.
+Показывает project preferences, layout и plugin permissions. Параметры Core и
+доступ к runtime изменяются через standalone CLI, а не через Studio.
 
 ## 3. Canvas
 

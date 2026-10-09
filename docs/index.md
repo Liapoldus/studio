@@ -32,7 +32,7 @@ Studio:
 
 Studio не:
 
-- создаёт Core connections и не вызывает Core API;
+- создаёт runtime targets и не вызывает Core API;
 - выполняет plan/apply/deploy;
 - показывает runtime observations как собственные live-данные;
 - исполняет произвольный plugin HTML/JS в Core inspector;
