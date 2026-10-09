@@ -6,6 +6,9 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"testing/fstest"
 
@@ -49,6 +52,28 @@ func TestReadOnlyShell(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestWorkspaceReturnsProjectFilesWithoutStudioState(t *testing.T) {
+	root := t.TempDir()
+	if err := os.Mkdir(filepath.Join(root, ".git"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "project.yaml"), []byte("id: demo\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "secret.key"), []byte("secret"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	server := NewServerAtProject(product.NewProductInfo(productdata.NewStaticReader("project", "file-tree", "git", "cli-reports")), fstest.MapFS{"index.web.html": {Data: []byte("Studio shell")}}, root)
+	response := httptest.NewRecorder()
+	server.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/v1/workspace", nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+	}
+	if strings.Contains(response.Body.String(), ".git") || strings.Contains(response.Body.String(), "secret.key") || !strings.Contains(response.Body.String(), "project.yaml") {
+		t.Fatalf("unexpected workspace: %s", response.Body.String())
 	}
 }
 

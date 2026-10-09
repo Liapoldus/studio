@@ -7,5 +7,8 @@ export function createWailsStudioAPI(): StudioAPI {
     async productInfo() {
       return new ProductInfoData(await ProductInfo())
     },
+    async workspace() {
+      return { project: null, files: [] }
+    },
   }
 }

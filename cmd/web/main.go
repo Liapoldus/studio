@@ -36,7 +36,7 @@ func main() {
 	))
 	server := &http.Server{
 		Addr:              webConfig.ListenAddress,
-		Handler:           webpresentation.NewServer(productInfo, assets),
+		Handler:           webpresentation.NewServerAtProject(productInfo, assets, webConfig.ProjectRoot),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
