@@ -77,7 +77,7 @@ Studio должна визуально различать эти состоян�
 
 ## 5. Общий lifecycle изменения
 
-![Lifecycle изменения проекта и Core](/diagrams/studio/studio-change-lifecycle.svg)
+![Lifecycle изменения проекта и Core](/diagrams/studio-change-lifecycle.svg)
 
 Проект можно открыть и валидировать без Core. Для Apply нужны:
 

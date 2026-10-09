@@ -46,7 +46,7 @@ Studio не:
 
 ## Главная архитектурная схема
 
-![Информационная архитектура Studio](/diagrams/studio/studio-information-architecture.svg)
+![Информационная архитектура Studio](/diagrams/studio-information-architecture.svg)
 
 ## Главный принцип
 
