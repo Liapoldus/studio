@@ -15,7 +15,6 @@ func TestProductInfoParity(t *testing.T) {
 		features []string
 	}{
 		{"desktop", []string{"project", "file-tree", "git", "cli-reports"}},
-		{"web", []string{"project", "file-tree", "git", "cli-reports"}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			reader := NewStaticReader(test.features...)

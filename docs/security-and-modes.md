@@ -11,7 +11,12 @@
 - Core service не регистрирует произвольный HTTP handler в Studio;
 - неизвестные field/page/action types отклоняются;
 - опасные действия требуют явного confirmation;
-- install/update показывают publisher, version и permissions.
+- install/update показывают publisher, version и permissions;
+- companion tools запускаются только через Tool Registry с declared scope;
+- production companion processes запускаются только при доступном OS sandbox;
+- tool artifact digests проверяются до регистрации; cryptographic publisher
+  signature verification выполняется только для configured release trust roots;
+- tool запуск не получает Core credentials, private keys или raw secrets.
 
 ## 2. Project files
 
@@ -35,6 +40,7 @@ Desktop — основной целевой режим:
 - локальные projects;
 - file system project tree;
 - dockable panels;
+- Studio-managed companion console tools;
 - Studio plugin lifecycle;
 - CLI handoff и report import;
 - Git remotes через OS credential manager.
@@ -42,23 +48,7 @@ Desktop — основной целевой режим:
 Локальная Studio SQLite хранит только project/Git metadata, client state и
 импортированные безопасные CLI reports; Core settings туда не копируются.
 
-## 4. Web
-
-Web получает project workspace и Git/CLI report context. Core endpoint не
-передаётся в Studio и не настраивается через UI: deploy credentials и target
-target connections принадлежат CLI/CI execution environment.
-
-Ограничения web:
-
-- нет Core API endpoint;
-- нет SSH bridge из Studio;
-- нет автоматического доступа к локальной файловой системе;
-- credentials остаются на server side;
-- desktop-only controls показываются только при наличии capability.
-
-Web не должен выдавать imported deploy report за live runtime state.
-
-## 5. Состояния страниц
+## 4. Состояния страниц
 
 Каждая страница поддерживает:
 
@@ -83,7 +73,7 @@ Web не должен выдавать imported deploy report за live runtime 
 - `Plugin not installed` и `Plugin installed but stopped`;
 - `File missing` и `File intentionally untracked`.
 
-## 6. Credentials и storage
+## 5. Credentials и storage
 
 Credentials не попадают в:
 
@@ -96,12 +86,13 @@ Credentials не попадают в:
 
 Core settings и runtime observations не копируются в локальную Studio SQLite.
 
-## 7. Failure boundaries
+## 6. Failure boundaries
 
 | Сбой | Что остаётся доступным |
 | --- | --- |
 | Core unavailable | Project tree, local validation, drafts и Git |
 | Service degraded | Последний CLI report, canvas, inspector и evidence |
 | Studio plugin stopped | Config workspace и базовый inspector |
+| Companion tool unavailable | Plugin UI, project files и базовый inspector |
 | File editor unavailable | File preview и validation diagnostics |
 | Stale surface | Безопасный reload schema, без dispatch устаревшего action |

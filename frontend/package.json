@@ -14,7 +14,6 @@
     "lint": "cd .. && frontend/node_modules/.bin/eslint --config frontend/eslint.config.mjs \"frontend/**/*.ts\" \"frontend/**/*.tsx\" \"frontend/*.mjs\" \"scripts/**/*.{ts,mts}\" \"tests/**/*.{ts,mts}\" --max-warnings 0",
     "dev": "vite",
     "build": "tsc && vite build",
-    "build:web": "tsc && vite build --config vite.web.config.ts",
     "preview": "vite preview"
   },
   "dependencies": {

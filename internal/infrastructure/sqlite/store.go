@@ -4,6 +4,7 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"net/url"
 	"os"
@@ -70,7 +71,7 @@ func (s *Store) initialize() (initErr error) {
 	if err := tx.QueryRowContext(ctx, "PRAGMA user_version").Scan(&version); err != nil {
 		return err
 	}
-	if version > 1 {
+	if version > 5 {
 		return ErrStorage
 	}
 	if version == 0 {
@@ -95,6 +96,47 @@ PRAGMA user_version = 1;`)
 			// The former connection schema used the same user_version. Reject it
 			// instead of carrying Core metadata into the project-only store.
 			return ErrStorage
+		}
+	}
+	if version < 2 {
+		if _, err := tx.ExecContext(ctx, `
+CREATE TABLE IF NOT EXISTS installed_plugins (
+ id TEXT NOT NULL CHECK(length(id) > 0),
+ version TEXT NOT NULL CHECK(length(version) > 0),
+ digest TEXT NOT NULL CHECK(length(digest) > 0),
+ path TEXT NOT NULL CHECK(length(path) > 0),
+ enabled INTEGER NOT NULL DEFAULT 1 CHECK(enabled IN (0, 1)),
+ signed INTEGER NOT NULL DEFAULT 0 CHECK(signed IN (0, 1)),
+ PRIMARY KEY(id, version)
+);
+CREATE TABLE IF NOT EXISTS trust_decisions (
+ digest TEXT PRIMARY KEY NOT NULL CHECK(length(digest) > 0),
+ approved INTEGER NOT NULL CHECK(approved IN (0, 1)),
+ reason TEXT NOT NULL DEFAULT ''
+);
+CREATE TABLE IF NOT EXISTS editor_associations (
+ pattern TEXT PRIMARY KEY NOT NULL CHECK(length(pattern) > 0),
+ application TEXT NOT NULL CHECK(length(application) > 0)
+);
+PRAGMA user_version = 2;`); err != nil {
+			return err
+		}
+	}
+	if version < 3 {
+		// Workspace navigation state is project-local in .studio/workspace.json.
+		// Remove the pre-production duplicate table from older desktop databases.
+		if _, err := tx.ExecContext(ctx, `DROP TABLE IF EXISTS workspace_state; PRAGMA user_version = 3;`); err != nil {
+			return err
+		}
+	}
+	if version < 4 {
+		if _, err := tx.ExecContext(ctx, `ALTER TABLE client_state ADD COLUMN theme TEXT NOT NULL DEFAULT 'system'; PRAGMA user_version = 4;`); err != nil {
+			return err
+		}
+	}
+	if version < 5 {
+		if _, err := tx.ExecContext(ctx, `ALTER TABLE trust_decisions ADD COLUMN permissions_json TEXT NOT NULL DEFAULT '[]'; PRAGMA user_version = 5;`); err != nil {
+			return err
 		}
 	}
 	return tx.Commit()
@@ -152,19 +194,135 @@ func (s *Store) DeleteProject(ctx context.Context, id string) error {
 }
 
 func (s *Store) SaveClientState(ctx context.Context, state models.ClientState) error {
-	var selected any
-	if state.SelectedProjectID != "" {
-		selected = state.SelectedProjectID
+	theme, err := models.NormalizeTheme(state.Theme)
+	if err != nil {
+		return err
 	}
-	_, err := s.db.ExecContext(ctx, "UPDATE client_state SET selected_project_id = ? WHERE singleton = 1", selected)
+	switch {
+	case state.SelectedProjectID == "" && state.Theme == "":
+		return nil
+	case state.SelectedProjectID == "":
+		_, err = s.db.ExecContext(ctx, "UPDATE client_state SET theme = ? WHERE singleton = 1", theme)
+	case state.Theme == "":
+		_, err = s.db.ExecContext(ctx, "UPDATE client_state SET selected_project_id = ? WHERE singleton = 1", state.SelectedProjectID)
+	default:
+		_, err = s.db.ExecContext(ctx, "UPDATE client_state SET selected_project_id = ?, theme = ? WHERE singleton = 1", state.SelectedProjectID, theme)
+	}
 	return storageError(ctx, err)
 }
 
 func (s *Store) ReadClientState(ctx context.Context) (models.ClientState, error) {
 	var selected sql.NullString
-	err := s.db.QueryRowContext(ctx, "SELECT selected_project_id FROM client_state WHERE singleton = 1").Scan(&selected)
+	var theme string
+	err := s.db.QueryRowContext(ctx, "SELECT selected_project_id, theme FROM client_state WHERE singleton = 1").Scan(&selected, &theme)
 	if err != nil {
 		return models.ClientState{}, storageError(ctx, err)
 	}
-	return models.ClientState{SelectedProjectID: selected.String}, nil
+	if theme == "" {
+		theme = "system"
+	}
+	return models.ClientState{SelectedProjectID: selected.String, Theme: theme}, nil
+}
+
+func (s *Store) SaveInstalledPlugin(ctx context.Context, value models.InstalledPluginState) error {
+	if strings.TrimSpace(value.ID) == "" || strings.TrimSpace(value.Version) == "" || strings.TrimSpace(value.Digest) == "" || strings.TrimSpace(value.Path) == "" {
+		return ErrStorage
+	}
+	_, err := s.db.ExecContext(ctx, `INSERT INTO installed_plugins(id, version, digest, path, enabled, signed) VALUES (?, ?, ?, ?, ?, ?)
+ON CONFLICT(id, version) DO UPDATE SET digest=excluded.digest, path=excluded.path, enabled=excluded.enabled, signed=excluded.signed`, value.ID, value.Version, value.Digest, value.Path, boolInt(value.Enabled), boolInt(value.Signed))
+	return storageError(ctx, err)
+}
+
+func (s *Store) ListInstalledPlugins(ctx context.Context) (values []models.InstalledPluginState, readErr error) {
+	rows, err := s.db.QueryContext(ctx, "SELECT id, version, digest, path, enabled, signed FROM installed_plugins ORDER BY id, version")
+	if err != nil {
+		return nil, storageError(ctx, err)
+	}
+	defer func() { readErr = errors.Join(readErr, storageError(ctx, rows.Close())) }()
+	values = make([]models.InstalledPluginState, 0)
+	for rows.Next() {
+		var value models.InstalledPluginState
+		var enabled, signed int
+		if err := rows.Scan(&value.ID, &value.Version, &value.Digest, &value.Path, &enabled, &signed); err != nil {
+			return nil, storageError(ctx, err)
+		}
+		value.Enabled, value.Signed = enabled != 0, signed != 0
+		values = append(values, value)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, storageError(ctx, err)
+	}
+	return values, nil
+}
+
+func (s *Store) DeleteInstalledPlugin(ctx context.Context, id, version string) error {
+	_, err := s.db.ExecContext(ctx, "DELETE FROM installed_plugins WHERE id = ? AND version = ?", id, version)
+	return storageError(ctx, err)
+}
+
+func (s *Store) SaveTrustState(ctx context.Context, value models.TrustState) error {
+	if strings.TrimSpace(value.Digest) == "" {
+		return ErrStorage
+	}
+	permissions, err := json.Marshal(value.GrantedPermissions)
+	if err != nil {
+		return ErrStorage
+	}
+	_, err = s.db.ExecContext(ctx, `INSERT INTO trust_decisions(digest, approved, reason, permissions_json) VALUES (?, ?, ?, ?)
+ON CONFLICT(digest) DO UPDATE SET approved=excluded.approved, reason=excluded.reason, permissions_json=excluded.permissions_json`, value.Digest, boolInt(value.Approved), value.Reason, string(permissions))
+	return storageError(ctx, err)
+}
+
+func (s *Store) ReadTrustState(ctx context.Context, digest string) (models.TrustState, error) {
+	var value models.TrustState
+	var approved int
+	var permissions string
+	err := s.db.QueryRowContext(ctx, "SELECT digest, approved, reason, permissions_json FROM trust_decisions WHERE digest = ?", digest).Scan(&value.Digest, &approved, &value.Reason, &permissions)
+	if errors.Is(err, sql.ErrNoRows) {
+		return models.TrustState{}, nil
+	}
+	if err != nil {
+		return models.TrustState{}, storageError(ctx, err)
+	}
+	value.Approved = approved != 0
+	if err := json.Unmarshal([]byte(permissions), &value.GrantedPermissions); err != nil {
+		return models.TrustState{}, ErrStorage
+	}
+	return value, nil
+}
+
+func (s *Store) SaveEditorAssociation(ctx context.Context, value models.EditorAssociation) error {
+	if strings.TrimSpace(value.Pattern) == "" || strings.TrimSpace(value.Application) == "" {
+		return ErrStorage
+	}
+	_, err := s.db.ExecContext(ctx, `INSERT INTO editor_associations(pattern, application) VALUES (?, ?)
+ON CONFLICT(pattern) DO UPDATE SET application=excluded.application`, value.Pattern, value.Application)
+	return storageError(ctx, err)
+}
+
+func (s *Store) ListEditorAssociations(ctx context.Context) (values []models.EditorAssociation, readErr error) {
+	rows, err := s.db.QueryContext(ctx, "SELECT pattern, application FROM editor_associations ORDER BY pattern")
+	if err != nil {
+		return nil, storageError(ctx, err)
+	}
+	defer func() { readErr = errors.Join(readErr, storageError(ctx, rows.Close())) }()
+	values = make([]models.EditorAssociation, 0)
+	for rows.Next() {
+		var value models.EditorAssociation
+		if err := rows.Scan(&value.Pattern, &value.Application); err != nil {
+			return nil, storageError(ctx, err)
+		}
+		values = append(values, value)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, storageError(ctx, err)
+	}
+	return values, nil
+}
+
+func boolInt(value bool) int {
+	if value {
+		return 1
+	}
+	return 0
 }

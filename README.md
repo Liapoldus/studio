@@ -4,39 +4,34 @@ Liapoldus Studio — отдельная среда разработки прое
 файлами проекта, локальным состоянием, Git-версиями и импортированными отчётами
 универсального `liapoldus` CLI. Studio не запускает Core и не обращается к Core API.
 
-## Варианты запуска
+## Запуск
 
 | Вариант | Entry point | Presentation | Ответственность |
 | --- | --- | --- | --- |
 | Desktop | `main.go` | Wails bindings | проект, дерево файлов, локальные Git-операции и отчёты CLI |
-| Web | `cmd/web/main.go` | HTTP + same-origin API | тот же workspace-shell без Core transport |
 
-React-приложение и основные компоненты общие. Тонкие адаптеры в
-`frontend/src/api/` направляют вызовы к Wails bindings либо к same-origin REST.
-Сборки используют отдельные Vite entrypoints, но общий `App.tsx`.
-
-Web endpoint намеренно ограничен health, product-info и workspace-shell. Core
-credentials, Core endpoint и управляющие операции отсутствуют. Deployment и
-изменение runtime выполняются standalone `liapoldus` CLI локально, вручную или
-в GitHub CI.
+React-приложение использует Wails bindings через адаптер
+`frontend/src/api/wails.ts`. Core credentials, Core endpoint и управляющие
+операции отсутствуют. Deployment и изменение runtime выполняются standalone
+`liapoldus` CLI локально, вручную или в GitHub CI.
 
 ## Слои Go
 
 - `internal/domain/models`, `internal/domain/interfaces` — модели и порты;
-- `internal/application/product` — прикладные сценарии информации о продукте;
+- `internal/application` — прикладные сценарии product/workspace и последующих
+  cli/plugin/report use cases;
 - `internal/infrastructure` — конфигурация и технические адаптеры;
-- `internal/presentation/wails` и `internal/presentation/web` — отдельные
-  presentation adapters;
-- `main.go` и `cmd/web/main.go` — независимые composition roots.
+- `internal/presentation/wails` — desktop presentation adapter;
+- `main.go` — composition root приложения.
 - Bootstrap читается только из ENV. Runtime JSON-конфигов и CLI config flags нет.
   Wails CLI запускается из корня с нативным `wails.json` и `main.go`;
   временные конфиги не создаются.
 
-Frontend embeds сгруппированы в `internal/infrastructure/assets/{desktop,web}`.
+Frontend embed находится в `internal/infrastructure/assets/desktop`.
 Product metadata хранится в Go (`internal/infrastructure/product/reader.go`),
-без JSON asset/parser; native parity tests фиксируют desktop/web значения и
-защиту от изменения slices вызывающим кодом. Runtime-адаптер Core намеренно
-отсутствует: единственный исполнительный контур — standalone CLI.
+без JSON asset/parser; native tests фиксируют значения и защиту от изменения
+slices вызывающим кодом. Runtime-адаптер Core намеренно отсутствует: единственный
+исполнительный контур — standalone CLI.
 
 ## Разработка
 
@@ -47,8 +42,6 @@ Product metadata хранится в Go (`internal/infrastructure/product/reader
 make install
 make desktop-dev
 make desktop-build
-make web-build
-make web-run
 ```
 
 Проверки:
@@ -59,7 +52,7 @@ make check-race
 make desktop-build
 ```
 
-`make check` собирает обе frontend версии, проверяет воспроизводимость Wails
+`make check` собирает desktop frontend, проверяет воспроизводимость Wails
 artifacts, quality lint, native Go tests, typed TS tests, vet и Go build.
 Каждая проверка блокирует gate. `make lint` — quality lint, `make test` — Go/TS
 tests (после frontend сборок); `make check-race` — native Go race tests.
@@ -80,7 +73,7 @@ Frontend использует закреплённые ESLint **9.39.5**, typesc
 и TypeScript **5.9.3** из `package-lock.json`. Vite **7.3.7** и React plugin
 **5.2.0** согласованы с Node types; TS scripts/tests запускаются через pinned
 tsx **4.20.6**. `strictTypeChecked` применяется ко
-всем frontend `.ts`/`.tsx`, включая обе Vite-конфигурации, Wails declarations,
+всем frontend `.ts`/`.tsx`, включая Vite-конфигурацию, Wails declarations,
 handwritten TS scripts и тесты в `tests/{bindings,frontend,e2e}`. Unsafe и promise
 checks блокируют gate; TypeScript проверяет declarations без `skipLibCheck`.
 Warnings блокируют gate; baseline, path exclusions и inline rule disables отсутствуют.
@@ -100,30 +93,31 @@ prepared output вручную. Новая Wails model schema требует о�
 Сама упаковка также использует временную SQLite для генерации bindings;
 база пользователя открывается при запуске приложения.
 Blocking macOS CI выполняет `make check`, `make check-race`, packaged desktop build.
-TS E2E собирает standalone web binary с `GOWORK=off`, проверяет ENV-only bootstrap,
-health/product-info и раздачу embedded HTML/JS из постороннего рабочего каталога.
 
 ## ENV и локальное хранилище
 
 | ENV | Назначение | Default |
 | --- | --- | --- |
-| `STUDIO_WEB_LISTEN_ADDRESS` | HTTP listener Studio web, host:port | `127.0.0.1:8080` |
 | `STUDIO_DESKTOP_DB_PATH` | Абсолютный путь к файлу SQLite Studio | `os.UserConfigDir()/Liapoldus/Studio/client.sqlite` |
 
 Изменение bootstrap требует перезапуска. Значения не публикуются в product-info.
-Web не имеет Core endpoint и не выполняет runtime-запросы.
 
-Desktop открывает собственную SQLite БД с транзакционной schema v1, сохранёнными
+Desktop открывает собственную SQLite БД с транзакционной schema v5, сохранёнными
 project metadata (ID, имя, абсолютный root path) и selected project. Адаптер
 поддерживает upsert/list/delete и чтение/запись selection; удаление выбранного
 project атомарно очищает selection. Данные сохраняются после reopen; неизвестная
 новая версия schema отклоняется. Файл БД имеет права `0600`, новые каталоги — `0700`.
-Core settings, credentials и plugin settings здесь не хранятся.
+Editor associations, installed plugin metadata и trust decisions также принадлежат
+этой базе. Workspace layout/tabs/filters хранятся только в project-local
+`.studio/workspace.json`; redacted recoverable CLI/plugin diagnostics принадлежат
+`.studio/diagnostics.jsonl`. Core settings, credentials и plugin settings здесь
+не хранятся. Application theme (`system`, `light`, `dark`) хранится в global
+SQLite и применяется host-controlled renderer theme tokens.
 
 Открытые задачи и границы каркаса перечислены в [TODO.md](TODO.md).
 
-Целевая продуктовая модель Studio, project/file tree, Core workspace, Core
-services, Studio plugins, marketplace и Mermaid-схемы описаны в разделе
+Целевая продуктовая модель Studio, project/file tree, runtime plugin graph,
+CLI boundary, Studio plugins, traffic reports и Mermaid-схемы описаны в разделе
 [docs/](docs/index.md). Документ имеет статус проектной спецификации и не
 заменяет контракты Core или Plugin SDK.
 

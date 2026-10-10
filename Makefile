@@ -1,4 +1,4 @@
-.PHONY: install check check-race lint lint-go lint-frontend test bindings-check desktop-dev desktop-build web-build web-binary web-run
+.PHONY: install check check-race lint lint-go lint-frontend test bindings-check desktop-dev desktop-build
 .NOTPARALLEL:
 
 export GOWORK := off
@@ -6,7 +6,7 @@ export GOFLAGS ?= -p=1
 
 GOLANGCI_LINT_VERSION := v2.5.0
 GOLANGCI_LINT := .tools/golangci-lint-$(GOLANGCI_LINT_VERSION)/golangci-lint
-GO_PACKAGES := . ./cmd/... ./internal/...
+GO_PACKAGES := . ./internal/...
 
 install:
 	cd frontend && npm ci
@@ -34,7 +34,6 @@ lint: lint-go lint-frontend
 
 check:
 	cd frontend && npm run build
-	cd frontend && npm run build:web
 	$(MAKE) bindings-check
 	$(MAKE) lint test
 	go vet $(GO_PACKAGES)
@@ -53,13 +52,3 @@ desktop-dev:
 desktop-build:
 	cd frontend && npm run desktop:build
 	$(MAKE) bindings-check lint
-
-web-build:
-	cd frontend && npm run build:web
-
-web-binary: web-build
-	mkdir -p build/bin
-	go build -o build/bin/studio-web ./cmd/web
-
-web-run: web-build
-	go run ./cmd/web

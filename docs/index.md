@@ -36,7 +36,7 @@ Studio не:
 - выполняет plan/apply/deploy;
 - показывает runtime observations как собственные live-данные;
 - исполняет произвольный plugin HTML/JS в Core inspector;
-- передаёт credentials и secrets в browser или Studio plugin.
+- передаёт credentials и secrets в frontend или Studio plugin.
 
 ## Карта документации
 
@@ -45,11 +45,17 @@ Studio не:
 | [Продуктовая модель](product-model) | Термины, контексты, ownership и source of truth |
 | [Проект и файлы](project-and-files) | Manifest, file tree, modules и local validation |
 | [Git и версии](version-control) | Repository, branches, commits, remotes и version page |
-| [Core workspace](core-workspace) | Shell, config graph, service nodes, links и inspector |
+| [Техническая архитектура](technical-architecture) | Go/React/Wails layers, ports, state и failure boundaries |
+| [UI system](ui-system) | Shell, canvas, inspector, panels, tokens и interaction rules |
+| [Plugin workspace](core-workspace) | Runtime plugin graph, full links и schema-driven inspector |
 | [Операции](operations) | Local validation, CLI reports и deploy diagnostics |
+| [CLI integration](cli-integration) | Process boundary, JSONL events, local Core и remote handoff |
 | [Studio plugins](studio-plugins) | Extension host, marketplace, capabilities и lifecycle |
-| [Режимы и безопасность](security-and-modes) | Desktop/Web, permissions, secrets и failure isolation |
-| [Roadmap и решения](roadmap) | Этапы реализации, acceptance criteria и открытые вопросы |
+| [Traffic inspector](traffic-inspector) | Observation reports, redaction и protocol diagnostics |
+| [Production readiness](production-readiness) | Release evidence, security gates и promotion policy |
+| [Режимы и безопасность](security-and-modes) | Desktop, permissions, secrets и failure isolation |
+| [Production release](release) | Platform packaging, reproducibility, QA и recovery |
+| [Roadmap и решения](roadmap) | Этапы реализации, acceptance criteria и принятые решения |
 
 ## Главная архитектурная схема
 
@@ -61,7 +67,7 @@ Studio не:
 
 1. активный project;
 2. активный Git revision/branch;
-3. выбранный service или link в project config graph;
+3. выбранный runtime plugin или link в project config graph;
 4. открытые workbench tabs и Studio plugin panels.
 
 Изменение файла является локальным draft. Изменение становится deployable только
@@ -78,5 +84,5 @@ CLI plan/apply для target → открыть deploy report.
 
 ## Статус
 
-Текущая Studio — каркас Wails/React и web shell. Этот раздел описывает целевую
+Текущая Studio — каркас Wails/React и desktop shell. Этот раздел описывает целевую
 модель, необходимую для следующих этапов проектирования и реализации.

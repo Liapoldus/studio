@@ -28,3 +28,69 @@ jobs:
       - run: make check
       - run: make check-race
       - run: make desktop-build
+
+  cross-platform:
+    name: package-${{ matrix.platform }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux-amd64
+            os: ubuntu-24.04
+            wails_platform: linux/amd64
+            wails_extra: ""
+          - platform: windows-amd64
+            os: windows-2022
+            wails_platform: windows/amd64
+            wails_extra: "-nsis"
+          - platform: macos-arm64
+            os: macos-14
+            wails_platform: darwin/arm64
+            wails_extra: ""
+    runs-on: ${{ matrix.os }}
+    env:
+      GOWORK: "off"
+      GOFLAGS: "-p=1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25.1"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.13.0"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install Linux Wails dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bubblewrap libgtk-3-dev libwebkit2gtk-4.1-dev
+      - run: npm ci --prefix frontend
+      - run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.12.0
+      - run: go test ./...
+      - run: go vet ./...
+      - run: go build ./...
+      - run: npm run bindings:check --prefix frontend
+      - run: npm run lint --prefix frontend
+      - name: Build desktop package
+        shell: bash
+        env:
+          STUDIO_WAILS_PLATFORM: ${{ matrix.wails_platform }}
+          STUDIO_WAILS_NSIS: ${{ runner.os == 'Windows' && 'true' || 'false' }}
+        run: |
+          npm run desktop:build --prefix frontend
+      - name: Smoke-test desktop package
+        shell: bash
+        env:
+          STUDIO_PACKAGE_PLATFORM: ${{ runner.os == 'Windows' && 'windows' || runner.os == 'macOS' && 'darwin' || 'linux' }}
+        run: node scripts/desktop/package-smoke.mjs
+      - name: Smoke-test Windows AppContainer launcher
+        if: runner.os == 'Windows'
+        run: node scripts/desktop/sandbox-smoke.mjs
+      - name: Upload package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: liapoldus-studio-${{ matrix.platform }}
+          path: build/bin/**
+          if-no-files-found: error

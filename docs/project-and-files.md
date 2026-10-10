@@ -12,17 +12,18 @@ Project не хранит копию Core SQLite, Core credentials или secret
 
 ## 2. Целевая структура
 
-Имена и форматы ниже являются UX-моделью, а не утверждённым публичным
-wire-контрактом:
+Эта структура является каноническим Project-контрактом CLI. Studio не вводит
+второй формат и не превращает `.studio/` в источник runtime-конфигурации:
 
 ```text
 liapoldus-project/
 ├── project.yaml                 # identity, format version, target profiles
 ├── services/
 │   ├── runtime-service/
-│   │   ├── service.yaml         # service binding и settings references
-│   │   ├── settings/            # source settings, если разрешено schema
-│   │   └── links/               # проектные декларации связей
+│   │   ├── service.yaml         # identity, plugin version, schema references
+│   │   ├── settings.json        # schema-driven plugin settings
+│   │   └── links/               # полные versioned plugin-to-plugin contracts
+│   │       └── forms-db.json
 │   ├── forms-db-service/
 │   │   └── service.yaml
 │   └── server-service/
@@ -38,14 +39,20 @@ liapoldus-project/
 │   ├── service-bindings/
 │   └── modules/
 ├── environments/
-│   ├── local.yaml
+│   ├── local.yaml                # target/profile metadata, без credentials
 │   └── production.yaml
 └── .studio/
-    ├── index/                   # generated local index, не VCS source
-    └── drafts/                  # локальные drafts без secrets
+    ├── workspace.json           # canvas/layout, tabs и filters
+    ├── index/                   # generated local index
+    ├── reports/                 # imported redacted reports
+    ├── diagnostics.jsonl        # redacted recoverable CLI/plugin diagnostics
+    └── drafts/                  # local drafts без secrets
 
-Git repository является обязательной частью Project. Локальная история включена
-всегда; remote может быть подключён отдельно и объявлен источником истины.
+`project.yaml`, `service.yaml`, `settings.json` и `links/*.json` редактируются
+как source. `.studio/` является локальным desktop state, исключается из CLI
+bundle и не содержит Core credentials. Git repository является частью Project:
+Studio явно показывает branch, revision и dirty state, но не подменяет Git
+источник истории своей SQLite-базой.
 ```
 
 ## 3. Узлы дерева
@@ -53,7 +60,7 @@ Git repository является обязательной частью Project. �
 Дерево должно отличать:
 
 - project metadata;
-- Core services;
+- runtime plugin services;
 - modules;
 - schemas;
 - environment profiles;
@@ -81,6 +88,11 @@ Project navigator — dockable panel слева. Он поддерживает:
 - создание project-owned file через зарегистрированный file type;
 - `Open`, `Reveal`, `Rename`, `Delete` с подтверждением;
 - `Open in plugin`, если тип файла принадлежит Studio plugin.
+
+В desktop shell доступны bounded search и фильтры `services`, `modules`,
+`schemas`, `changed`. Их значения и текущая selection сохраняются в
+`.studio/workspace.json`; это локальное UI-состояние и не меняет canonical
+Project format.
 
 Project service tree и project file tree могут быть двумя вкладками одной панели:
 
@@ -125,12 +137,19 @@ sequenceDiagram
     Operator->>Studio: Меняет settings/module reference
     Studio->>Files: Сохраняет draft
     Operator->>Studio: Validate → Git diff → Commit
-    Studio->>Git: Push approved revision
-    Operator->>CLI: plan/apply revision для target
-    CLI->>Files: Читает commit
-    CLI->>CoreAPI: Отправляет canonical bundle
+    Studio->>CLI: validate/plan/apply для local target
+    CLI->>Files: Читает canonical project
+    CLI->>CoreAPI: Локальный Core workflow через CLI
     CoreAPI-->>CLI: operationId и deploy report
+    Operator->>Studio: Remote handoff
+    Studio->>CLI: exact revision + target metadata
+    CLI-->>Operator: CLI/CI deployment workflow
 ```
+
+Studio не подключается к Core API, не хранит target credentials и не выполняет
+remote deployment. Для `local` Studio запускает `liapoldus` как дочерний процесс
+и импортирует его JSONL events/reports. Для remote Studio только подготавливает
+exact CLI handoff и открывает provenance результата.
 
 ## 7. Inspector и files
 
@@ -141,7 +160,7 @@ reference. Оно не раскрывает secrets и не превращает
 Пример:
 
 ```text
-Core service: runtime-service
+Runtime plugin: runtime-service
 Field: Logic module
 Value: modules/auth-flow
 Action: Open in Logic Modules
@@ -149,6 +168,11 @@ Action: Open in Logic Modules
 
 Base Studio не обязана быть полноценной code IDE. Редактор module/source должен
 принадлежать специализированному Studio plugin.
+
+Для любого файла доступны системный default application, выбор приложения и
+per-file/per-type association. Studio передаёт native path через OS launcher,
+не строит shell-команду из пользовательской строки и не передаёт редактору
+secrets. Встроенного Monaco/CodeMirror/code editor в продукте нет.
 
 ## 8. Draft, validation и deploy handoff
 

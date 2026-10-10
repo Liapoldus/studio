@@ -5,12 +5,12 @@
 Studio находится между IDE и configuration workbench:
 
 - как Android Studio — имеет project, manifest, file tree и редакторы;
-- как Unity — показывает объектную сцену сервисов и inspector выбранного объекта;
+- как Unity — показывает объектную сцену runtime plugins и inspector выбранного объекта;
 - как Figma — использует canvas-first рабочее пространство и dockable panels.
 
 Core не рисуется отдельным узлом. Studio не является control-plane client и не
-подключается к Core. Canvas показывает service declarations из project source и
-Core-owned links, а результат deploy приходит только через CLI report.
+подключается к Core. Canvas показывает runtime plugin instances из project
+source и links между ними, а результат deploy приходит только через CLI report.
 
 ## 2. Термины
 
@@ -20,20 +20,23 @@ Core-owned links, а результат deploy приходит только ч�
 configuration в SQLite, публикует immutable generations и наблюдает replicas,
 leases, readiness и rollout. Core доступен CLI, но не Studio.
 
-### Core service declaration
+### Runtime plugin declaration
 
-Проектная декларация сервиса, который будет собран CLI в bundle для Core. В
-Studio она представлена canvas node, строкой в дереве сервисов и правым
-schema-driven inspector. Runtime observations отображаются только из
+Проектная декларация runtime plugin, который будет собран CLI в bundle для
+Core. В Studio она представлена canvas node, строкой в дереве services и
+правым schema-driven inspector. Runtime observations отображаются только из
 импортированного CLI/CI report.
 
-Core service не добавляет в Studio произвольную страницу, HTML, CSS или
-JavaScript. Product-specific fields приходят через declarative settings schema.
+Runtime plugin не загружает в Studio исполняемый код и не добавляет произвольную
+страницу, HTML, CSS или JavaScript. Product-specific fields приходят через
+plugin-owned declarative settings schema.
 
 ### Studio plugin
 
 Расширение самой Studio. Оно отделено от Core services и может объявлять
-commands, workbench pages, dockable panels, file editors и capability access.
+commands, workbench pages, dockable panels, file editors, companion console tools
+и capability access. Companion tool устанавливается и запускается через Studio
+Tool Registry, но остаётся локальным developer tool, а не Core service.
 
 ### Project
 
@@ -52,10 +55,10 @@ working tree не может быть передан в `apply`.
 flowchart TD
     S["Studio"] --> P["Active project"]
     S --> C["Active branch / commit"]
-    S --> O["Selected config object"]
+    S --> O["Selected plugin or link"]
     S --> T["Workbench tabs and panels"]
-    O --> N["Service declaration"]
-    O --> L["Core-owned link declaration"]
+    O --> N["Runtime plugin instance"]
+    O --> L["Versioned plugin-to-plugin contract"]
     T --> SP["Studio plugin page"]
     T --> DP["Studio plugin panel"]
 ```
@@ -99,9 +102,10 @@ Studio должна визуально различать эти состоян�
 | Core desired configuration | Core SQLite + CLI | Показывает provenance из CLI report |
 | Replica/lease observations | Core/SDK + CLI report | Импортирует и фильтрует report |
 | Project files | Project workspace | Индексирует, валидирует, редактирует через подходящий surface |
-| Core service settings schema | Core service contract | Строит inspector |
-| Studio plugin extension manifest | Studio plugin ecosystem | Регистрирует commands/pages/panels |
-| Plugin marketplace package | Marketplace/deployment owner | Показывает metadata и lifecycle |
+| Runtime plugin settings schema | Runtime plugin contract | Строит inspector |
+| Studio plugin extension manifest | Studio plugin ecosystem | Регистрирует commands/pages/panels/editors/tools |
+| Companion console tool | Studio plugin publisher | Устанавливает проверенный executable через Tool Registry |
+| Local Studio plugin package | Plugin publisher + local user trust | Проверяет digest/manifest и управляет lifecycle |
 
 ## 7. Что не входит в базовую Studio
 
@@ -111,4 +115,4 @@ Studio должна визуально различать эти состоян�
 - product-specific routing editor общего назначения;
 - автоматический replay неизвестной операции;
 - raw JSON как основной операторский workflow;
-- произвольные plugin web pages внутри Core inspector.
+- произвольные plugin pages/HTML внутри Core inspector.

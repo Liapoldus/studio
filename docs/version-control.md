@@ -11,23 +11,22 @@ runtime SQLite Core.
 источником истины проекта. Studio не должна отправлять изменения в protected
 remote без выполненной provider/CI approval policy.
 
-## 2. Version Control page
+## 2. Version Control page — production first scope
 
 Отдельная страница `Version Control` содержит:
 
-- repository root и remote list;
-- active branch и branch switcher;
-- ahead/behind/diverged state для каждого remote;
+- repository root и redacted remote list;
+- active branch и safe branch switcher для clean working tree;
+- bounded commit history и file-level diff;
 - staged, unstaged, untracked и conflicted files;
-- commit editor и partial staging;
-- commit history, graph и file-level diff;
-- fetch/pull/push controls с выбором remote и branch;
-- create/delete branch;
-- merge, rebase и cherry-pick;
-- stash create/apply/drop;
-- conflict resolver;
-- tags/releases metadata, если remote provider это поддерживает;
+- commit editor для project-scoped changes;
+- pull/push controls для выбранного remote/branch;
 - policy/approval status перед push.
+
+Merge, rebase, cherry-pick, stash, partial staging, provider metadata и
+интерактивный conflict resolver остаются CLI/external-editor workflows до
+утверждения отдельного versioned Git operations contract. Studio уже фиксирует
+conflict state и блокирует опасные действия.
 
 ## 3. Revision gate
 

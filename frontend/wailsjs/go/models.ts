@@ -1,2 +1,2 @@
 // Prepared by scripts/bindings/prepare.mts.
-export { ProductInfo, models } from '../../src/api/info'
+export { Diagnostic, GitBranch, GitChange, GitCommit, GitDiff, GitRemote, GitStatus, InstalledPluginState, PluginGraph, PluginLink, ProductInfo, Project, ProjectFile, RuntimePlugin, TrafficRecordView, Workspace, WorkspaceState, models } from '../../src/api/info'

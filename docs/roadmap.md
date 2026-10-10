@@ -1,126 +1,121 @@
-# Roadmap, acceptance criteria и открытые решения
+# Roadmap, acceptance criteria и границы готовности
+
+Roadmap описывает production-ready desktop Studio. Реализация идёт
+вертикальными срезами: каждый срез должен оставлять работающий offline desktop
+workspace, typed Wails boundary и тестируемый контракт. Отсутствующий Core/CLI
+не блокирует разработку shell и source workspace.
 
 ## 1. Этапы реализации
 
-### Этап 0. Product shell
+### Этап 0. Architecture freeze
 
-- project/revision context model;
-- file tree shell;
-- canvas shell;
-- inspector shell;
-- operations shell;
-- loading/empty/error states.
+- канонический CLI Project contract и ownership map;
+- typed CLI JSON/JSONL events, reports и provenance;
+- manifest/schema/link-contract Studio plugin host;
+- redaction annotations и traffic report contract;
+- product, security, UI, release и cross-platform documents.
 
-### Этап 1. Project config read model
+### Этап 1. Desktop shell и design system
 
-- project service inventory;
-- canvas nodes/links;
-- schema and validation diagnostics;
-- last known CLI/CI reports;
-- report import and stale handling.
+- Wails-only desktop bootstrap для macOS, Windows и Linux;
+- Home, Settings и Project shell;
+- собственные tokens, light-first/dark themes и headless primitives;
+- command palette, keyboard/focus/accessibility и reduced motion;
+- loading, empty, error и degraded states.
 
-### Этап 2. Project source model
+### Этап 2. Project и Git workspace
 
-- project manifest;
-- root directory selection;
-- file indexing;
-- local validation;
-- service/module references;
-- diff against selected Git revision and imported deploy report.
+- discovery/open/import canonical Project;
+- project/file tree с `.studio/` boundary;
+- безопасное чтение/запись project-owned files;
+- native Git status, diff, history, branches, commit, push/pull;
+- conflict state и `.studio` layout/workspace persistence;
+- external editor associations без встроенного IDE.
 
-### Этап 3. Git и version control
+### Этап 3. Canvas и configuration workspace
 
-- local repository always enabled;
-- multiple remotes;
-- branch switching and history;
-- commit/push/pull;
-- merge/rebase/cherry-pick/stash;
-- conflict resolution;
-- version-management page.
+- runtime plugin graph: только plugin instances и plugin-to-plugin links;
+- layout, selection, focus и validation badges;
+- schema-driven settings forms для `settings.json`;
+- полный link contract editor для `links/*.json`;
+- compatibility, diagnostics и generated safe references;
+- Core не показывается отдельным canvas node.
 
-### Этап 4. CLI handoff
+### Этап 4. CLI и local Core workflow
 
-- schema-driven settings inspector;
-- draft/save/validate;
-- commit-gated plan/apply handoff;
-- CLI/CI report import;
-- degraded/failed report diagnostics;
-- target/revision provenance.
+- typed `CliRunner`, JSONL parser и cancellation/timeout;
+- local `validate`, `plan`, `apply` и Core start/stop/status/logs через CLI;
+- target catalog и operation progress;
+- report import с commit/target/bundle/CLI/Core provenance;
+- remote deployment только exact CLI handoff, без remote execution из Studio.
 
-### Этап 4a. V2 boundary conformance
+### Этап 5. Local Studio plugin host
 
-- Studio has no Core API adapter or Core credential store;
-- `Apply` is absent from Studio and replaced by CLI handoff;
-- imported reports cannot be presented as live observations;
-- project schema and bundle fixtures match the standalone CLI contract;
-- local bootstrap/target configuration is owned by CLI, not Studio.
+- local `.studio-plugin` file import и manifest validation;
+- explicit trust dialog, version/signature/digest metadata и rollback;
+- declarative pages, panels, inspectors, forms и commands;
+- out-of-process companion tools с Tool Registry policy;
+- permission grants, cancellation, limits, crash/timeout isolation.
 
-### Этап 5. Studio plugin host
+### Этап 6. Traffic inspector
 
-- extension manifest discovery;
-- commands/pages/panels;
-- capability consent;
-- failure isolation;
-- contextual file opening.
+- CLI/Core observation report ingestion;
+- schema annotation based redaction до UI и `.studio/` persistence;
+- timeline/table/payload/schema views;
+- filters по plugin, method, status, latency и time;
+- safe diagnostic export без secrets и live Studio→Core connection.
 
-### Этап 6. Marketplace
+### Этап 7. Production packaging
 
-- catalog;
-- details;
-- install/update/remove;
-- compatibility;
-- permissions;
-- lifecycle state machine.
-
-### Этап 7. Specialized editors
-
-- Logic Modules plugin;
-- module/source editor;
-- schema-aware editors;
-- plugin-specific validation;
-- project artifact preview.
+- macOS bundle, signing и notarization;
+- Windows installer, WebView2 prerequisite, signing и upgrade path;
+- Linux AppImage и package artifact;
+- migrations, crash diagnostics, release channels и reproducible builds;
+- cross-platform packaged smoke tests и release evidence.
 
 ## 2. Acceptance criteria
 
-Целевая модель считается согласованной, если:
+Целевая production-ready модель считается достигнутой, если:
 
-- у Studio есть project context и file tree;
-- project не смешан с deploy target или Core runtime;
-- Git Project остаётся source of source configuration;
-- Core SQLite остаётся source of applied runtime state;
-- local source, desired state и observed state видны раздельно;
-- canvas показывает Core services, но не Core как node;
-- service settings открываются в schema-driven inspector;
-- service links не становятся product-specific routing editor;
-- deploy reports показывают фактический rollout result;
-- Core process lifecycle не выглядит управляемым из Studio;
-- Studio не имеет Core API adapter;
-- Studio plugins отделены от Core services;
-- marketplace управляет только Studio plugins;
-- module/code editor принадлежит специализированному plugin;
-- plugin failure не ломает Core workspace;
-- опасные действия имеют scope, permission и confirmation;
-- страницы имеют empty/loading/error/degraded states;
-- web ограничения не маскируются под desktop возможности.
+- Studio запускается только как desktop application и открывает Project offline;
+- canonical CLI Project редактируется без второго project format;
+- branch, exact revision и dirty state видны явно;
+- canvas показывает только runtime plugins и связи между ними;
+- plugin settings и полный link contract редактируются schema-driven;
+- traffic view строится только из CLI/Core report и показывает redacted payloads;
+- внешний системный IDE открывает выбранный файл;
+- local Core workflow выполняется через `liapoldus` child process;
+- remote deployment отсутствует в Studio и передаётся CLI/CI;
+- local Studio plugins импортируются package-файлом с explicit trust;
+- plugin UI declarative, tools out-of-process, plugin failure изолирован;
+- credentials и secrets не попадают в frontend, plugin UI или persisted reports;
+- package/build/smoke matrix проходит на macOS, Windows и Linux;
+- product, architecture, UI, CLI, plugin, traffic, security и release decisions
+  описаны в Studio docs.
 
-## 3. Вопросы, которые нужно утвердить
+## 3. Принятые решения
 
-1. Точный формат project manifest и его владелец.
-2. Может ли один project иметь несколько environment profiles.
-3. Какие типы файлов являются базовыми, а какие полностью принадлежат Studio
-   plugins.
-4. Где физически запускаются Studio plugin services.
-5. Кто владеет install/update/start/stop lifecycle Studio plugins.
-6. Формат и trust model marketplace packages.
-7. Capability consent и authorization model для Studio plugins.
-8. Безопасный способ работы web с project files.
-9. Связь local source с plugin-owned settings schemas.
-10. Допустимый уровень bidirectional sync между project и CLI reports.
-11. Формат подписанного/machine-readable deploy report.
-12. Нужна ли отдельная audit page или достаточно Reports workspace.
+1. Project format принадлежит CLI; Studio лишь читает и редактирует его source.
+2. `.studio/` — локальное состояние Studio, не часть bundle и не secret store.
+3. Canvas показывает plugins и links; Core не является отдельным узлом.
+4. Link editor работает с полным versioned contract, а не с декоративным edge.
+5. Local debugging разрешён через CLI; прямой Core API adapter запрещён.
+6. Remote deployment остаётся CLI/CI responsibility.
+7. Studio plugins устанавливаются локально; remote marketplace registry не входит
+   в первую production scope.
+8. Production plugin UI — только declarative host-controlled surfaces.
+9. Companion tools запускаются без arbitrary shell и с declared permissions.
+10. Base Studio не содержит IDE; code/module editors принадлежат specialized
+    plugins или внешним приложениям.
 
-## 4. Документный статус
+## 4. Definition of done по срезу
 
-Этот раздел описывает Studio v2 target UX/product model. Он не добавляет Core
-runtime API, SQLite tables или process control в Studio; cross-repository
-contracts принадлежат CLI и Core API owners.
+Срез считается готовым, если его Go port/application code, Wails binding,
+frontend state/UI, negative/error states, tests и documentation обновлены вместе.
+Нельзя считать этап завершённым по одному нарисованному экрану или stub API.
+
+## 5. Document status
+
+Этот файл фиксирует целевую архитектуру и порядок реализации. Он не утверждает,
+что все этапы уже реализованы. Текущую фактическую готовность следует проверять
+по git diff, тестам и разделам технической архитектуры.

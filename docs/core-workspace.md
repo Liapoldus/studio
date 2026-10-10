@@ -2,14 +2,14 @@
 
 ## 1. Shell
 
-Config workspace — основной canvas-first экран Studio. Он показывает структуру
-проектной конфигурации, а не live-подключение к Core.
+Config workspace — основной canvas-first экран Studio. Он показывает runtime
+plugins и связи между ними, а не live-подключение к Core.
 
 ```mermaid
 flowchart LR
     A["Activity bar"] --> B["Project / services navigator"]
-    B --> C["Central service canvas"]
-    C --> D["Selected service or link"]
+    B --> C["Central plugin canvas"]
+    C --> D["Selected plugin or link"]
     D --> E["Right inspector"]
     C --> F["Bottom operations panel"]
     G["Top bar: project + branch + revision"] --> C
@@ -20,8 +20,8 @@ flowchart LR
 
 - activity bar — переключение разделов;
 - top bar — project, branch, commit/revision, validation summary, deploy report;
-- navigator — files и services;
-- canvas — nodes и links;
+- navigator — files и runtime plugins;
+- canvas — plugin nodes и links;
 - inspector — выбранный node/link;
 - bottom panel — operations, problems, events;
 - workbench tabs — Config workspace и Studio plugin pages.
@@ -41,20 +41,22 @@ flowchart LR
 
 ### Config workspace
 
-Показывает canvas проектных services, Core-owned links и schema-driven inspector.
+Показывает canvas runtime plugin instances, plugin-to-plugin links и
+schema-driven inspector.
 
 ### Services
 
-Показывает inventory services в таблице с фильтрами и переходом в canvas.
+Показывает inventory runtime plugins в таблице с фильтрами и переходом в canvas.
 
 ### Deploy reports
 
 Показывает импортированные CLI/CI reports, operations, ACKs, errors и degraded
 states. Live Core access из Studio отсутствует.
 
-### Marketplace
+### Installed Studio plugins
 
-Показывает только Studio plugins: Discover, Installed, Updates и Details.
+Показывает только локально импортированные Studio plugins, trust decisions,
+installed tools, updates из нового local package и rollback.
 
 ### Settings
 
@@ -63,10 +65,10 @@ states. Live Core access из Studio отсутствует.
 
 ## 3. Canvas
 
-На canvas отображаются:
+На canvas отображаются только:
 
-- project service nodes;
-- Core-owned service link declarations;
+- runtime plugin instances из Project;
+- полные versioned plugin-to-plugin link contracts;
 - schema/validation badges;
 - last known deploy report indicators;
 - project binding markers;
@@ -75,12 +77,12 @@ states. Live Core access из Studio отсутствует.
 Сам Core, Core database, live replicas, credentials и plugin internals на canvas
 не рисуются.
 
-### Service node
+### Runtime plugin node
 
 Минимум:
 
 - display name;
-- stable service id;
+- stable plugin/service id;
 - type/manifest version;
 - local validation state;
 - last known deploy state;
@@ -92,16 +94,21 @@ settings section inspector.
 
 ### Link
 
-Link создаётся drag-жестом между двумя service nodes. Inspector показывает:
+Link создаётся drag-жестом между двумя runtime plugin nodes. Inspector редактирует
+полный versioned contract и показывает:
 
 - caller;
 - target;
 - link id;
-- declared policy generation;
+- methods и enabled/disabled methods;
+- request/response schemas;
+- transport и security profile;
+- timeout/retry/limits и redaction policy;
 - validation state;
 - generic contract/transport metadata, если оно доступно Core.
 
-Product-specific routing и payload editor в общий Studio inspector не входят.
+Product-specific UI не встраивается в общий renderer: plugin-owned schemas
+рендерятся generic host-controlled controls.
 
 ### Layout
 
@@ -109,11 +116,11 @@ Product-specific routing и payload editor в общий Studio inspector не �
 configuration. Доступны move, multi-select, zoom/pan, fit to content, focus from
 tree/search и reset local layout.
 
-## 4. Service inspector
+## 4. Runtime plugin inspector
 
 Секции inspector:
 
-1. identity — name, id, manifest version;
+1. identity — name, id, plugin и manifest version;
 2. settings — schema-generated fields;
 3. source binding — project file/module references;
 4. last deploy — commit, bundle digest, report state;
@@ -125,7 +132,9 @@ duration, size, code/reference, file, directory, array/object и secret
 reference без возврата secret value.
 
 Неизвестный тип поля делает surface недоступным с diagnostic, а не превращается
-в произвольный HTML control.
+в произвольный HTML control. Перед записью host повторно проверяет
+тип/required/enum/bounds/pattern constraints и вложенные значения; renderer не
+является security boundary сам по себе.
 
 ## 5. Link inspector
 
@@ -133,17 +142,18 @@ reference без возврата secret value.
 
 - caller и target;
 - link id;
-- policy generation source;
+- contract/schema version;
 - eligibility and validation;
 - contract compatibility;
-- transport/profile declaration;
+- methods, request/response schemas, transport/profile, security, limits;
+- redaction policy;
 - last deploy report.
 
 Общий inspector не знает product-specific методы и payloads.
 
-## 6. Services workspace
+## 6. Runtime plugins workspace
 
-Таблица services должна показывать:
+Таблица runtime plugins должна показывать:
 
 - service id/name;
 - manifest/schema version;
