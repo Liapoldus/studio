@@ -4,12 +4,22 @@ export interface ProductInfo {
   workspaceFeatures: string[]
 }
 
+export interface ToolchainStatus {
+  cliAvailable: boolean
+  cliPath: string
+  cliVersion: string
+  errorCode: string
+}
+
 export interface StudioAPI {
   productInfo(): Promise<ProductInfo>
+  toolchainStatus(): Promise<ToolchainStatus>
   clientPreferences(): Promise<ClientPreferences>
   saveClientPreferences(theme: ThemePreference): Promise<void>
+  saveClientLocale(locale: Locale): Promise<void>
   listProjects(): Promise<Project[]>
   openProject(root: string): Promise<Workspace>
+  createProject(root: string, id: string, name: string): Promise<Workspace>
   workspace(): Promise<Workspace>
   readWorkspaceState(): Promise<WorkspaceState>
   writeWorkspaceState(state: WorkspaceState): Promise<void>
@@ -22,8 +32,19 @@ export interface StudioAPI {
   readProjectSchema(schemaPath: string): Promise<Uint8Array>
   readProjectSettings(settingsPath: string, schemaPath: string): Promise<Uint8Array>
   writeProjectSettings(settingsPath: string, schemaPath: string, patch: Uint8Array): Promise<void>
-  runCLI(args: string[]): Promise<void>
+  runStudioCommand(command: string, target?: string, operationID?: string, profilePath?: string): Promise<void>
+  runStudioRuntimeCommand(command: string, serviceID: string): Promise<void>
+  initializeGit(): Promise<Workspace>
+  createRuntimePlugin(input: RuntimePluginInput): Promise<Workspace>
+  deleteRuntimePlugin(id: string, confirmed: boolean): Promise<Workspace>
+  createPluginLink(input: PluginLinkInput): Promise<Workspace>
+  deletePluginLink(caller: string, id: string, confirmed: boolean): Promise<Workspace>
+  selectTargetProfile(): Promise<string>
   cancelCLI(): Promise<void>
+  listRuntimeArtifacts(): Promise<ArtifactReference[]>
+  registerRuntimeArtifact(id: string, version: string, platform: string, binaryPath: string): Promise<ArtifactReference>
+  trustRuntimeArtifact(id: string, version: string, platform: string, digest: string): Promise<ArtifactReference>
+  readRuntimePluginMetadata(pluginID: string, view: 'manifest' | 'schema' | 'status'): Promise<string>
   prepareRemoteHandoff(target: string): Promise<string>
   onCLIEvent(callback: (event: CLIEvent) => void): () => void
   trafficRecords(): Promise<TrafficRecordView[]>
@@ -41,6 +62,14 @@ export interface StudioAPI {
   stopStudioPluginProcess(pluginId: string, version: string): Promise<void>
   studioPluginProcessStatus(pluginId: string, version: string): Promise<string>
   gitDiff(path: string): Promise<GitDiff>
+  gitConflict(path: string): Promise<GitConflict>
+  gitResolveConflict(path: string, side: 'ours' | 'theirs', confirmed: boolean): Promise<void>
+  gitStage(paths: string[], confirmed: boolean): Promise<void>
+  gitUnstage(paths: string[], confirmed: boolean): Promise<void>
+  gitCommitStaged(message: string, confirmed: boolean): Promise<string>
+  gitStashes(limit: number): Promise<GitStash[]>
+  gitStash(message: string, includeUntracked: boolean, confirmed: boolean): Promise<string>
+  gitApplyStash(index: number, drop: boolean, confirmed: boolean): Promise<void>
   gitBranches(): Promise<GitBranch[]>
   gitHistory(limit: number): Promise<GitCommit[]>
   gitRemotes(): Promise<GitRemote[]>
@@ -48,10 +77,29 @@ export interface StudioAPI {
   gitCommit(message: string, paths: string[], confirmed: boolean): Promise<string>
   gitPull(remote: string, branch: string, confirmed: boolean): Promise<void>
   gitPush(remote: string, branch: string, confirmed: boolean): Promise<void>
+  gitMerge(branch: string, confirmed: boolean): Promise<void>
+  gitRebase(branch: string, confirmed: boolean): Promise<void>
+  gitCherryPick(commit: string, confirmed: boolean): Promise<void>
+  gitAbort(operation: string, confirmed: boolean): Promise<void>
+  selectRuntimeArtifactBinary(): Promise<string>
 }
 
+export interface ArtifactReference {
+  id: string
+  version: string
+  platform: string
+  digest: string
+  trusted: boolean
+  command?: string
+  manifest?: string
+  schema?: string
+}
+
+export type RuntimePluginReadiness = 'ready' | 'not-ready' | 'unknown'
+
 export type ThemePreference = 'system' | 'light' | 'dark'
-export interface ClientPreferences { theme: ThemePreference }
+export type Locale = 'ru' | 'en'
+export interface ClientPreferences { theme: ThemePreference; locale: Locale }
 
 export interface CLIEvent {
   schemaVersion: string
@@ -142,6 +190,25 @@ export interface GitDiff {
   truncated: boolean
 }
 
+export interface GitConflictSide {
+  available: boolean
+  content: string
+  truncated: boolean
+}
+
+export interface GitConflict {
+  path: string
+  base: GitConflictSide
+  ours: GitConflictSide
+  theirs: GitConflictSide
+}
+
+export interface GitStash {
+  ref: string
+  message: string
+  createdAt: string
+}
+
 export interface Project {
   id: string
   name: string
@@ -181,6 +248,34 @@ export interface WorkspaceState {
   layoutJson: string
   tabsJson: string
   filtersJson: string
+}
+
+export interface RuntimePluginInput {
+  id: string
+  name: string
+  version: string
+  manifestVersion: string
+  settingsSchemaPath: string
+}
+
+export interface PluginLinkInput {
+  id: string
+  caller: string
+  target: string
+  contractVersion: string
+  methods: string[]
+  transport: string
+  requestSchemaPath: string
+  responseSchemaPath: string
+  contractSchemaPath: string
+  securityProfile: string
+  timeoutMillis: number
+  retryLimit: number
+  requestLimitBytes: number
+  responseLimitBytes: number
+  disabledMethods: string[]
+  compatibility: string
+  redactionPolicy: string
 }
 
 export interface RuntimePlugin {

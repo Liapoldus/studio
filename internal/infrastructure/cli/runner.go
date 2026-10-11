@@ -33,12 +33,17 @@ func (r Runner) Run(ctx context.Context, request models.CLIRequest) (<-chan mode
 	}
 	factory := r.CommandFactory
 	if factory == nil {
-		if _, err := exec.LookPath("liapoldus"); err != nil {
+		executable, err := resolveCLI(nil)
+		if err != nil {
 			return nil, ErrCLIUnavailable
 		}
-		factory = defaultCommand
+		factory = func(commandContext context.Context, args []string) *exec.Cmd {
+			return exec.CommandContext(commandContext, executable, args...) //nolint:gosec // executable comes only from the fixed CLI resolver.
+		}
 	}
-	command := factory(ctx, append([]string{}, request.Args...))
+	commandArgs := append([]string{}, request.Args...)
+	commandArgs = append(commandArgs, "--studio-events")
+	command := factory(ctx, commandArgs)
 	if command == nil {
 		return nil, ErrCLIUnavailable
 	}
@@ -60,10 +65,6 @@ func (r Runner) Run(ctx context.Context, request models.CLIRequest) (<-chan mode
 	events := make(chan models.CLIEvent)
 	go stream(ctx, command, stdout, stderr, events)
 	return events, nil
-}
-
-func defaultCommand(ctx context.Context, args []string) *exec.Cmd {
-	return exec.CommandContext(ctx, "liapoldus", args...)
 }
 
 func stream(ctx context.Context, command *exec.Cmd, stdout io.ReadCloser, stderr io.ReadCloser, events chan<- models.CLIEvent) {

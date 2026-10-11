@@ -2,8 +2,13 @@ package plugins
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -11,6 +16,35 @@ import (
 	"github.com/Liapoldus/studio/internal/domain/models"
 	"github.com/Liapoldus/studio/internal/infrastructure/sqlite"
 )
+
+func TestHostRejectsTamperedInstalledArtifact(t *testing.T) {
+	tool := "#!/bin/sh\nprintf '%s' '{\"status\":\"ok\"}'\n"
+	digest := sha256.Sum256([]byte(tool))
+	packagePath := writePackage(t, map[string]string{
+		"manifest.json": fmt.Sprintf(`{"id":"runtime.integrity","name":"Integrity","version":"1.0.0","tools":[{"id":"runtime.compiler","version":"1.0.0","executable":"bin/compiler","artifacts":[{"platform":"%s/%s","path":"bin/compiler","digest":"sha256:%s"}]}]}`, runtime.GOOS, runtime.GOARCH, hex.EncodeToString(digest[:])),
+		"bin/compiler":  tool,
+	})
+	store, err := sqlite.Open(filepath.Join(t.TempDir(), "client.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if closeErr := store.Close(); closeErr != nil {
+			t.Error(closeErr)
+		}
+	}()
+	host := NewHost(store, ToolRunner{}, Installer{Directory: filepath.Join(t.TempDir(), "plugins")})
+	installed, err := host.Install(context.Background(), packagePath, models.TrustDecision{Approved: true, GrantedPermissions: nil})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(installed.Path, "bin", "compiler"), []byte("tampered"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := host.RunTool(context.Background(), installed.Manifest.ID, installed.Manifest.Version, "runtime.compiler", t.TempDir(), nil); !errors.Is(err, models.ErrInvalidStudioPlugin) {
+		t.Fatalf("tampered installed tool was executed: %v", err)
+	}
+}
 
 func TestHostPersistsTrustAndRunsInstalledTool(t *testing.T) {
 	packagePath := writePackage(t, map[string]string{

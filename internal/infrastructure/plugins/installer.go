@@ -15,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"sort"
 	"strings"
 
@@ -30,6 +31,12 @@ var (
 	ErrPluginTrustRootMissing  = errors.New("studio plugin signing trust root is unavailable")
 	pluginIDPattern            = regexp.MustCompile(`^[a-z0-9]+(?:[._-][a-z0-9]+)+$`)
 	pluginVersionPattern       = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9.+_-]*$`)
+)
+
+const (
+	maxPluginEntries    = 4096
+	maxPluginFileBytes  = 64 * 1024 * 1024
+	maxPluginTotalBytes = 256 * 1024 * 1024
 )
 
 //nolint:govet // the public installer keeps a readable path, trust roots and policy flag together.
@@ -57,7 +64,7 @@ func (i Installer) Inspect(ctx context.Context, packagePath string) (models.Plug
 	if err != nil {
 		return models.PluginInspection{}, err
 	}
-	if err := validateManifest(manifest, files); err != nil {
+	if err := validateManifest(manifest, files, i.RequireSignatures); err != nil {
 		return models.PluginInspection{}, err
 	}
 	if err := verifyArtifactDigests(archive.File, manifest); err != nil {
@@ -67,6 +74,76 @@ func (i Installer) Inspect(ctx context.Context, packagePath string) (models.Plug
 		return models.PluginInspection{}, err
 	}
 	return models.PluginInspection{Manifest: manifest, Digest: digest, Signed: strings.TrimSpace(manifest.Signature) != "", Files: files}, nil
+}
+
+// verifyInstalled re-validates the activated directory before it is exposed
+// or executed. The archive digest identifies the approved import; these checks
+// protect against post-install tampering of the activated package.
+func (i Installer) verifyInstalled(root string) (models.StudioPluginManifest, error) {
+	if !filepath.IsAbs(root) || strings.ContainsRune(root, '\x00') {
+		return models.StudioPluginManifest{}, models.ErrInvalidStudioPlugin
+	}
+	root = filepath.Clean(root)
+	info, err := os.Lstat(root)
+	if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+		return models.StudioPluginManifest{}, models.ErrInvalidStudioPlugin
+	}
+	files := make([]string, 0)
+	var totalBytes int64
+	err = filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() {
+			if entry.Type()&os.ModeSymlink != 0 {
+				return models.ErrInvalidStudioPlugin
+			}
+			return nil
+		}
+		if entry.Type()&os.ModeSymlink != 0 || len(files) >= maxPluginEntries {
+			return models.ErrInvalidStudioPlugin
+		}
+		fileInfo, statErr := entry.Info()
+		if statErr != nil || fileInfo.Size() < 0 {
+			return models.ErrInvalidStudioPlugin
+		}
+		size := fileInfo.Size()
+		if size > int64(maxPluginFileBytes) {
+			return models.ErrInvalidStudioPlugin
+		}
+		totalBytes += size
+		if totalBytes > maxPluginTotalBytes {
+			return models.ErrInvalidStudioPlugin
+		}
+		relative, relErr := filepath.Rel(root, path)
+		if relErr != nil {
+			return models.ErrInvalidStudioPlugin
+		}
+		files = append(files, filepath.ToSlash(relative))
+		return nil
+	})
+	if err != nil {
+		return models.StudioPluginManifest{}, models.ErrInvalidStudioPlugin
+	}
+	manifestData, err := os.ReadFile(filepath.Join(root, "manifest.json")) //nolint:gosec // root is a verified Studio-managed directory.
+	if err != nil || len(manifestData) > 2*1024*1024 {
+		return models.StudioPluginManifest{}, models.ErrInvalidStudioPlugin
+	}
+	var manifest models.StudioPluginManifest
+	if err := json.Unmarshal(manifestData, &manifest); err != nil {
+		return models.StudioPluginManifest{}, models.ErrInvalidStudioPlugin
+	}
+	sort.Strings(files)
+	if err := validateManifest(manifest, files, i.RequireSignatures); err != nil {
+		return models.StudioPluginManifest{}, err
+	}
+	if err := verifyInstalledArtifactDigests(root, manifest); err != nil {
+		return models.StudioPluginManifest{}, err
+	}
+	if err := i.verifyManifestSignature(manifest); err != nil {
+		return models.StudioPluginManifest{}, err
+	}
+	return manifest, nil
 }
 
 func (i Installer) verifyManifestSignature(manifest models.StudioPluginManifest) error {
@@ -197,7 +274,11 @@ func (i Installer) Install(ctx context.Context, packagePath string, trust models
 		// has passed safeArchivePath; executable tools need owner-only execute bits.
 		file, createErr := os.OpenFile(destination, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0700) //nolint:gosec // validated package path and intentional executable mode
 		if createErr == nil {
-			_, createErr = io.Copy(file, io.LimitReader(reader, 64*1024*1024))
+			var written int64
+			written, createErr = io.Copy(file, io.LimitReader(reader, maxPluginFileBytes+1))
+			if createErr == nil && written > maxPluginFileBytes {
+				createErr = models.ErrInvalidStudioPlugin
+			}
 		}
 		if closeErr := reader.Close(); createErr == nil {
 			createErr = closeErr
@@ -234,13 +315,29 @@ func fileDigest(path string) (string, error) {
 }
 
 func readManifest(entries []*zip.File) (models.StudioPluginManifest, []string, error) {
+	if len(entries) == 0 || len(entries) > maxPluginEntries {
+		return models.StudioPluginManifest{}, nil, models.ErrInvalidStudioPlugin
+	}
 	files := make([]string, 0, len(entries))
+	seen := make(map[string]struct{}, len(entries))
+	var totalBytes uint64
 	var manifest models.StudioPluginManifest
 	manifestFound := false
 	for _, entry := range entries {
+		if entry.UncompressedSize64 > maxPluginFileBytes {
+			return models.StudioPluginManifest{}, nil, models.ErrInvalidStudioPlugin
+		}
+		totalBytes += entry.UncompressedSize64
+		if totalBytes > maxPluginTotalBytes {
+			return models.StudioPluginManifest{}, nil, models.ErrInvalidStudioPlugin
+		}
 		if _, err := safeArchivePath("/validated", entry.Name); err != nil {
 			return models.StudioPluginManifest{}, nil, err
 		}
+		if _, duplicate := seen[entry.Name]; duplicate || entry.FileInfo().Mode()&os.ModeSymlink != 0 {
+			return models.StudioPluginManifest{}, nil, models.ErrInvalidStudioPlugin
+		}
+		seen[entry.Name] = struct{}{}
 		if !entry.FileInfo().IsDir() {
 			files = append(files, filepath.ToSlash(entry.Name))
 		}
@@ -265,7 +362,7 @@ func readManifest(entries []*zip.File) (models.StudioPluginManifest, []string, e
 	return manifest, files, nil
 }
 
-func validateManifest(manifest models.StudioPluginManifest, files []string) error {
+func validateManifest(manifest models.StudioPluginManifest, files []string, requireExecutableDigests bool) error {
 	if !pluginIDPattern.MatchString(manifest.ID) || !pluginVersionPattern.MatchString(manifest.Version) || strings.TrimSpace(manifest.Name) == "" || strings.TrimSpace(manifest.Version) == "" {
 		return models.ErrInvalidStudioPlugin
 	}
@@ -274,6 +371,7 @@ func validateManifest(manifest models.StudioPluginManifest, files []string) erro
 		fileSet[file] = true
 	}
 	permissionSet := make(map[string]bool, len(manifest.Permissions))
+	toolSet := make(map[string]bool, len(manifest.Tools))
 	for _, permission := range manifest.Permissions {
 		permission = strings.TrimSpace(permission)
 		if permission == "" || permissionSet[permission] {
@@ -285,8 +383,15 @@ func validateManifest(manifest models.StudioPluginManifest, files []string) erro
 		if !pluginIDPattern.MatchString(tool.ID) || strings.TrimSpace(tool.Version) == "" || !fileSet[filepath.ToSlash(tool.Executable)] {
 			return models.ErrInvalidStudioPlugin
 		}
+		if toolSet[tool.ID] {
+			return models.ErrInvalidStudioPlugin
+		}
+		toolSet[tool.ID] = true
 		if err := validateArtifacts(tool.Artifacts, fileSet); err != nil {
 			return err
+		}
+		if requireExecutableDigests && platformSupported(tool.Platforms) && !hasPlatformArtifact(tool.Executable, tool.Platforms, tool.Artifacts) {
+			return models.ErrInvalidStudioPlugin
 		}
 		for _, name := range tool.Environment {
 			if !validEnvironmentName(name) {
@@ -301,6 +406,9 @@ func validateManifest(manifest models.StudioPluginManifest, files []string) erro
 		if err := validateArtifacts(manifest.Process.Artifacts, fileSet); err != nil {
 			return err
 		}
+		if requireExecutableDigests && platformSupported(manifest.Process.Platforms) && !hasPlatformArtifact(manifest.Process.Executable, manifest.Process.Platforms, manifest.Process.Artifacts) {
+			return models.ErrInvalidStudioPlugin
+		}
 		for _, name := range manifest.Process.Environment {
 			if !validEnvironmentName(name) {
 				return models.ErrInvalidStudioPlugin
@@ -311,6 +419,12 @@ func validateManifest(manifest models.StudioPluginManifest, files []string) erro
 		if strings.TrimSpace(surface.ID) == "" || !map[string]bool{"page": true, "panel": true, "inspector": true, "form": true, "command": true}[surface.Kind] {
 			return models.ErrInvalidStudioPlugin
 		}
+		if surface.Kind == "command" && strings.TrimSpace(surface.ToolID) == "" {
+			return models.ErrInvalidStudioPlugin
+		}
+		if strings.TrimSpace(surface.ToolID) != "" && !toolSet[surface.ToolID] {
+			return models.ErrInvalidStudioPlugin
+		}
 		if surface.Schema != "" {
 			if _, err := safeArchivePath("/validated", surface.Schema); err != nil || !fileSet[filepath.ToSlash(surface.Schema)] {
 				return models.ErrInvalidStudioPlugin
@@ -318,6 +432,22 @@ func validateManifest(manifest models.StudioPluginManifest, files []string) erro
 		}
 	}
 	return nil
+}
+
+func hasPlatformArtifact(executable string, platforms []string, artifacts []models.PluginArtifact) bool {
+	if !platformSupported(platforms) {
+		return true
+	}
+	current := runtime.GOOS + "/" + runtime.GOARCH
+	for _, artifact := range artifacts {
+		if filepath.ToSlash(artifact.Path) != filepath.ToSlash(executable) {
+			continue
+		}
+		if artifact.Platform == current || artifact.Platform == runtime.GOOS || artifact.Platform == "*" {
+			return validSHA256(artifact.Digest)
+		}
+	}
+	return false
 }
 
 func validateArtifacts(artifacts []models.PluginArtifact, fileSet map[string]bool) error {
@@ -429,7 +559,10 @@ func permissionsApproved(requested, granted []string) bool {
 }
 
 func safeArchivePath(root, name string) (string, error) {
-	if strings.ContainsRune(name, '\x00') || filepath.IsAbs(name) {
+	// Package names are POSIX-style and must remain safe when inspected on one
+	// OS and installed on another. Reject Windows separators and drive syntax on
+	// Unix too, where filepath.Clean would otherwise treat them as text.
+	if strings.ContainsRune(name, '\x00') || strings.ContainsRune(name, '\\') || strings.ContainsRune(name, ':') || filepath.IsAbs(name) {
 		return "", models.ErrInvalidStudioPlugin
 	}
 	clean := filepath.Clean(filepath.FromSlash(name))
@@ -437,6 +570,33 @@ func safeArchivePath(root, name string) (string, error) {
 		return "", models.ErrInvalidStudioPlugin
 	}
 	return filepath.Join(root, clean), nil
+}
+
+func verifyInstalledArtifactDigests(root string, manifest models.StudioPluginManifest) error {
+	artifacts := make([]models.PluginArtifact, 0)
+	for _, tool := range manifest.Tools {
+		artifacts = append(artifacts, tool.Artifacts...)
+	}
+	if manifest.Process != nil {
+		artifacts = append(artifacts, manifest.Process.Artifacts...)
+	}
+	for _, artifact := range artifacts {
+		path, err := safeToolExecutable(root, artifact.Path)
+		if err != nil {
+			return models.ErrInvalidStudioPlugin
+		}
+		file, err := os.Open(path) //nolint:gosec // path was validated below the verified package root.
+		if err != nil {
+			return models.ErrInvalidStudioPlugin
+		}
+		hash := sha256.New()
+		count, copyErr := io.Copy(hash, io.LimitReader(file, maxPluginFileBytes+1))
+		closeErr := file.Close()
+		if copyErr != nil || closeErr != nil || count > maxPluginFileBytes || "sha256:"+hex.EncodeToString(hash.Sum(nil)) != strings.ToLower(artifact.Digest) {
+			return models.ErrInvalidStudioPlugin
+		}
+	}
+	return nil
 }
 
 func discardError(err error) { _ = err }

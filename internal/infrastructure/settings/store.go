@@ -6,11 +6,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"net/url"
 	"os"
 	"path/filepath"
 	"reflect"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -125,8 +127,12 @@ func (s Store) readSchema(ctx context.Context, root, schemaPath string) (any, er
 		readFile: func(path string) ([]byte, error) {
 			return s.Files.ReadFile(ctx, root, path)
 		},
-		docs:  map[string]any{normalized: value},
+		docs:  map[string]any{},
+		ids:   map[string]string{},
 		stack: map[string]bool{},
+	}
+	if err := resolver.register(normalized, value); err != nil {
+		return nil, err
 	}
 	return resolver.resolve(value, normalized, value)
 }
@@ -134,7 +140,28 @@ func (s Store) readSchema(ctx context.Context, root, schemaPath string) (any, er
 type schemaResolver struct {
 	readFile func(string) ([]byte, error)
 	docs     map[string]any
+	ids      map[string]string
 	stack    map[string]bool
+}
+
+func (resolver *schemaResolver) register(documentPath string, value any) error {
+	resolver.docs[documentPath] = value
+	object, ok := value.(map[string]any)
+	if !ok {
+		return fmt.Errorf("%w: schema document must be an object", ErrInvalidSchema)
+	}
+	id, ok := object["$id"].(string)
+	if !ok || strings.TrimSpace(id) == "" {
+		return nil
+	}
+	if strings.ContainsAny(id, "\r\n") {
+		return fmt.Errorf("%w: schema $id contains control characters", ErrInvalidSchema)
+	}
+	if previous, exists := resolver.ids[id]; exists && previous != documentPath {
+		return fmt.Errorf("%w: duplicate schema $id %s", ErrInvalidSchema, id)
+	}
+	resolver.ids[id] = documentPath
+	return nil
 }
 
 func (resolver *schemaResolver) resolve(value any, documentPath string, documentRoot any) (any, error) {
@@ -170,10 +197,12 @@ func (resolver *schemaResolver) resolve(value any, documentPath string, document
 				return nil, fmt.Errorf("%w: $ref %s does not resolve to an object schema", ErrInvalidSchema, ref)
 			}
 			result := cloneObject(resolvedObject)
-			for key, child := range typed {
+			keys := sortedSchemaKeys(typed)
+			for _, key := range keys {
 				if key == "$ref" {
 					continue
 				}
+				child := typed[key]
 				resolved, err := resolver.resolve(child, documentPath, documentRoot)
 				if err != nil {
 					return nil, err
@@ -183,7 +212,8 @@ func (resolver *schemaResolver) resolve(value any, documentPath string, document
 			return result, nil
 		}
 		result := make(map[string]any, len(typed))
-		for key, child := range typed {
+		for _, key := range sortedSchemaKeys(typed) {
+			child := typed[key]
 			resolved, err := resolver.resolve(child, documentPath, documentRoot)
 			if err != nil {
 				return nil, err
@@ -196,6 +226,15 @@ func (resolver *schemaResolver) resolve(value any, documentPath string, document
 	}
 }
 
+func sortedSchemaKeys(value map[string]any) []string {
+	keys := make([]string, 0, len(value))
+	for key := range value {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
 func (resolver *schemaResolver) reference(ref, documentPath string, documentRoot any) (any, string, any, string, error) {
 	parts := strings.SplitN(ref, "#", 2)
 	pathPart := parts[0]
@@ -206,29 +245,33 @@ func (resolver *schemaResolver) reference(ref, documentPath string, documentRoot
 	targetPath := documentPath
 	targetRoot := documentRoot
 	if pathPart != "" {
-		if filepath.IsAbs(pathPart) {
-			return nil, "", nil, "", fmt.Errorf("%w: absolute schema reference %s", ErrInvalidSchema, ref)
-		}
-		resolvedPath, err := normalizeSchemaPath(filepath.Join(filepath.Dir(documentPath), pathPart))
-		if err != nil {
-			return nil, "", nil, "", fmt.Errorf("%w: schema reference %s", ErrInvalidSchema, ref)
-		}
-		targetPath = resolvedPath
-		loaded, ok := resolver.docs[targetPath]
-		if !ok {
-			data, err := resolver.readFile(targetPath)
+		if registeredPath, registered := resolver.ids[pathPart]; registered {
+			targetPath = registeredPath
+			targetRoot = resolver.docs[targetPath]
+		} else {
+			if filepath.IsAbs(pathPart) || strings.Contains(pathPart, "://") {
+				return nil, "", nil, "", fmt.Errorf("%w: unregistered external schema reference %s", ErrInvalidSchema, ref)
+			}
+			resolvedPath, err := normalizeSchemaPath(filepath.Join(filepath.Dir(documentPath), pathPart))
 			if err != nil {
-				return nil, "", nil, "", fmt.Errorf("resolve schema reference %s: %w", ref, err)
+				return nil, "", nil, "", fmt.Errorf("%w: schema reference %s", ErrInvalidSchema, ref)
 			}
-			if err := json.Unmarshal(data, &loaded); err != nil {
-				return nil, "", nil, "", fmt.Errorf("decode schema reference %s: %w", ref, err)
+			targetPath = resolvedPath
+			loaded, ok := resolver.docs[targetPath]
+			if !ok {
+				data, err := resolver.readFile(targetPath)
+				if err != nil {
+					return nil, "", nil, "", fmt.Errorf("resolve schema reference %s: %w", ref, err)
+				}
+				if err := json.Unmarshal(data, &loaded); err != nil {
+					return nil, "", nil, "", fmt.Errorf("decode schema reference %s: %w", ref, err)
+				}
+				if err := resolver.register(targetPath, loaded); err != nil {
+					return nil, "", nil, "", err
+				}
 			}
-			if _, ok := loaded.(map[string]any); !ok {
-				return nil, "", nil, "", fmt.Errorf("%w: schema reference %s is not an object", ErrInvalidSchema, ref)
-			}
-			resolver.docs[targetPath] = loaded
+			targetRoot = loaded
 		}
-		targetRoot = loaded
 	}
 	target := targetRoot
 	if fragment != "" {
@@ -316,20 +359,20 @@ func redactSchema(value any, propertyName string) any {
 	}
 }
 
-func redactValue(value any, schema any) any {
-	if isSensitive(schema, "") {
+func redactValue(value any, schema any, propertyName ...string) any {
+	name := ""
+	if len(propertyName) > 0 {
+		name = propertyName[0]
+	}
+	if isSensitive(schema, name) {
 		return nil
 	}
 	schemaObject, schemaOK := schema.(map[string]any)
 	object, objectOK := value.(map[string]any)
 	if schemaOK && objectOK {
-		properties, propertiesOK := schemaObject["properties"].(map[string]any)
-		if !propertiesOK {
-			properties = map[string]any{}
-		}
 		result := make(map[string]any, len(object))
 		for key, child := range object {
-			result[key] = redactValue(child, properties[key])
+			result[key] = redactValue(child, propertySchema(schemaObject, key), key)
 		}
 		return result
 	}
@@ -337,11 +380,33 @@ func redactValue(value any, schema any) any {
 		items := schemaObject["items"]
 		result := make([]any, len(values))
 		for index, child := range values {
-			result[index] = redactValue(child, items)
+			result[index] = redactValue(child, items, name)
 		}
 		return result
 	}
 	return value
+}
+
+func propertySchema(schema map[string]any, name string) any {
+	if properties, ok := schema["properties"].(map[string]any); ok {
+		if candidate, declared := properties[name]; declared {
+			return candidate
+		}
+	}
+	if candidate, matched := patternPropertySchema(schema, name); matched {
+		return candidate
+	}
+	additional, exists := schema["additionalProperties"]
+	if !exists {
+		return nil
+	}
+	if allowed, ok := additional.(bool); ok {
+		if allowed {
+			return nil
+		}
+		return nil
+	}
+	return additional
 }
 
 func mergeSafe(current, patch, schema any) (any, error) {
@@ -367,7 +432,30 @@ func mergeSafe(current, patch, schema any) (any, error) {
 	for key, child := range patchObject {
 		childSchema, declared := properties[key]
 		if !declared {
-			return nil, fmt.Errorf("%w: %s", ErrUnsupportedPatch, key)
+			if patternSchema, matched := patternPropertySchema(schemaObject, key); matched {
+				childSchema = patternSchema
+				declared = true
+			}
+		}
+		if !declared {
+			additional, hasAdditional := schemaObject["additionalProperties"]
+			if !hasAdditional {
+				return nil, fmt.Errorf("%w: %s", ErrUnsupportedPatch, key)
+			}
+			if allowed, ok := additional.(bool); ok {
+				if !allowed {
+					return nil, fmt.Errorf("%w: %s", ErrUnsupportedPatch, key)
+				}
+				if isSensitive(nil, key) {
+					return nil, fmt.Errorf("%w: %s", ErrSensitiveField, key)
+				}
+				currentObject[key] = child
+				continue
+			}
+			if _, ok := additional.(map[string]any); !ok {
+				return nil, fmt.Errorf("%w: additionalProperties", ErrInvalidSchema)
+			}
+			childSchema = additional
 		}
 		if isSensitive(childSchema, key) {
 			return nil, fmt.Errorf("%w: %s", ErrSensitiveField, key)
@@ -519,20 +607,75 @@ func validateValue(value, schema any, path string) error {
 		if limit, exists := integerConstraint(object, "maxProperties"); exists && len(typed) > limit {
 			return fmt.Errorf("%w: %s has too many properties", ErrUnsupportedPatch, path)
 		}
+		if err := validatePatternProperties(object); err != nil {
+			return err
+		}
 		for name, child := range typed {
 			childSchema, declared := properties[name]
 			if !declared {
+				if patternSchema, matched := patternPropertySchema(object, name); matched {
+					if err := validateValue(child, patternSchema, path+"."+name); err != nil {
+						return err
+					}
+					continue
+				}
 				additional, hasAdditional := object["additionalProperties"]
-				if hasAdditional {
-					allowed, ok := additional.(bool)
-					if !ok || !allowed {
+				if !hasAdditional {
+					continue
+				}
+				if allowed, ok := additional.(bool); ok {
+					if !allowed {
 						return fmt.Errorf("%w: %s.%s is not declared", ErrUnsupportedPatch, path, name)
 					}
+					continue
+				}
+				additionalSchema, ok := additional.(map[string]any)
+				if !ok {
+					return fmt.Errorf("%w: additionalProperties", ErrInvalidSchema)
+				}
+				if err := validateValue(child, additionalSchema, path+"."+name); err != nil {
+					return err
 				}
 				continue
 			}
+			if patternSchema, matched := patternPropertySchema(object, name); matched {
+				if err := validateValue(child, patternSchema, path+"."+name); err != nil {
+					return err
+				}
+			}
 			if err := validateValue(child, childSchema, path+"."+name); err != nil {
 				return err
+			}
+		}
+		if propertyNames, exists := object["propertyNames"]; exists {
+			for name := range typed {
+				if err := validateValue(name, propertyNames, path+".<property-name>"); err != nil {
+					return err
+				}
+			}
+		}
+		if dependencies, exists := object["dependentRequired"]; exists {
+			dependencyMap, ok := dependencies.(map[string]any)
+			if !ok {
+				return ErrInvalidSchema
+			}
+			for name, dependency := range dependencyMap {
+				if _, present := typed[name]; !present {
+					continue
+				}
+				required, ok := dependency.([]any)
+				if !ok {
+					return ErrInvalidSchema
+				}
+				for _, item := range required {
+					dependencyName, ok := item.(string)
+					if !ok {
+						return ErrInvalidSchema
+					}
+					if _, present := typed[dependencyName]; !present {
+						return fmt.Errorf("%w: %s.%s requires %s", ErrUnsupportedPatch, path, name, dependencyName)
+					}
+				}
 			}
 		}
 	case []any:
@@ -541,6 +684,9 @@ func validateValue(value, schema any, path string) error {
 		}
 		if limit, exists := integerConstraint(object, "maxItems"); exists && len(typed) > limit {
 			return fmt.Errorf("%w: %s has too many items", ErrUnsupportedPatch, path)
+		}
+		if unique, exists := object["uniqueItems"].(bool); exists && unique && !uniqueValues(typed) {
+			return fmt.Errorf("%w: %s contains duplicate items", ErrUnsupportedPatch, path)
 		}
 		if itemSchema, exists := object["items"]; exists {
 			for index, child := range typed {
@@ -569,8 +715,17 @@ func validateValue(value, schema any, path string) error {
 		if minimum, exists := numberConstraint(object, "minimum"); exists && typed < minimum {
 			return fmt.Errorf("%w: %s is below minimum", ErrUnsupportedPatch, path)
 		}
+		if minimum, exists := exclusiveNumberConstraint(object, "exclusiveMinimum", "minimum"); exists && typed <= minimum {
+			return fmt.Errorf("%w: %s is not above exclusive minimum", ErrUnsupportedPatch, path)
+		}
 		if maximum, exists := numberConstraint(object, "maximum"); exists && typed > maximum {
 			return fmt.Errorf("%w: %s is above maximum", ErrUnsupportedPatch, path)
+		}
+		if maximum, exists := exclusiveNumberConstraint(object, "exclusiveMaximum", "maximum"); exists && typed >= maximum {
+			return fmt.Errorf("%w: %s is not below exclusive maximum", ErrUnsupportedPatch, path)
+		}
+		if multiple, exists := numberConstraint(object, "multipleOf"); exists && multiple > 0 && !isMultipleOf(typed, multiple) {
+			return fmt.Errorf("%w: %s is not a multiple of %v", ErrUnsupportedPatch, path, multiple)
 		}
 		typeName, typeNameOK := object["type"].(string)
 		if typeNameOK && typeName == "integer" && typed != float64(int64(typed)) {
@@ -587,6 +742,66 @@ func containsValue(values []any, target any) bool {
 		}
 	}
 	return false
+}
+
+func uniqueValues(values []any) bool {
+	for index, value := range values {
+		for _, other := range values[index+1:] {
+			if reflect.DeepEqual(value, other) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func isMultipleOf(value, divisor float64) bool {
+	quotient := value / divisor
+	return math.Abs(quotient-math.Round(quotient)) < 1e-9
+}
+
+func patternPropertySchema(schema map[string]any, name string) (any, bool) {
+	patterns, ok := schema["patternProperties"].(map[string]any)
+	if !ok {
+		return nil, false
+	}
+	for pattern, candidate := range patterns {
+		expression, err := regexp.Compile(pattern)
+		if err != nil {
+			return nil, false
+		}
+		if expression.MatchString(name) {
+			return candidate, true
+		}
+	}
+	return nil, false
+}
+
+func validatePatternProperties(schema map[string]any) error {
+	patterns, ok := schema["patternProperties"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	for pattern, candidate := range patterns {
+		if _, err := regexp.Compile(pattern); err != nil {
+			return fmt.Errorf("%w: invalid patternProperties pattern %s", ErrInvalidSchema, pattern)
+		}
+		if _, ok := candidate.(map[string]any); !ok {
+			return ErrInvalidSchema
+		}
+	}
+	return nil
+}
+
+func exclusiveNumberConstraint(schema map[string]any, exclusiveKey, minimumKey string) (float64, bool) {
+	value := schema[exclusiveKey]
+	if numeric, numericOK := value.(float64); numericOK {
+		return numeric, true
+	}
+	if enabled, enabledOK := value.(bool); enabledOK && enabled {
+		return numberConstraint(schema, minimumKey)
+	}
+	return 0, false
 }
 
 func schemaList(value any) []any {

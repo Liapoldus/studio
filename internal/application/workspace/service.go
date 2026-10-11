@@ -38,6 +38,23 @@ func (s *Service) Open(ctx context.Context, root string) (models.Workspace, erro
 	return workspace, nil
 }
 
+func (s *Service) Create(ctx context.Context, root, id, name string) (models.Workspace, error) {
+	workspace, err := s.source.Create(ctx, root, id, name)
+	if err != nil {
+		return models.Workspace{}, err
+	}
+	if workspace.Project == nil {
+		return models.Workspace{}, models.ErrInvalidProject
+	}
+	if err := s.projects.SaveProject(ctx, *workspace.Project); err != nil {
+		return models.Workspace{}, err
+	}
+	if err := s.projects.SaveClientState(ctx, models.ClientState{SelectedProjectID: workspace.Project.ID}); err != nil {
+		return models.Workspace{}, err
+	}
+	return workspace, nil
+}
+
 func (s *Service) Current(ctx context.Context) (models.Workspace, error) {
 	state, err := s.projects.ReadClientState(ctx)
 	if err != nil {
@@ -47,6 +64,7 @@ func (s *Service) Current(ctx context.Context) (models.Workspace, error) {
 		return models.Workspace{
 			Files: []models.ProjectFile{},
 			Graph: models.PluginGraph{Plugins: []models.RuntimePlugin{}, Links: []models.PluginLink{}},
+			Git:   models.GitStatus{Changes: []models.GitChange{}},
 		}, nil
 	}
 	projects, err := s.projects.ListProjects(ctx)
@@ -61,5 +79,6 @@ func (s *Service) Current(ctx context.Context) (models.Workspace, error) {
 	return models.Workspace{
 		Files: []models.ProjectFile{},
 		Graph: models.PluginGraph{Plugins: []models.RuntimePlugin{}, Links: []models.PluginLink{}},
+		Git:   models.GitStatus{Changes: []models.GitChange{}},
 	}, nil
 }

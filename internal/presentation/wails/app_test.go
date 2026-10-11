@@ -1,6 +1,7 @@
 package wails
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -8,6 +9,59 @@ import (
 
 	"github.com/Liapoldus/studio/internal/domain/models"
 )
+
+type diagnosticStoreStub struct {
+	items []models.Diagnostic
+}
+
+func (s *diagnosticStoreStub) Append(_ context.Context, _ string, diagnostic models.Diagnostic) error {
+	s.items = append(s.items, diagnostic)
+	return nil
+}
+
+func (s *diagnosticStoreStub) List(context.Context, string) ([]models.Diagnostic, error) {
+	return s.items, nil
+}
+
+func TestStructuredCLIResultUsesSafeDiagnosticWhenOutputIsMissing(t *testing.T) {
+	events := make(chan models.CLIEvent, 2)
+	events <- models.CLIEvent{Type: "diagnostic", Severity: "error", Code: "cli.protocol", Message: "invalid liapoldus CLI event"}
+	events <- models.CLIEvent{Type: "run.completed"}
+	close(events)
+
+	if _, err := structuredCLIResult(events); err == nil || err.Error() != "liapoldus: cli.protocol: invalid liapoldus CLI event" {
+		t.Fatalf("expected actionable safe diagnostic, got %v", err)
+	}
+}
+
+func TestStructuredCLIResultReturnsRunOutput(t *testing.T) {
+	events := make(chan models.CLIEvent, 2)
+	events <- models.CLIEvent{Type: "run.output", Payload: []byte(`{"registered":true}`)}
+	events <- models.CLIEvent{Type: "run.completed"}
+	close(events)
+
+	result, err := structuredCLIResult(events)
+	if err != nil || string(result) != `{"registered":true}` {
+		t.Fatalf("unexpected structured result %s: %v", result, err)
+	}
+}
+
+func TestPluginProcessFailureDiagnosticIsDeduplicatedUntilRestart(t *testing.T) {
+	store := &diagnosticStoreStub{}
+	app := &App{diagnostics: store}
+
+	app.recordPluginProcessFailure(t.TempDir(), "example.plugin", "1.0.0", "process.exit")
+	app.recordPluginProcessFailure(t.TempDir(), "example.plugin", "1.0.0", "process.exit")
+	if len(store.items) != 1 {
+		t.Fatalf("expected one diagnostic for repeated status polling, got %d", len(store.items))
+	}
+
+	app.clearPluginProcessDiagnostic("example.plugin", "1.0.0")
+	app.recordPluginProcessFailure(t.TempDir(), "example.plugin", "1.0.0", "process.exit")
+	if len(store.items) != 2 {
+		t.Fatalf("expected a new diagnostic after restart, got %d", len(store.items))
+	}
+}
 
 func TestTrafficViewsAreRedactedAndKeepProvenance(t *testing.T) {
 	views, err := trafficViews([]models.Report{{

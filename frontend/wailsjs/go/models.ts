@@ -1,2 +1,2 @@
 // Prepared by scripts/bindings/prepare.mts.
-export { Diagnostic, GitBranch, GitChange, GitCommit, GitDiff, GitRemote, GitStatus, InstalledPluginState, PluginGraph, PluginLink, ProductInfo, Project, ProjectFile, RuntimePlugin, TrafficRecordView, Workspace, WorkspaceState, models } from '../../src/api/info'
+export { ArtifactReference, Diagnostic, GitBranch, GitChange, GitCommit, GitConflictSide, GitConflict, GitDiff, GitRemote, GitStash, GitStatus, InstalledPluginState, PluginLink, RuntimePlugin, PluginGraph, PluginLinkInput, ProductInfo, Project, ProjectFile, RuntimePluginInput, ToolchainStatus, TrafficRecordView, Workspace, WorkspaceState, models } from '../../src/api/info'

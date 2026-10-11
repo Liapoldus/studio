@@ -2,8 +2,10 @@
 
 ## 1. Роль Git в Studio
 
-Каждый Studio Project является корнем одного локального Git repository. Local
-versioning всегда включено и обязательно. Studio предоставляет полноценную
+Новый Studio Project автоматически получает локальный Git repository. Existing
+Project без `.git` открывается offline и явно предлагает подтверждаемое
+`Initialize Git`; Git не создаётся молча при открытии чужого каталога. Studio
+предоставляет полноценную
 работу с версиями, но Git отвечает только за исходные файлы проекта, а не за
 runtime SQLite Core.
 
@@ -19,14 +21,19 @@ remote без выполненной provider/CI approval policy.
 - active branch и safe branch switcher для clean working tree;
 - bounded commit history и file-level diff;
 - staged, unstaged, untracked и conflicted files;
+- explicit path-level stage/unstage controls и commit только выбранного staged set;
 - commit editor для project-scoped changes;
 - pull/push controls для выбранного remote/branch;
 - policy/approval status перед push.
 
-Merge, rebase, cherry-pick, stash, partial staging, provider metadata и
-интерактивный conflict resolver остаются CLI/external-editor workflows до
-утверждения отдельного versioned Git operations contract. Studio уже фиксирует
-conflict state и блокирует опасные действия.
+Merge, rebase и cherry-pick доступны через typed native Git boundary только для
+clean working tree и после explicit confirmation. При конфликте Studio сохраняет
+операцию и предлагает безопасный abort. Для каждого обычного path Studio
+показывает bounded base/ours/theirs snapshots и позволяет явно выбрать ours или
+theirs с последующим `git add`. Draft stash поддерживает include-untracked,
+bounded list и apply/apply-and-drop только в clean working tree. Ручное
+редактирование результата и provider metadata остаются CLI/external-editor
+workflows.
 
 ## 3. Revision gate
 
@@ -69,20 +76,25 @@ Studio должна поддерживать полный branch workflow:
 - восстановление после прерванной операции.
 
 Операции, меняющие remote или переписывающие history, требуют explicit
-confirmation и показывают exact remote/branch/commit scope.
+confirmation и показывают exact remote/branch/commit scope. Native Git adapter
+использует только allowlisted operation и validated branch/commit token.
 
 ## 6. Commit UI
 
 Commit dialog показывает staged file list, diff, validation problems и связь с
-project/environment. Commit message обязателен. Amend разрешён только для
+project/environment. Stage/unstage выполняются только для explicit relative
+paths, а commit не добавляет unstaged files автоматически. Commit message
+обязателен. Amend разрешён только для
 локального commit и должен явно предупреждать, если revision уже pushed или
 использовалась в deploy report.
 
 ## 7. Conflict resolver
 
-При конфликте Studio сохраняет Git conflict state, показывает base/ours/theirs,
-результирующий файл и validation diagnostics. Нельзя создать deployable commit,
-пока все conflicts не разрешены и проект не прошёл local validation.
+При конфликте Studio сохраняет Git conflict state, показывает bounded
+base/ours/theirs snapshots, текущий diff и validation diagnostics. Для
+однозначного выбора доступно staged-разрешение ours/theirs; сложный ручной
+three-way merge открывается внешним Git-инструментом. Нельзя создать deployable
+commit, пока все conflicts не разрешены и проект не прошёл local validation.
 
 ## 8. Связь с CLI
 

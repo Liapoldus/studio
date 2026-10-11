@@ -44,6 +44,7 @@ func run() (runErr error) {
 	if err != nil {
 		return err
 	}
+	config.ApplyReleasePluginPolicy()
 	store, err := sqlite.Open(bootstrap.DatabasePath)
 	if err != nil {
 		return err
@@ -72,7 +73,7 @@ func run() (runErr error) {
 	})
 	pluginHost.Sandbox = toolRunner.Sandbox
 	pluginHost.SandboxMode = toolRunner.Mode
-	app := wailspresentation.NewApp(product.NewProductInfo(productInfo), workspace, desktopintegration.EditorLauncher{}, files, projectsettings.Store{Files: files}, clirunner.Runner{}, reportstore.Store{}, diagnosticstore.Store{}, pluginHost, gitrepo.Repository{}, projectstate.Store{}, store)
+	app := wailspresentation.NewApp(product.NewProductInfo(productInfo), workspace, desktopintegration.EditorLauncher{}, files, projectsettings.Store{Files: files}, clirunner.Runner{}, reportstore.Store{}, diagnosticstore.Store{}, pluginHost, gitrepo.Repository{}, clirunner.ToolchainProbe{}, projectstate.Store{}, store, projectsource.Mutations{})
 
 	err = wails.Run(&options.App{
 		Title:  "Liapoldus Studio",

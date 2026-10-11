@@ -4,11 +4,23 @@ package models
 import "errors"
 
 var ErrInvalidTheme = errors.New("invalid Studio theme")
+var ErrInvalidLocale = errors.New("invalid Studio locale")
 
 // ClientState contains only local desktop preferences, never Core or plugin settings.
 type ClientState struct {
 	SelectedProjectID string
 	Theme             string `json:"theme"`
+	Locale            string `json:"locale"`
+}
+
+func NormalizeLocale(locale string) (string, error) {
+	if locale == "" {
+		return "ru", nil
+	}
+	if locale != "ru" && locale != "en" {
+		return "", ErrInvalidLocale
+	}
+	return locale, nil
 }
 
 func NormalizeTheme(theme string) (string, error) {

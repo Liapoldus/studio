@@ -4,22 +4,20 @@ import (
 	"context"
 	"errors"
 	"os"
-	"os/exec"
-	"strings"
+	"path/filepath"
 	"testing"
 
 	"github.com/Liapoldus/studio/internal/domain/models"
 )
 
 func TestToolchainProbeReadsOnlyVersionMetadata(t *testing.T) {
-	t.Setenv("STUDIO_TOOLCHAIN_HELPER", "version")
 	probe := ToolchainProbe{
 		LookPath: func(string) (string, error) { return "/opt/liapoldus", nil },
-		Command: func(_ context.Context, path string, args ...string) *exec.Cmd {
-			if path != "/opt/liapoldus" || len(args) != 1 || args[0] != "version" {
-				t.Fatalf("unexpected probe command: %s %v", path, args)
+		ReadVersion: func(_ context.Context, path string) ([]byte, error) {
+			if path != "/opt/liapoldus" {
+				t.Fatalf("unexpected probe path: %s", path)
 			}
-			return exec.Command(os.Args[0], "-test.run=TestToolchainHelperProcess", "--") //nolint:gosec // fixed test helper process.
+			return []byte(`{"version":"1.2.3"}`), nil
 		},
 	}
 	status := probe.Status(context.Background())
@@ -37,24 +35,32 @@ func TestToolchainProbeFailsClosedWithoutLeakingCommandOutput(t *testing.T) {
 
 	probe = ToolchainProbe{
 		LookPath: func(string) (string, error) { return "/opt/liapoldus", nil },
-		Command: func(context.Context, string, ...string) *exec.Cmd {
-			return exec.Command(os.Args[0], "-test.run=TestToolchainHelperProcess", "--") //nolint:gosec // fixed test helper process.
+		ReadVersion: func(context.Context, string) ([]byte, error) {
+			return []byte(`token=secret`), nil
 		},
 	}
-	t.Setenv("STUDIO_TOOLCHAIN_HELPER", "invalid")
 	status = probe.Status(context.Background())
 	if status.ErrorCode != "cli.protocol" || status.CLIVersion != "" {
 		t.Fatalf("unexpected invalid protocol status: %+v", status)
 	}
 }
 
-func TestToolchainHelperProcess(t *testing.T) {
-	if os.Getenv("STUDIO_TOOLCHAIN_HELPER") == "" {
-		return
+func TestToolchainProbeUsesExplicitGUIPathWhenShellPathIsUnavailable(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "liapoldus")
+	if err := os.WriteFile(path, []byte("binary"), 0600); err != nil {
+		t.Fatal(err)
 	}
-	if strings.EqualFold(os.Getenv("STUDIO_TOOLCHAIN_HELPER"), "version") {
-		_, _ = os.Stdout.WriteString(`{"version":"1.2.3"}`)
-		return
+	if err := os.Chmod(path, 0700); err != nil { //nolint:gosec // executable permission is required for the resolver fixture.
+		t.Fatal(err)
 	}
-	_, _ = os.Stdout.WriteString(`token=secret`)
+	t.Setenv("STUDIO_CLI_PATH", path)
+	probe := ToolchainProbe{
+		ReadVersion: func(context.Context, string) ([]byte, error) {
+			return []byte(`{"version":"dev"}`), nil
+		},
+	}
+	status := probe.Status(context.Background())
+	if !status.CLIAvailable || status.CLIPath != path || status.CLIVersion != "dev" {
+		t.Fatalf("unexpected explicit CLI path status: %+v", status)
+	}
 }

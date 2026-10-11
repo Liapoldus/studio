@@ -29,8 +29,11 @@ Core-клиент.
   `os.UserConfigDir()/Liapoldus/Studio/client.sqlite`).
 - SQLite Studio хранит project/Git metadata, локальные drafts, imported CLI/CI
   reports и client state. Не копировать Core/plugin settings или credentials.
-- Не изображать live Core observations или Core authorization как возможности
-  Studio.
+- Plugin readiness на canvas разрешено показывать только по typed CLI-команде
+  `plugin status`, возвращающей Core-backed ответ. Это ephemeral status текущей
+  сессии: при недоступности CLI/Core отображается `unknown`; Studio не открывает
+  Core API/SQLite напрямую и не заявляет Core authorization как собственную
+  возможность.
 
 Studio implementation includes the approved local Studio-plugin host,
 declarative surfaces and companion-tool boundary. Runtime/Core plugin contracts

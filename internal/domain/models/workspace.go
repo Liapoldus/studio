@@ -29,6 +29,25 @@ type GitDiff struct {
 	Truncated bool   `json:"truncated"`
 }
 
+type GitConflictSide struct {
+	Content   string `json:"content"`
+	Available bool   `json:"available"`
+	Truncated bool   `json:"truncated"`
+}
+
+type GitConflict struct {
+	Path   string          `json:"path"`
+	Base   GitConflictSide `json:"base"`
+	Ours   GitConflictSide `json:"ours"`
+	Theirs GitConflictSide `json:"theirs"`
+}
+
+type GitStash struct {
+	Ref       string `json:"ref"`
+	Message   string `json:"message"`
+	CreatedAt string `json:"createdAt"`
+}
+
 type GitBranch struct {
 	Name    string `json:"name"`
 	Remote  string `json:"remote"`
@@ -91,6 +110,35 @@ type PluginLink struct {
 type PluginGraph struct {
 	Plugins []RuntimePlugin `json:"plugins"`
 	Links   []PluginLink    `json:"links"`
+}
+
+type RuntimePluginInput struct {
+	ID                 string `json:"id"`
+	Name               string `json:"name"`
+	Version            string `json:"version"`
+	ManifestVersion    string `json:"manifestVersion"`
+	SettingsSchemaPath string `json:"settingsSchemaPath"`
+}
+
+//nolint:govet // field order mirrors the versioned JSON contract.
+type PluginLinkInput struct {
+	ID                 string   `json:"id"`
+	Caller             string   `json:"caller"`
+	Target             string   `json:"target"`
+	ContractVersion    string   `json:"contractVersion"`
+	Methods            []string `json:"methods"`
+	Transport          string   `json:"transport"`
+	RequestSchemaPath  string   `json:"requestSchemaPath"`
+	ResponseSchemaPath string   `json:"responseSchemaPath"`
+	ContractSchemaPath string   `json:"contractSchemaPath"`
+	SecurityProfile    string   `json:"securityProfile"`
+	TimeoutMillis      int64    `json:"timeoutMillis"`
+	RetryLimit         int      `json:"retryLimit"`
+	RequestLimitBytes  int64    `json:"requestLimitBytes"`
+	ResponseLimitBytes int64    `json:"responseLimitBytes"`
+	DisabledMethods    []string `json:"disabledMethods"`
+	Compatibility      string   `json:"compatibility"`
+	RedactionPolicy    string   `json:"redactionPolicy"`
 }
 
 // Workspace is the read model used by the desktop shell. It contains only

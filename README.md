@@ -2,7 +2,8 @@
 
 Liapoldus Studio — отдельная среда разработки проектов Liapoldus. Она управляет
 файлами проекта, локальным состоянием, Git-версиями и импортированными отчётами
-универсального `liapoldus` CLI. Studio не запускает Core и не обращается к Core API.
+универсального `liapoldus` CLI. Studio не запускает Core и не вызывает Core или
+plugin API напрямую: управляющий путь проходит только через typed CLI intents.
 
 ## Запуск
 
@@ -11,14 +12,15 @@ Liapoldus Studio — отдельная среда разработки прое
 | Desktop | `main.go` | Wails bindings | проект, дерево файлов, локальные Git-операции и отчёты CLI |
 
 React-приложение использует Wails bindings через адаптер
-`frontend/src/api/wails.ts`. Core credentials, Core endpoint и управляющие
-операции отсутствуют. Deployment и изменение runtime выполняются standalone
-`liapoldus` CLI локально, вручную или в GitHub CI.
+`frontend/src/api/wails.ts`. Core credentials, Core endpoint и plugin REST URLs
+не попадают в renderer. Local runtime выполняется standalone `liapoldus` CLI;
+Studio передаёт только typed command intents, а remote deployment остаётся CLI/CI
+ответственностью.
 
 ## Слои Go
 
 - `internal/domain/models`, `internal/domain/interfaces` — модели и порты;
-- `internal/application` — прикладные сценарии product/workspace и последующих
+- `internal/application` — прикладные сценарии product/workspace и typed
   cli/plugin/report use cases;
 - `internal/infrastructure` — конфигурация и технические адаптеры;
 - `internal/presentation/wails` — desktop presentation adapter;
@@ -30,8 +32,8 @@ React-приложение использует Wails bindings через ада
 Frontend embed находится в `internal/infrastructure/assets/desktop`.
 Product metadata хранится в Go (`internal/infrastructure/product/reader.go`),
 без JSON asset/parser; native tests фиксируют значения и защиту от изменения
-slices вызывающим кодом. Runtime-адаптер Core намеренно отсутствует: единственный
-исполнительный контур — standalone CLI.
+slices вызывающим кодом. Docker adapter и plugin SDK client в Studio отсутствуют:
+единственный runtime/control-plane исполнитель — standalone CLI.
 
 ## Разработка
 

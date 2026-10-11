@@ -26,7 +26,9 @@ if (platform === 'darwin') {
   if (!artifacts.some((path) => path.toLowerCase().endsWith('.exe'))) throw new Error('Windows package has no executable')
   if (!artifacts.some((path) => path.toLowerCase().endsWith('studio-sandbox-launcher.exe'))) throw new Error('Windows package has no AppContainer sandbox launcher')
 } else if (platform === 'linux') {
-  if (!artifacts.some((path) => path.toLowerCase().endsWith('.appimage') || path.endsWith('/studio'))) throw new Error('Linux package has no executable or AppImage')
+  const appImage = artifacts.some((path) => path.toLowerCase().endsWith('.appimage'))
+  if (process.env.STUDIO_REQUIRE_APPIMAGE === 'true' && !appImage) throw new Error('Linux production package has no AppImage')
+  if (!appImage && !artifacts.some((path) => path.endsWith('/studio'))) throw new Error('Linux package has no executable or AppImage')
 } else {
   throw new Error(`Unsupported package smoke platform: ${platform ?? '<missing>'}`)
 }

@@ -10,6 +10,11 @@ Studio — desktop development environment для developer-operator. Она в�
 Studio запускается только как Wails desktop application. Web distribution Studio
 не поддерживается.
 
+Frontend structure and state boundaries are specified in
+[frontend-architecture.md](frontend-architecture.md): models remain pure,
+Zustand stores contain only state/reducers, controllers own Wails/CLI/Git
+effects, and views remain rendering-only.
+
 ## 2. Runtime boundaries
 
 ```mermaid
@@ -28,8 +33,12 @@ flowchart LR
 Правила границы:
 
 - React не читает filesystem и не запускает процессы напрямую;
-- Studio не открывает Core SQLite и не вызывает Core Management API;
+- Studio не открывает Core SQLite и не вызывает Core Management API напрямую;
 - все Core operations проходят через `liapoldus` CLI;
+- control plane имеет единственную форму `Studio → CLI → Core Management API →
+  Plugin SDK REST API`; CLI не знает plugin REST endpoints;
+- data plane остаётся прямым: `Server → pluginprotocol → Echo`, без CLI/Core
+  proxy для business traffic;
 - local Core допускает start/stop/status/logs/plan/apply через CLI;
 - remote deployment превращается в CLI handoff;
 - remote handoff создаётся как revision-pinned credential-free JSON artifact и
@@ -40,7 +49,11 @@ flowchart LR
   settings file; перед записью host проверяет типы, required-поля, enum,
   numeric/string/array constraints и nested objects, разрешает только
   project-relative `$ref`/JSON Pointer и проверяет `allOf`/`anyOf`/`oneOf`,
-  `readOnly` и nullable types; unsupported или cyclic schema vocabulary
+  `readOnly`, nullable types, `additionalProperties` schema, `patternProperties`,
+  `propertyNames`, `dependentRequired`, unique arrays, exclusive numeric bounds
+  и `multipleOf`; schema `$id` indexes are local to the current Project and
+  resolve only already loaded project documents, so unsupported, remote or cyclic
+  schema vocabulary
   завершает операцию fail-closed. Renderer получает resolved schema через
   typed `ReadProjectSchema`, а sensitive defaults/examples/const/enum не
   попадают в frontend;
@@ -65,7 +78,7 @@ internal/infrastructure
   git/           native git subprocess adapter
   sqlite/        global application metadata
   projectstate/  `.studio/` project-local state
-  cli/           liapoldus process adapter
+  cli/           liapoldus process adapter and toolchain probe
   plugins/       package installer and process host
   desktop/       external editor and OS integration
 
@@ -93,14 +106,42 @@ type FileSystem interface {
 }
 
 type GitRepository interface {
+    Init(ctx context.Context, root string) error
     Status(ctx context.Context, root string) (GitStatus, error)
-    Diff(ctx context.Context, root string) (GitDiff, error)
-    Commit(ctx context.Context, root string, request CommitRequest) (Revision, error)
+    Diff(ctx context.Context, root, path string) (GitDiff, error)
+    Conflict(ctx context.Context, root, path string) (GitConflict, error)
+    ResolveConflict(ctx context.Context, root, path, side string, confirmed bool) error
+    Stage(ctx context.Context, root string, paths []string, confirmed bool) error
+    Unstage(ctx context.Context, root string, paths []string, confirmed bool) error
+    CommitStaged(ctx context.Context, root, message string, confirmed bool) (Revision, error)
+    Stashes(ctx context.Context, root string, limit int) ([]GitStash, error)
+    Stash(ctx context.Context, root, message string, includeUntracked, confirmed bool) (string, error)
+    ApplyStash(ctx context.Context, root string, index int, drop, confirmed bool) error
     Branches(ctx context.Context, root string) ([]Branch, error)
+    History(ctx context.Context, root string, limit int) ([]Commit, error)
+    Remotes(ctx context.Context, root string) ([]Remote, error)
+    Checkout(ctx context.Context, root, branch string, confirmed bool) error
+    Pull(ctx context.Context, root, remote, branch string, confirmed bool) error
+    Push(ctx context.Context, root, remote, branch string, confirmed bool) error
+    Merge(ctx context.Context, root, branch string, confirmed bool) error
+    Rebase(ctx context.Context, root, branch string, confirmed bool) error
+    CherryPick(ctx context.Context, root, commit string, confirmed bool) error
+    Abort(ctx context.Context, root, operation string, confirmed bool) error
+}
+
+type GraphRepository interface {
+    CreateRuntimePlugin(ctx context.Context, root string, input RuntimePluginInput) error
+    DeleteRuntimePlugin(ctx context.Context, root, id string, confirmed bool) error
+    CreatePluginLink(ctx context.Context, root string, input PluginLinkInput) error
+    DeletePluginLink(ctx context.Context, root, caller, id string, confirmed bool) error
 }
 
 type CliRunner interface {
     Run(ctx context.Context, request CliRequest) (<-chan CliEvent, error)
+}
+
+type ToolchainProbe interface {
+    Status(ctx context.Context) ToolchainStatus
 }
 
 type PluginPackageInstaller interface {
@@ -120,15 +161,17 @@ type ReportStore interface {
 ```
 
 Текущие инфраструктурные реализации уже включают project tree/graph reader,
-project-scoped filesystem, native Git status, schema-aware settings и link
-contract boundary, CLI JSONL process runner, redacted report store, local plugin
+project-scoped filesystem, native Git status/init, schema-aware settings и link
+contract boundary, atomic graph source mutations, typed CLI intent planner,
+CLI JSONL process runner, redacted report store, local plugin
 package installer, project-local `.studio/workspace.json` и external editor
-launcher. Git adapter также предоставляет bounded diff, branch catalog и
-confirmation-gated commit/pull/push operations. Companion tools запускаются из
+launcher. Git adapter также предоставляет bounded diff, branch catalog,
+bounded conflict snapshots и confirmation-gated history/commit/pull/push
+operations. Companion tools запускаются из
 verified package path с platform check, output limit, redaction и manifest
 timeout. Declarative surface rendering и supervised optional plugin processes
 проходят host-controlled boundary; target catalog UI остаётся отдельным
-production increment. Установленные surfaces
+report-based traffic observation и exact remote handoff. Установленные surfaces
 проходят host-controlled JSON schema preview; arbitrary plugin frontend не
 загружается.
 
@@ -154,6 +197,10 @@ credentials.
 | Deploy/traffic evidence | CLI/Core report | `.studio/reports/` |
 | Recoverable failures | Studio diagnostic projection | `.studio/diagnostics.jsonl` |
 
+Runtime plugin readiness is an ephemeral UI projection from the typed CLI
+`plugin status` response backed by Core Management API. It is not persisted in
+`.studio/` and becomes `unknown` when that query is unavailable or malformed.
+
 `.studio/` исключается из bundle. Reports сохраняются только после redaction.
 
 ## 6. Failure model
@@ -164,3 +211,4 @@ credentials.
 
 Process failures не должны завершать Studio. CLI/plugin/tool process получает
 cancel, timeout и output limit; завершение фиксируется как reportable diagnostic.
+Frontend structure and state boundaries are specified in [frontend-architecture.md](frontend-architecture.md): models remain pure, Zustand stores contain only state/reducers, controllers own Wails/CLI/Git effects, and views remain rendering-only.

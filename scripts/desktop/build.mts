@@ -15,6 +15,9 @@ try {
   if (process.env.STUDIO_WAILS_NSIS === 'true') {
     wailsArgs.push('-nsis')
   }
+  if (process.env.STUDIO_RELEASE_BUILD === 'true') {
+    wailsArgs.push('-ldflags', '-X github.com/Liapoldus/studio/internal/infrastructure/config.ReleaseBuild=true')
+  }
   if (process.platform === 'win32') {
     const helperPath = join(root, 'build/sandbox/studio-sandbox-launcher.exe')
     await mkdir(join(root, 'build/sandbox'), { recursive: true })

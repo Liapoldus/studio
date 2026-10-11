@@ -10,6 +10,26 @@ export function ClientPreferences() {
   return window['go']['wails']['App']['ClientPreferences']();
 }
 
+export function CreatePluginLink(arg1) {
+  return window['go']['wails']['App']['CreatePluginLink'](arg1);
+}
+
+export function CreateProject(arg1, arg2, arg3) {
+  return window['go']['wails']['App']['CreateProject'](arg1, arg2, arg3);
+}
+
+export function CreateRuntimePlugin(arg1) {
+  return window['go']['wails']['App']['CreateRuntimePlugin'](arg1);
+}
+
+export function DeletePluginLink(arg1, arg2, arg3) {
+  return window['go']['wails']['App']['DeletePluginLink'](arg1, arg2, arg3);
+}
+
+export function DeleteRuntimePlugin(arg1, arg2) {
+  return window['go']['wails']['App']['DeleteRuntimePlugin'](arg1, arg2);
+}
+
 export function Diagnostics() {
   return window['go']['wails']['App']['Diagnostics']();
 }
@@ -22,6 +42,14 @@ export function ExportTrafficReport() {
   return window['go']['wails']['App']['ExportTrafficReport']();
 }
 
+export function GitAbort(arg1, arg2) {
+  return window['go']['wails']['App']['GitAbort'](arg1, arg2);
+}
+
+export function GitApplyStash(arg1, arg2, arg3) {
+  return window['go']['wails']['App']['GitApplyStash'](arg1, arg2, arg3);
+}
+
 export function GitBranches() {
   return window['go']['wails']['App']['GitBranches']();
 }
@@ -30,8 +58,20 @@ export function GitCheckout(arg1, arg2) {
   return window['go']['wails']['App']['GitCheckout'](arg1, arg2);
 }
 
+export function GitCherryPick(arg1, arg2) {
+  return window['go']['wails']['App']['GitCherryPick'](arg1, arg2);
+}
+
 export function GitCommit(arg1, arg2, arg3) {
   return window['go']['wails']['App']['GitCommit'](arg1, arg2, arg3);
+}
+
+export function GitCommitStaged(arg1, arg2) {
+  return window['go']['wails']['App']['GitCommitStaged'](arg1, arg2);
+}
+
+export function GitConflict(arg1) {
+  return window['go']['wails']['App']['GitConflict'](arg1);
 }
 
 export function GitDiff(arg1) {
@@ -42,6 +82,10 @@ export function GitHistory(arg1) {
   return window['go']['wails']['App']['GitHistory'](arg1);
 }
 
+export function GitMerge(arg1, arg2) {
+  return window['go']['wails']['App']['GitMerge'](arg1, arg2);
+}
+
 export function GitPull(arg1, arg2, arg3) {
   return window['go']['wails']['App']['GitPull'](arg1, arg2, arg3);
 }
@@ -50,8 +94,36 @@ export function GitPush(arg1, arg2, arg3) {
   return window['go']['wails']['App']['GitPush'](arg1, arg2, arg3);
 }
 
+export function GitRebase(arg1, arg2) {
+  return window['go']['wails']['App']['GitRebase'](arg1, arg2);
+}
+
 export function GitRemotes() {
   return window['go']['wails']['App']['GitRemotes']();
+}
+
+export function GitResolveConflict(arg1, arg2, arg3) {
+  return window['go']['wails']['App']['GitResolveConflict'](arg1, arg2, arg3);
+}
+
+export function GitStage(arg1, arg2) {
+  return window['go']['wails']['App']['GitStage'](arg1, arg2);
+}
+
+export function GitStash(arg1, arg2, arg3) {
+  return window['go']['wails']['App']['GitStash'](arg1, arg2, arg3);
+}
+
+export function GitStashes(arg1) {
+  return window['go']['wails']['App']['GitStashes'](arg1);
+}
+
+export function GitUnstage(arg1, arg2) {
+  return window['go']['wails']['App']['GitUnstage'](arg1, arg2);
+}
+
+export function InitializeGit() {
+  return window['go']['wails']['App']['InitializeGit']();
 }
 
 export function InspectStudioPlugin(arg1) {
@@ -72,6 +144,10 @@ export function InstalledStudioPlugins() {
 
 export function ListProjects() {
   return window['go']['wails']['App']['ListProjects']();
+}
+
+export function ListRuntimeArtifacts() {
+  return window['go']['wails']['App']['ListRuntimeArtifacts']();
 }
 
 export function OpenFileExternally(arg1, arg2) {
@@ -102,12 +178,20 @@ export function ReadProjectSettings(arg1, arg2) {
   return window['go']['wails']['App']['ReadProjectSettings'](arg1, arg2);
 }
 
+export function ReadRuntimePluginMetadata(arg1, arg2) {
+  return window['go']['wails']['App']['ReadRuntimePluginMetadata'](arg1, arg2);
+}
+
 export function ReadStudioPluginSurface(arg1, arg2, arg3) {
   return window['go']['wails']['App']['ReadStudioPluginSurface'](arg1, arg2, arg3);
 }
 
 export function ReadWorkspaceState() {
   return window['go']['wails']['App']['ReadWorkspaceState']();
+}
+
+export function RegisterRuntimeArtifact(arg1, arg2, arg3, arg4) {
+  return window['go']['wails']['App']['RegisterRuntimeArtifact'](arg1, arg2, arg3, arg4);
 }
 
 export function RemoveStudioPlugin(arg1, arg2) {
@@ -118,8 +202,20 @@ export function RunCLI(arg1) {
   return window['go']['wails']['App']['RunCLI'](arg1);
 }
 
+export function RunStudioCommand(arg1, arg2, arg3, arg4) {
+  return window['go']['wails']['App']['RunStudioCommand'](arg1, arg2, arg3, arg4);
+}
+
 export function RunStudioPluginTool(arg1, arg2, arg3, arg4) {
   return window['go']['wails']['App']['RunStudioPluginTool'](arg1, arg2, arg3, arg4);
+}
+
+export function RunStudioRuntimeCommand(arg1, arg2) {
+  return window['go']['wails']['App']['RunStudioRuntimeCommand'](arg1, arg2);
+}
+
+export function SaveClientLocale(arg1) {
+  return window['go']['wails']['App']['SaveClientLocale'](arg1);
 }
 
 export function SaveClientPreferences(arg1) {
@@ -134,12 +230,24 @@ export function SelectExternalEditor() {
   return window['go']['wails']['App']['SelectExternalEditor']();
 }
 
+export function SelectProjectCreationDirectory() {
+  return window['go']['wails']['App']['SelectProjectCreationDirectory']();
+}
+
 export function SelectProjectDirectory() {
   return window['go']['wails']['App']['SelectProjectDirectory']();
 }
 
+export function SelectRuntimeArtifactBinary() {
+  return window['go']['wails']['App']['SelectRuntimeArtifactBinary']();
+}
+
 export function SelectStudioPluginPackage() {
   return window['go']['wails']['App']['SelectStudioPluginPackage']();
+}
+
+export function SelectTargetProfile() {
+  return window['go']['wails']['App']['SelectTargetProfile']();
 }
 
 export function StartStudioPluginProcess(arg1, arg2) {
@@ -154,8 +262,16 @@ export function StudioPluginProcessStatus(arg1, arg2) {
   return window['go']['wails']['App']['StudioPluginProcessStatus'](arg1, arg2);
 }
 
+export function ToolchainStatus() {
+  return window['go']['wails']['App']['ToolchainStatus']();
+}
+
 export function TrafficRecords() {
   return window['go']['wails']['App']['TrafficRecords']();
+}
+
+export function TrustRuntimeArtifact(arg1, arg2, arg3, arg4) {
+  return window['go']['wails']['App']['TrustRuntimeArtifact'](arg1, arg2, arg3, arg4);
 }
 
 export function Workspace() {

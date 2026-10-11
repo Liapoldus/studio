@@ -80,10 +80,24 @@ jobs:
           STUDIO_WAILS_NSIS: ${{ runner.os == 'Windows' && 'true' || 'false' }}
         run: |
           npm run desktop:build --prefix frontend
+      - name: Build Linux AppImage
+        if: runner.os == 'Linux'
+        shell: bash
+        env:
+          APPIMAGETOOL: ${{ runner.temp }}/appimagetool-x86_64.AppImage
+          APPIMAGETOOL_RUNTIME_FILE: ${{ runner.temp }}/runtime-x86_64
+        run: |
+          curl --fail --silent --show-error --location https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-x86_64.AppImage --output "$APPIMAGETOOL"
+          echo "ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0  $APPIMAGETOOL" | sha256sum --check
+          curl --fail --silent --show-error --location https://github.com/AppImage/type2-runtime/releases/download/20251108/runtime-x86_64 --output "$APPIMAGETOOL_RUNTIME_FILE"
+          echo "2fca8b443c92510f1483a883f60061ad09b46b978b2631c807cd873a47ec260d  $APPIMAGETOOL_RUNTIME_FILE" | sha256sum --check
+          chmod +x "$APPIMAGETOOL"
+          node scripts/desktop/build-appimage.mjs
       - name: Smoke-test desktop package
         shell: bash
         env:
           STUDIO_PACKAGE_PLATFORM: ${{ runner.os == 'Windows' && 'windows' || runner.os == 'macOS' && 'darwin' || 'linux' }}
+          STUDIO_REQUIRE_APPIMAGE: ${{ runner.os == 'Linux' && 'true' || 'false' }}
         run: node scripts/desktop/package-smoke.mjs
       - name: Smoke-test Windows AppContainer launcher
         if: runner.os == 'Windows'

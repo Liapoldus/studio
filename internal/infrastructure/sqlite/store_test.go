@@ -102,7 +102,7 @@ func TestSchemaVersionAndPermissions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = db.ExecContext(context.Background(), "PRAGMA user_version = 6"); err != nil {
+	if _, err = db.ExecContext(context.Background(), "PRAGMA user_version = 7"); err != nil {
 		t.Fatal(err)
 	}
 	if closeErr := db.Close(); closeErr != nil {

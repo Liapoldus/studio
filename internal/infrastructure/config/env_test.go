@@ -2,6 +2,7 @@ package config
 
 import (
 	"errors"
+	"os"
 	"testing"
 )
 
@@ -23,4 +24,24 @@ func TestDesktopENV(t *testing.T) {
 			t.Fatalf("accepted path %q", path)
 		}
 	}
+}
+
+func TestReleaseBuildForcesPluginPolicy(t *testing.T) {
+	previous := ReleaseBuild
+	ReleaseBuild = "true"
+	t.Cleanup(func() { ReleaseBuild = previous })
+	t.Setenv("STUDIO_PLUGIN_REQUIRE_SIGNATURES", "false")
+	t.Setenv("STUDIO_PLUGIN_SANDBOX_MODE", "disabled")
+	ApplyReleasePluginPolicy()
+	if got := lookupEnv("STUDIO_PLUGIN_REQUIRE_SIGNATURES"); got != "true" {
+		t.Fatalf("release signatures policy: %q", got)
+	}
+	if got := lookupEnv("STUDIO_PLUGIN_SANDBOX_MODE"); got != "required" {
+		t.Fatalf("release sandbox policy: %q", got)
+	}
+}
+
+func lookupEnv(key string) string {
+	value, _ := os.LookupEnv(key)
+	return value
 }

@@ -10,12 +10,17 @@ Git остаются источниками конфигурации, deployment
 ## Уже реализовано
 
 - [x] Desktop entrypoint на Wails и React UI через typed bindings.
+- [x] Home command palette (`Cmd/Ctrl+P`) и read-only local `liapoldus` toolchain
+  status с явным unavailable/degraded state.
 - [x] ENV-only bootstrap для desktop SQLite без Core endpoint и credentials.
 - [x] Canonical Project tree reader с `.studio`/`.git` isolation.
 - [x] Runtime plugin/link graph read model из `services/*`.
 - [x] Native Git branch/revision/dirty adapter.
 - [x] Project-scoped filesystem с traversal/symlink protection и atomic writes.
 - [x] JSONL CLI runner boundary с allowlisted commands и output isolation.
+- [x] Межрепозиторный `cli-events/v1` JSONL contract: Studio adds the internal
+  `--studio-events` flag, CLI emits typed lifecycle/output/report events, а
+  plain stderr не пересекает renderer boundary.
 - [x] Redacted CLI/Core report persistence в `.studio/reports`.
 - [x] Local `.studio-plugin` inspection/install с explicit trust, digest и
   atomic activation.
@@ -32,12 +37,17 @@ Git остаются источниками конфигурации, deployment
   redacted read, safe patch и backend structural validation (types, required,
   enum, bounds, patterns, project-relative `$ref`, composition keywords,
   readOnly и nested arrays/objects) работают через один typed generic
-  renderer; полноценный versioned registry и оставшийся advanced JSON Schema
-  vocabulary остаются отдельным contract gate.
+  renderer; advanced object/array/numeric vocabulary (`additionalProperties`,
+  `patternProperties`, `propertyNames`, `dependentRequired`, `uniqueItems`,
+  exclusive bounds и `multipleOf`) также fail-closed покрыт тестами. Local
+  versioned `$id` registry без network resolution добавлен; custom format
+  vocabulary и remaining draft-specific keywords остаются отдельным contract
+  gate.
 - [~] Подключить CLI runner к operation progress, target catalog, local Core
   lifecycle и exact remote handoff: typed JSONL events доходят до Wails event
   stream, а UI предоставляет target list, Core status/start, local plan/apply и
-  validate, cancellation и revision-pinned credential-free remote handoff;
+  validate, cancellation, report-based local traffic observation и
+  revision-pinned credential-free remote handoff;
   operation report lifecycle остаётся CLI-owned. Process boundary теперь
   fail-closed проверяет конкретную reviewed command grammar, обязательный
   `--target local`, operation id и project-relative target profiles; произвольный
@@ -48,17 +58,23 @@ Git остаются источниками конфигурации, deployment
   process supervisor с timeout/crash state и host-controlled generic surface
   preview и version-specific remove/rollback action подключены; declared
   artifact SHA-256 и optional Ed25519 signature проверяются при
-  inspection/install; macOS/Linux sandbox adapters, Windows AppContainer
-  launcher и observable best-effort warning добавлены, а production
-  `required` rollout и Windows isolation smoke остаются release policy gates.
+  inspection/install; перед каждым host use установленный каталог повторно
+  валидируется, а release-mode executable требует matching platform digest.
+  macOS/Linux sandbox adapters, Windows AppContainer launcher и observable
+  best-effort warning добавлены, а production `required` rollout и Windows
+  isolation smoke остаются release policy gates.
 - [x] Добавить traffic report import, timeline/table filters и safe export:
   redacted report projection, provenance, text/status/transport/time/latency
   filters, schema validation column, timeline/table views и safe export
   реализованы; источник observation и report lifecycle остаётся CLI-owned.
 - [~] Реализовать Git diff/branches/history/remotes/checkout/commit/pull/push/
-  conflict workflows: native status/diff/history/redacted remotes и clean-tree
-  branch switch boundary, typed Wails methods и Git panel уже добавлены;
-  conflict/rebase/merge/cherry-pick остаются external-editor/CLI workflow.
+  conflict workflows: native status/diff/history/redacted remotes, clean-tree
+  branch switch boundary и typed Wails methods уже добавлены; confirmed native
+  merge/rebase/cherry-pick и conflict abort теперь также подключены и покрыты
+  integration test. Bounded base/ours/theirs snapshots, explicit ours/theirs
+  path-level stage/unstage, staged-only commit и bounded stash recovery
+  подключены через typed Wails methods. Ручной three-way resolver и provider
+  metadata остаются external-editor/CLI workflow.
 - [x] Добавить global SQLite migrations для installed plugins, trust decisions
   и editor associations; migration v3 удаляет прежнюю duplicate workspace table,
   migration v4 сохраняет application theme, migration v5 сохраняет granted
@@ -66,8 +82,10 @@ Git остаются источниками конфигурации, deployment
   `.studio/workspace.json` хранит layout, tabs и filters.
 - [~] Добавить macOS/Windows/Linux CI package builds, signing, upgrade,
   crash diagnostics и cross-platform smoke tests: CI package matrix, Go
-  test/vet, structural package smoke и artifact upload добавлены;
+  test/vet, Linux AppImage assembly with pinned tool/runtime, structural package
+  smoke и artifact upload добавлены;
   redacted recoverable CLI/plugin diagnostics добавлены; certificate-backed
   signing/release promotion и фактический Windows/Linux CI run остаются;
   signed workflow теперь fail-closed проверяет trust roots, обязательные
-  signatures и required sandbox до production build.
+  signatures и required sandbox до production build, затем проверяет
+  codesign/notarization staple или Authenticode каждого packaged executable.

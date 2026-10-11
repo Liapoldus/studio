@@ -140,6 +140,12 @@ Manifest-bound tool execution также имеет bounded lifetime: descriptor
 задать `timeoutMillis`, host применяет timeout с безопасным default и верхним
 пределом, возвращает `timedOut` и не оставляет бесконечный child process.
 
+Declarative surface с `kind: "command"` обязан ссылаться на объявленный
+`toolId`. Host-controlled renderer передаёт форме один positional argument —
+canonical JSON object текущих значений schema; plugin не получает DOM, JS
+callback или process handle. Surface с `toolId` проходит ту же permission,
+digest, timeout, output-limit и redaction policy, что и прямой запуск tool.
+
 Каждый запуск получает cancellation, timeout, exit code, stdout/stderr limits и
 diagnostics. В UI и report отображаются `toolId`, version и digest; secret
 значения из arguments, environment и output не сохраняются.
@@ -149,7 +155,10 @@ diagnostics. В UI и report отображаются `toolId`, version и diges
 `signature`. Desktop получает release trust roots через
 `STUDIO_PLUGIN_TRUST_ROOTS` в формате `key-id=base64-public-key`, а
 `STUDIO_PLUGIN_REQUIRE_SIGNATURES=true` включает fail-closed режим для release
-канала. В обычном local mode unsigned package всё ещё требует explicit trust;
+канала. В release mode каждый executable tool/backend process, доступный на
+текущей платформе, также обязан иметь matching artifact с SHA-256 digest;
+одной подписи manifest без проверки бинарного содержимого недостаточно. В
+обычном local mode unsigned package всё ещё требует explicit trust;
 наличие signature metadata без настроенного trust root не выдаётся за
 cryptographic verification.
 
@@ -177,8 +186,10 @@ Manifest может объявить один optional backend process:
 Host запускает его только через `StartStudioPluginProcess`, хранит lifecycle
 `starting/running/stopping/stopped/failed`, не наследует environment по умолчанию
 и наблюдает exit/timeout в supervisor. Crash этого процесса меняет только его
-plugin state и не завершает основной workspace. Executable, platform list и
-environment names проверяются до install.
+plugin state и не завершает основной workspace. Renderer bounded-polling-ом
+читает typed status; каждый новый failure code один раз попадает в project
+diagnostics, а успешный restart сбрасывает это состояние. Executable, platform
+list и environment names проверяются до install.
 
 Если manifest объявляет `permissions`, trust dialog требует отдельного checkbox
 grant для каждой capability. Granted permissions сохраняются в SQLite вместе с

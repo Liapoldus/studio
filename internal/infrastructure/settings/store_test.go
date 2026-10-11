@@ -91,6 +91,10 @@ func TestStoreValidatesRenderedSchemaBeforeWriting(t *testing.T) {
 			}
 		})
 	}
+	write("services/runtime/settings.json", `{"mode":"local","rate":1,"labels":["api"],"metadata":{"x-port":8080}}`)
+	if err := store.Update(context.Background(), root, "services/runtime/settings.json", "schemas/runtime/settings.json", []byte(`{"mode":"remote"}`)); err == nil {
+		t.Fatal("expected dependentRequired to reject mode without profile")
+	}
 }
 
 func TestStoreResolvesProjectScopedSchemaReferencesAndComposition(t *testing.T) {
@@ -118,6 +122,72 @@ func TestStoreResolvesProjectScopedSchemaReferencesAndComposition(t *testing.T) 
 	}
 	if err := store.Update(context.Background(), root, "services/runtime/settings.json", "schemas/runtime/settings.json", []byte(`{"endpoint":"http://insecure"}`)); err == nil {
 		t.Fatal("expected oneOf branch constraints to reject the patch")
+	}
+}
+
+func TestStoreIndexesVersionedSchemaIDsWithoutNetworkResolution(t *testing.T) {
+	root := t.TempDir()
+	files := projectfiles.FileSystem{}
+	write := func(path, content string) {
+		t.Helper()
+		if err := files.WriteFile(context.Background(), root, path, []byte(content)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("schemas/shared.json", `{"$id":"https://liapoldus.example/schemas/shared/v1.json","$schema":"https://json-schema.org/draft/2020-12/schema","$defs":{"port":{"type":"integer","minimum":1,"maximum":65535}}}`)
+	write("schemas/runtime/settings.json", `{"$id":"https://liapoldus.example/schemas/runtime/v1/settings.json","$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","properties":{"a":{"$ref":"../shared.json#/$defs/port"},"b":{"$ref":"https://liapoldus.example/schemas/shared/v1.json#/$defs/port"}}}`)
+	write("services/runtime/settings.json", `{"a":8080,"b":8081}`)
+	store := Store{Files: files}
+	if err := store.Update(context.Background(), root, "services/runtime/settings.json", "schemas/runtime/settings.json", []byte(`{"a":443,"b":8443}`)); err != nil {
+		t.Fatalf("versioned local schema IDs should resolve without network: %v", err)
+	}
+	write("schemas/runtime/unregistered.json", `{"type":"object","properties":{"port":{"$ref":"https://untrusted.example/schema.json#/port"}}}`)
+	if err := store.Update(context.Background(), root, "services/runtime/settings.json", "schemas/runtime/unregistered.json", []byte(`{"port":443}`)); err == nil {
+		t.Fatal("expected unregistered external $ref to fail closed")
+	}
+}
+
+func TestStoreSupportsAdvancedObjectArrayAndNumericConstraints(t *testing.T) {
+	root := t.TempDir()
+	files := projectfiles.FileSystem{}
+	write := func(path, content string) {
+		t.Helper()
+		if err := files.WriteFile(context.Background(), root, path, []byte(content)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("schemas/runtime/settings.json", `{"type":"object","additionalProperties":{"type":"string"},"propertyNames":{"type":"string","pattern":"^[a-z][a-z-]*$"},"dependentRequired":{"mode":["profile"]},"properties":{"mode":{"type":"string"},"profile":{"type":"string"},"rate":{"type":"number","exclusiveMinimum":0.5,"multipleOf":0.5},"labels":{"type":"array","minItems":1,"maxItems":2,"uniqueItems":true,"items":{"type":"string"}},"metadata":{"type":"object","additionalProperties":false,"patternProperties":{"^x-":{"type":"integer"}}},"secret-bag":{"type":"object","additionalProperties":{"type":"string","x-sensitive":true}}}}`)
+	write("services/runtime/settings.json", `{"mode":"local","profile":"dev","rate":1,"labels":["api"],"metadata":{"x-port":8080},"secret-bag":{"api-key":"hidden"},"extra":"allowed"}`)
+	store := Store{Files: files}
+	redacted, err := store.Read(context.Background(), root, "services/runtime/settings.json", "schemas/runtime/settings.json")
+	if err != nil || strings.Contains(string(redacted), "hidden") {
+		t.Fatalf("schema-driven additional property was not redacted: %s (%v)", redacted, err)
+	}
+
+	if err := store.Update(context.Background(), root, "services/runtime/settings.json", "schemas/runtime/settings.json", []byte(`{"rate":1.5,"labels":["api","worker"],"metadata":{"x-timeout":30}}`)); err != nil {
+		t.Fatalf("advanced constraints should allow valid updates: %v", err)
+	}
+	invalid := []struct {
+		name  string
+		patch string
+	}{
+		{name: "duplicate array items", patch: `{"labels":["api","api"]}`},
+		{name: "exclusive minimum", patch: `{"rate":0.5}`},
+		{name: "multiple of", patch: `{"rate":1.25}`},
+		{name: "pattern property type", patch: `{"metadata":{"x-port":"8080"}}`},
+		{name: "property name", patch: `{"BadName":"value"}`},
+		{name: "dependent required", patch: `{"mode":"local","profile":null}`},
+	}
+	for _, test := range invalid {
+		t.Run(test.name, func(t *testing.T) {
+			if err := store.Update(context.Background(), root, "services/runtime/settings.json", "schemas/runtime/settings.json", []byte(test.patch)); err == nil {
+				t.Fatalf("expected advanced constraint to reject %s", test.patch)
+			}
+		})
+	}
+	write("services/runtime/settings.json", `{"mode":"local","rate":1,"labels":["api"],"metadata":{"x-port":8080}}`)
+	if err := store.Update(context.Background(), root, "services/runtime/settings.json", "schemas/runtime/settings.json", []byte(`{"mode":"remote"}`)); err == nil {
+		t.Fatal("expected dependentRequired to reject mode without profile")
 	}
 }
 

@@ -22,13 +22,17 @@ design tokens, а не локальными hex-значениями в комп
 - installed local Studio plugins;
 - application settings.
 
+Toolchain status is a read-only local executable probe. Home shows the resolved
+`liapoldus` path and version, or `CLI unavailable`; it never reads credentials,
+target profiles or Core state.
+
 ### Project shell
 
 ```text
 ┌──────────────────────────────────────────────────────────────────────┐
 │ Project · branch · revision · validation · local Core · command palette│
 ├───────────────┬───────────────────────────────┬──────────────────────┤
-│ File tree     │ Canvas / workbench tabs       │ Inspector            │
+│ Activity bar  │ Canvas / CodeMirror tabs      │ Inspector            │
 │               │                               │                      │
 │ project.yaml  │ runtime plugin graph         │ selected plugin       │
 │ services/     │ links and diagnostics         │ settings schema       │
@@ -38,9 +42,15 @@ design tokens, а не локальными hex-значениями в комп
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
-Zones, selection, bottom tab and navigator filters persist in
-`.studio/workspace.json`. A hidden panel remains
-available through command palette and keyboard shortcuts.
+Activity selection, document tabs, fixed bottom dock and navigator filters
+persist as versioned `workspace/v2` state in `.studio/workspace.json`. A hidden
+panel remains available through command palette and keyboard shortcuts.
+
+Plugin nodes can be moved, selected, connected and deleted on a pan/zoom React
+Flow canvas. Their finite `x`/`y` offsets are stored in the same workspace state
+and restored on the next open; invalid local layout data is ignored without
+changing the canonical Project. The bottom dock is fixed and only its active
+panel expands.
 
 ## 3. Design tokens
 
@@ -71,15 +81,25 @@ field types, permissions, labels, descriptions and action scopes before render.
 
 ## 5. Interaction rules
 
-- single click selects; double click opens inspector focus;
-- `Cmd/Ctrl+P` opens command palette;
+- single click selects; graph handles create a versioned link contract;
+- `Cmd/Ctrl+P` opens command palette; `↑/↓` navigates, `Enter` runs and `Esc`
+  closes it;
 - `Cmd/Ctrl+S` saves current draft;
 - `Cmd/Ctrl+Shift+F` focuses project search;
 - dangerous Git/Core actions require a confirmation dialog with exact scope;
-- dirty state is visible in top bar and tab title;
+- conflict view renders bounded base/ours/theirs snapshots; ours/theirs staging
+  requires explicit confirmation, while manual three-way editing opens an
+  external Git tool;
+- Git changes expose explicit Stage/Unstage actions; commit operates only on
+  staged paths, and Draft stash exposes include-untracked plus apply/drop with
+  clean-tree safeguards;
+- dirty state is visible in top bar and tab title; supported YAML, JSON, Markdown
+  and text files open in internal CodeMirror 6 tabs with save/search/undo;
 - unsaved project changes block deploy handoff;
 - keyboard focus never disappears into canvas;
 - every asynchronous operation has loading, success and failure feedback.
+- CLI target registration requires a project-relative profile path and an exact
+  confirmation; credentials remain owned by the CLI target registry.
 
 ## 6. External editor workflow
 

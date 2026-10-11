@@ -2,8 +2,11 @@ import type {
   GitChange as GitChangeData,
   GitBranch as GitBranchData,
   GitCommit as GitCommitData,
+  GitConflict as GitConflictData,
+  GitConflictSide as GitConflictSideData,
   GitDiff as GitDiffData,
   GitRemote as GitRemoteData,
+  GitStash as GitStashData,
   GitStatus as GitStatusData,
   Diagnostic as DiagnosticData,
   InstalledPluginState as InstalledPluginStateData,
@@ -13,9 +16,11 @@ import type {
   PluginLink as PluginLinkData,
   ProductInfo as ProductInfoData,
   RuntimePlugin as RuntimePluginData,
+  ToolchainStatus as ToolchainStatusData,
   TrafficRecordView as TrafficRecordViewData,
   Workspace as WorkspaceData,
   WorkspaceState as WorkspaceStateData,
+  ArtifactReference as ArtifactReferenceData,
 } from './types'
 
 // Wails generates unchecked constructors. This Studio-owned boundary keeps its
@@ -41,6 +46,44 @@ export class ProductInfo implements ProductInfoData {
     this.name = value.name
     this.description = value.description
     this.workspaceFeatures = [...value.workspaceFeatures]
+  }
+}
+
+export class ArtifactReference implements ArtifactReferenceData {
+  id: string
+  version: string
+  platform: string
+  digest: string
+  trusted: boolean
+  command?: string
+  manifest?: string
+  schema?: string
+
+  constructor(source: unknown = {}) {
+    const value = object(source, 'artifact reference')
+    this.id = stringField(value, 'id', 'artifact reference')
+    this.version = stringField(value, 'version', 'artifact reference')
+    this.platform = stringField(value, 'platform', 'artifact reference')
+    this.digest = stringField(value, 'digest', 'artifact reference')
+    this.trusted = booleanField(value, 'trusted', 'artifact reference')
+    this.command = optionalStringField(value, 'command')
+    this.manifest = optionalStringField(value, 'manifest')
+    this.schema = optionalStringField(value, 'schema')
+  }
+}
+
+export class ToolchainStatus implements ToolchainStatusData {
+  cliAvailable: boolean
+  cliPath: string
+  cliVersion: string
+  errorCode: string
+
+  constructor(source: unknown = {}) {
+    const value = object(source, 'toolchain status')
+    this.cliAvailable = booleanField(value, 'cliAvailable', 'toolchain status')
+    this.cliPath = stringField(value, 'cliPath', 'toolchain status')
+    this.cliVersion = stringField(value, 'cliVersion', 'toolchain status')
+    this.errorCode = stringField(value, 'errorCode', 'toolchain status')
   }
 }
 
@@ -132,6 +175,34 @@ export class GitDiff implements GitDiffData {
   }
 }
 
+export class GitConflictSide implements GitConflictSideData {
+  available: boolean
+  content: string
+  truncated: boolean
+
+  constructor(source: unknown = {}) {
+    const value = object(source, 'git conflict side')
+    this.available = booleanField(value, 'available', 'git conflict side')
+    this.content = stringField(value, 'content', 'git conflict side')
+    this.truncated = booleanField(value, 'truncated', 'git conflict side')
+  }
+}
+
+export class GitConflict implements GitConflictData {
+  path: string
+  base: GitConflictSide
+  ours: GitConflictSide
+  theirs: GitConflictSide
+
+  constructor(source: unknown = {}) {
+    const value = object(source, 'git conflict')
+    this.path = stringField(value, 'path', 'git conflict')
+    this.base = new GitConflictSide(value.base)
+    this.ours = new GitConflictSide(value.ours)
+    this.theirs = new GitConflictSide(value.theirs)
+  }
+}
+
 export class GitCommit implements GitCommitData {
   hash: string
   shortHash: string
@@ -162,6 +233,19 @@ export class GitRemote implements GitRemoteData {
   }
 }
 
+export class GitStash implements GitStashData {
+  ref: string
+  message: string
+  createdAt: string
+
+  constructor(source: unknown = {}) {
+    const value = object(source, 'git stash')
+    this.ref = stringField(value, 'ref', 'git stash')
+    this.message = stringField(value, 'message', 'git stash')
+    this.createdAt = stringField(value, 'createdAt', 'git stash')
+  }
+}
+
 export class GitStatus implements GitStatusData {
   branch: string
   revision: string
@@ -174,7 +258,7 @@ export class GitStatus implements GitStatusData {
     const value = object(source, 'git status')
     this.branch = stringField(value, 'branch', 'git status')
     this.revision = stringField(value, 'revision', 'git status')
-    this.changes = arrayField(value, 'changes', 'git status').map((change) => new GitChange(change))
+    this.changes = arrayField(value, 'changes', GitChange, 'git status')
     this.dirty = booleanField(value, 'dirty', 'git status')
     this.available = booleanField(value, 'available', 'git status')
     this.conflict = booleanField(value, 'conflict', 'git status')
@@ -223,10 +307,7 @@ export class RuntimePlugin implements RuntimePluginData {
     this.settingsSchemaPath = stringField(value, 'settingsSchemaPath', 'runtime plugin')
     this.configured = booleanField(value, 'configured', 'runtime plugin')
     this.problemCount = numberField(value, 'problemCount', 'runtime plugin')
-    this.linkPaths = arrayField(value, 'linkPaths', 'runtime plugin').map((path) => {
-      if (typeof path !== 'string') throw new Error('Invalid Studio runtime plugin')
-      return path
-    })
+    this.linkPaths = stringArrayField(value, 'linkPaths', 'runtime plugin')
   }
 }
 
@@ -257,10 +338,7 @@ export class PluginLink implements PluginLinkData {
     this.caller = stringField(value, 'caller', 'plugin link')
     this.target = stringField(value, 'target', 'plugin link')
     this.contractVersion = stringField(value, 'contractVersion', 'plugin link')
-    this.methods = arrayField(value, 'methods', 'plugin link').map((method) => {
-      if (typeof method !== 'string') throw new Error('Invalid Studio plugin link')
-      return method
-    })
+    this.methods = stringArrayField(value, 'methods', 'plugin link')
     this.transport = stringField(value, 'transport', 'plugin link')
     this.sourcePath = stringField(value, 'sourcePath', 'plugin link')
     this.requestSchemaPath = stringField(value, 'requestSchemaPath', 'plugin link')
@@ -271,10 +349,7 @@ export class PluginLink implements PluginLinkData {
     this.retryLimit = numberField(value, 'retryLimit', 'plugin link')
     this.requestLimitBytes = numberField(value, 'requestLimitBytes', 'plugin link')
     this.responseLimitBytes = numberField(value, 'responseLimitBytes', 'plugin link')
-    this.disabledMethods = arrayField(value, 'disabledMethods', 'plugin link').map((method) => {
-      if (typeof method !== 'string') throw new Error('Invalid Studio plugin link')
-      return method
-    })
+    this.disabledMethods = stringArrayField(value, 'disabledMethods', 'plugin link')
     this.compatibility = stringField(value, 'compatibility', 'plugin link')
     this.redactionPolicy = stringField(value, 'redactionPolicy', 'plugin link')
     this.valid = booleanField(value, 'valid', 'plugin link')
@@ -287,8 +362,8 @@ export class PluginGraph implements PluginGraphData {
 
   constructor(source: unknown = {}) {
     const value = object(source, 'plugin graph')
-    this.plugins = arrayField(value, 'plugins', 'plugin graph').map((plugin) => new RuntimePlugin(plugin))
-    this.links = arrayField(value, 'links', 'plugin graph').map((link) => new PluginLink(link))
+    this.plugins = arrayField(value, 'plugins', RuntimePlugin, 'plugin graph')
+    this.links = arrayField(value, 'links', PluginLink, 'plugin graph')
   }
 }
 
@@ -300,12 +375,44 @@ export class Workspace implements WorkspaceData {
   constructor(source: unknown = {}) {
     const value = object(source, 'workspace')
     this.project = value.project === null || value.project === undefined ? null : new Project(value.project)
-    this.files = arrayField(value, 'files', 'workspace').map((file) => new ProjectFile(file))
+    this.files = arrayField(value, 'files', ProjectFile, 'workspace')
     this.git = new GitStatus(value.git)
     this.graph = new PluginGraph(value.graph)
   }
 
   graph: PluginGraph
+}
+
+export class PluginLinkInput {
+  id = ''
+  caller = ''
+  target = ''
+  contractVersion = ''
+  methods: string[] = []
+  transport = ''
+  requestSchemaPath = ''
+  responseSchemaPath = ''
+  contractSchemaPath = ''
+  securityProfile = ''
+  timeoutMillis = 0
+  retryLimit = 0
+  requestLimitBytes = 0
+  responseLimitBytes = 0
+  disabledMethods: string[] = []
+  compatibility = ''
+  redactionPolicy = ''
+
+  constructor(source: Partial<PluginLinkInput> = {}) { Object.assign(this, source) }
+}
+
+export class RuntimePluginInput {
+  id = ''
+  name = ''
+  version = ''
+  manifestVersion = ''
+  settingsSchemaPath = ''
+
+  constructor(source: Partial<RuntimePluginInput> = {}) { Object.assign(this, source) }
 }
 
 export class TrafficRecordView implements TrafficRecordViewData {
@@ -360,6 +467,15 @@ function stringField(value: Record<string, unknown>, key: string, label: string)
   return value[key]
 }
 
+function optionalStringField(value: Record<string, unknown>, key: string): string | undefined {
+  return value[key] === undefined ? undefined : typeof value[key] === 'string' ? value[key] : undefined
+}
+
+function stringArrayField(value: Record<string, unknown>, key: string, label: string): string[] {
+  if (!Array.isArray(value[key]) || !value[key].every((entry): entry is string => typeof entry === 'string')) throw new Error(`Invalid Studio ${label}`)
+  return value[key]
+}
+
 function numberField(value: Record<string, unknown>, key: string, label: string): number {
   if (typeof value[key] !== 'number' || !Number.isFinite(value[key])) {
     throw new Error(`Invalid Studio ${label}`)
@@ -372,9 +488,9 @@ function booleanField(value: Record<string, unknown>, key: string, label: string
   return value[key]
 }
 
-function arrayField(value: Record<string, unknown>, key: string, label: string): unknown[] {
+function arrayField<T>(value: Record<string, unknown>, key: string, constructor: { new(source: unknown): T }, label: string): T[] {
   if (!Array.isArray(value[key])) throw new Error(`Invalid Studio ${label}`)
-  return value[key]
+  return value[key].map((entry) => new constructor(entry))
 }
 
 export class WorkspaceState implements WorkspaceStateData {
@@ -392,4 +508,5 @@ export class WorkspaceState implements WorkspaceStateData {
   }
 }
 
-export const models = { ProductInfo, Project, ProjectFile, GitBranch, GitChange, GitDiff, GitStatus, InstalledPluginState, RuntimePlugin, PluginLink, PluginGraph, TrafficRecordView, Workspace, WorkspaceState }
+
+export const models = { ArtifactReference, ProductInfo, Project, ProjectFile, ToolchainStatus, GitBranch, GitChange, GitDiff, GitConflictSide, GitConflict, GitStash, GitStatus, InstalledPluginState, RuntimePlugin, PluginLink, PluginGraph, TrafficRecordView, Workspace, WorkspaceState }

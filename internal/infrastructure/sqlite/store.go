@@ -71,8 +71,26 @@ func (s *Store) initialize() (initErr error) {
 	if err := tx.QueryRowContext(ctx, "PRAGMA user_version").Scan(&version); err != nil {
 		return err
 	}
-	if version > 5 {
+	if version > 6 {
 		return ErrStorage
+	}
+	// Versions 1 from the pre-project Studio used `connections` and a
+	// connection-oriented `client_state`. They are not compatible with the
+	// project workbench schema, but keeping the old tables under legacy names
+	// makes the migration recoverable and lets the desktop start without asking
+	// the operator to delete application data.
+	if version > 0 {
+		var projectsTable string
+		err := tx.QueryRowContext(ctx, "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'projects'").Scan(&projectsTable)
+		if err != nil || projectsTable != "projects" {
+			if _, err := tx.ExecContext(ctx, `
+ALTER TABLE connections RENAME TO legacy_connections;
+ALTER TABLE client_state RENAME TO legacy_client_state;
+PRAGMA user_version = 0;`); err != nil {
+				return err
+			}
+			version = 0
+		}
 	}
 	if version == 0 {
 		_, err := tx.ExecContext(ctx, `
@@ -139,6 +157,11 @@ PRAGMA user_version = 2;`); err != nil {
 			return err
 		}
 	}
+	if version < 6 {
+		if _, err := tx.ExecContext(ctx, `ALTER TABLE client_state ADD COLUMN locale TEXT NOT NULL DEFAULT 'ru'; PRAGMA user_version = 6;`); err != nil {
+			return err
+		}
+	}
 	return tx.Commit()
 }
 
@@ -194,34 +217,61 @@ func (s *Store) DeleteProject(ctx context.Context, id string) error {
 }
 
 func (s *Store) SaveClientState(ctx context.Context, state models.ClientState) error {
-	theme, err := models.NormalizeTheme(state.Theme)
-	if err != nil {
-		return err
+	theme, locale := "", ""
+	var err error
+	if state.Theme != "" {
+		theme, err = models.NormalizeTheme(state.Theme)
+		if err != nil {
+			return err
+		}
 	}
-	switch {
-	case state.SelectedProjectID == "" && state.Theme == "":
+	if state.Locale != "" {
+		locale, err = models.NormalizeLocale(state.Locale)
+		if err != nil {
+			return err
+		}
+	}
+	selected, hasSelected := state.SelectedProjectID, state.SelectedProjectID != ""
+	hasTheme, hasLocale := theme != "", locale != ""
+	if !hasSelected && !hasTheme && !hasLocale {
 		return nil
-	case state.SelectedProjectID == "":
-		_, err = s.db.ExecContext(ctx, "UPDATE client_state SET theme = ? WHERE singleton = 1", theme)
-	case state.Theme == "":
-		_, err = s.db.ExecContext(ctx, "UPDATE client_state SET selected_project_id = ? WHERE singleton = 1", state.SelectedProjectID)
-	default:
-		_, err = s.db.ExecContext(ctx, "UPDATE client_state SET selected_project_id = ?, theme = ? WHERE singleton = 1", state.SelectedProjectID, theme)
 	}
+	var query string
+	var args []any
+	switch {
+	case hasSelected && hasTheme && hasLocale:
+		query, args = "UPDATE client_state SET selected_project_id = ?, theme = ?, locale = ? WHERE singleton = ?", []any{selected, theme, locale, 1}
+	case hasSelected && hasTheme:
+		query, args = "UPDATE client_state SET selected_project_id = ?, theme = ? WHERE singleton = ?", []any{selected, theme, 1}
+	case hasSelected && hasLocale:
+		query, args = "UPDATE client_state SET selected_project_id = ?, locale = ? WHERE singleton = ?", []any{selected, locale, 1}
+	case hasTheme && hasLocale:
+		query, args = "UPDATE client_state SET theme = ?, locale = ? WHERE singleton = ?", []any{theme, locale, 1}
+	case hasSelected:
+		query, args = "UPDATE client_state SET selected_project_id = ? WHERE singleton = ?", []any{selected, 1}
+	case hasTheme:
+		query, args = "UPDATE client_state SET theme = ? WHERE singleton = ?", []any{theme, 1}
+	default:
+		query, args = "UPDATE client_state SET locale = ? WHERE singleton = ?", []any{locale, 1}
+	}
+	_, err = s.db.ExecContext(ctx, query, args...)
 	return storageError(ctx, err)
 }
 
 func (s *Store) ReadClientState(ctx context.Context) (models.ClientState, error) {
 	var selected sql.NullString
-	var theme string
-	err := s.db.QueryRowContext(ctx, "SELECT selected_project_id, theme FROM client_state WHERE singleton = 1").Scan(&selected, &theme)
+	var theme, locale string
+	err := s.db.QueryRowContext(ctx, "SELECT selected_project_id, theme, locale FROM client_state WHERE singleton = 1").Scan(&selected, &theme, &locale)
 	if err != nil {
 		return models.ClientState{}, storageError(ctx, err)
 	}
 	if theme == "" {
 		theme = "system"
 	}
-	return models.ClientState{SelectedProjectID: selected.String, Theme: theme}, nil
+	if locale == "" {
+		locale = "ru"
+	}
+	return models.ClientState{SelectedProjectID: selected.String, Theme: theme, Locale: locale}, nil
 }
 
 func (s *Store) SaveInstalledPlugin(ctx context.Context, value models.InstalledPluginState) error {

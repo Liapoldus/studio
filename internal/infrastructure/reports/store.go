@@ -17,6 +17,8 @@ import (
 
 var ErrInvalidReport = errors.New("invalid report")
 
+const maxPersistedReportBytes = 32 * 1024 * 1024
+
 type Store struct{}
 
 var _ interfaces.ReportStore = Store{}
@@ -47,7 +49,13 @@ func (Store) Save(ctx context.Context, root string, report models.Report, annota
 	if err != nil {
 		return "", ErrInvalidReport
 	}
-	directory := filepath.Join(filepath.Clean(root), ".studio", "reports")
+	if len(data) > maxPersistedReportBytes {
+		return "", ErrInvalidReport
+	}
+	directory, err := safeReportsDirectory(root)
+	if err != nil {
+		return "", err
+	}
 	if mkdirErr := os.MkdirAll(directory, 0700); mkdirErr != nil {
 		return "", mkdirErr
 	}
@@ -86,7 +94,10 @@ func (Store) List(ctx context.Context, root string) ([]models.Report, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	directory := filepath.Join(filepath.Clean(root), ".studio", "reports")
+	directory, err := safeReportsDirectory(root)
+	if err != nil {
+		return nil, err
+	}
 	entries, err := os.ReadDir(directory)
 	if errors.Is(err, os.ErrNotExist) {
 		return []models.Report{}, nil
@@ -96,6 +107,9 @@ func (Store) List(ctx context.Context, root string) ([]models.Report, error) {
 	}
 	paths := make([]string, 0, len(entries))
 	for _, entry := range entries {
+		if entry.Type()&os.ModeSymlink != 0 {
+			return nil, ErrInvalidReport
+		}
 		if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".json") {
 			paths = append(paths, filepath.Join(directory, entry.Name()))
 		}
@@ -114,6 +128,31 @@ func (Store) List(ctx context.Context, root string) ([]models.Report, error) {
 		values = append(values, report)
 	}
 	return values, nil
+}
+
+func safeReportsDirectory(root string) (string, error) {
+	if !filepath.IsAbs(root) || strings.ContainsRune(root, '\x00') {
+		return "", ErrInvalidReport
+	}
+	studio := filepath.Join(filepath.Clean(root), ".studio")
+	info, err := os.Lstat(studio)
+	if err == nil {
+		if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
+			return "", ErrInvalidReport
+		}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return "", err
+	}
+	directory := filepath.Join(studio, "reports")
+	info, err = os.Lstat(directory)
+	if err == nil {
+		if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
+			return "", ErrInvalidReport
+		}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return "", err
+	}
+	return directory, nil
 }
 
 func safeName(value string) string {

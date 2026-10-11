@@ -1,11 +1,16 @@
-import { CancelCLI, ClientPreferences as ReadClientPreferences, Diagnostics, EditorAssociations as ReadEditorAssociations, ExportTrafficReport, GitBranches, GitCheckout, GitCommit as RunGitCommit, GitDiff as ReadGitDiff, GitHistory, GitPull, GitPush, GitRemotes, InspectStudioPlugin, InstallStudioPlugin, InstalledStudioPluginManifests, InstalledStudioPlugins, ListProjects, OpenFileExternally, OpenProject, PrepareRemoteHandoff, ProductInfo, ReadProjectFile, ReadProjectSchema, ReadProjectSettings, ReadStudioPluginSurface, ReadWorkspaceState, RemoveStudioPlugin, RunCLI, RunStudioPluginTool, SaveClientPreferences, SaveEditorAssociation, SelectExternalEditor, SelectStudioPluginPackage, StartStudioPluginProcess, StopStudioPluginProcess, StudioPluginProcessStatus, TrafficRecords, Workspace as ReadWorkspace, WriteProjectFile, WriteProjectSettings, WriteWorkspaceState } from '../../wailsjs/go/wails/App'
+import { CancelCLI, ClientPreferences as ReadClientPreferences, CreatePluginLink, CreateProject, CreateRuntimePlugin, DeletePluginLink, DeleteRuntimePlugin, Diagnostics, EditorAssociations as ReadEditorAssociations, ExportTrafficReport, GitAbort, GitApplyStash, GitBranches, GitCheckout, GitCherryPick, GitCommit as RunGitCommit, GitCommitStaged, GitConflict as ReadGitConflict, GitDiff as ReadGitDiff, GitHistory, GitMerge, GitPull, GitPush, GitRebase, GitRemotes, GitResolveConflict, GitStage, GitStash, GitStashes, GitUnstage, InitializeGit, InspectStudioPlugin, InstallStudioPlugin, InstalledStudioPluginManifests, InstalledStudioPlugins, ListProjects, ListRuntimeArtifacts, OpenFileExternally, OpenProject, PrepareRemoteHandoff, ProductInfo, ReadProjectFile, ReadProjectSchema, ReadProjectSettings, ReadRuntimePluginMetadata, ReadStudioPluginSurface, ReadWorkspaceState, RemoveStudioPlugin, RunStudioCommand, RunStudioRuntimeCommand, RunStudioPluginTool, SaveClientLocale, SaveClientPreferences, SaveEditorAssociation, SelectExternalEditor, SelectProjectCreationDirectory, SelectRuntimeArtifactBinary, SelectStudioPluginPackage, SelectTargetProfile, StartStudioPluginProcess, StopStudioPluginProcess, StudioPluginProcessStatus, ToolchainStatus as ReadToolchainStatus, TrafficRecords, TrustRuntimeArtifact, RegisterRuntimeArtifact, Workspace as ReadWorkspace, WriteProjectFile, WriteProjectSettings, WriteWorkspaceState } from '../../wailsjs/go/wails/App'
 import { EventsOn } from '../../wailsjs/runtime/runtime'
-import { Diagnostic as DiagnosticDataModel, GitBranch, GitCommit, GitDiff, GitRemote, InstalledPluginState, ProductInfo as ProductInfoData, Project, TrafficRecordView, Workspace as WorkspaceData, WorkspaceState } from './info'
-import type { CLIEvent, ClientPreferences, EditorAssociation, StudioAPI } from './types'
+import { Diagnostic as DiagnosticDataModel, GitBranch, GitCommit, GitConflict, GitDiff, GitRemote, GitStash as GitStashDataModel, InstalledPluginState, ProductInfo as ProductInfoData, Project, TrafficRecordView, Workspace as WorkspaceData, WorkspaceState } from './info'
+import { decodeWailsBytes } from './bytes'
+import type { CLIEvent, ClientPreferences, EditorAssociation, Locale, PluginLinkInput, RuntimePluginInput, StudioAPI } from './types'
 
 export async function selectProjectDirectory(): Promise<string> {
   const { SelectProjectDirectory } = await import('../../wailsjs/go/wails/App')
   return SelectProjectDirectory()
+}
+
+export async function selectProjectCreationDirectory(): Promise<string> {
+	return SelectProjectCreationDirectory()
 }
 
 export function createWailsStudioAPI(): StudioAPI {
@@ -13,17 +18,26 @@ export function createWailsStudioAPI(): StudioAPI {
     async productInfo() {
       return new ProductInfoData(await ProductInfo())
     },
+    toolchainStatus() {
+      return ReadToolchainStatus()
+    },
     async clientPreferences() {
       return JSON.parse(await ReadClientPreferences()) as ClientPreferences
     },
     saveClientPreferences(theme) {
       return SaveClientPreferences(theme)
     },
+    saveClientLocale(locale: Locale) {
+      return SaveClientLocale(locale)
+    },
     async listProjects() {
       return (await ListProjects()).map((project) => new Project(project))
     },
     async openProject(root) {
       return new WorkspaceData(await OpenProject(root))
+    },
+    async createProject(root, id, name) {
+      return new WorkspaceData(await CreateProject(root, id, name))
     },
     async workspace() {
       return new WorkspaceData(await ReadWorkspace())
@@ -47,25 +61,56 @@ export function createWailsStudioAPI(): StudioAPI {
       return SaveEditorAssociation(pattern, application)
     },
     async readProjectFile(path) {
-      return Uint8Array.from(await ReadProjectFile(path))
+      return decodeWailsBytes(await ReadProjectFile(path))
     },
     writeProjectFile(path, content) {
       return WriteProjectFile(path, Array.from(content))
     },
     async readProjectSchema(schemaPath) {
-      return Uint8Array.from(await ReadProjectSchema(schemaPath))
+      return decodeWailsBytes(await ReadProjectSchema(schemaPath))
     },
     async readProjectSettings(settingsPath, schemaPath) {
-      return Uint8Array.from(await ReadProjectSettings(settingsPath, schemaPath))
+      return decodeWailsBytes(await ReadProjectSettings(settingsPath, schemaPath))
     },
     writeProjectSettings(settingsPath, schemaPath, patch) {
       return WriteProjectSettings(settingsPath, schemaPath, Array.from(patch))
     },
-    runCLI(args) {
-      return RunCLI(args)
+    runStudioCommand(command, target, operationID, profilePath) {
+      return RunStudioCommand(command, target ?? '', operationID ?? '', profilePath ?? '')
+    },
+    runStudioRuntimeCommand(command, serviceID) { return RunStudioRuntimeCommand(command, serviceID) },
+    initializeGit() {
+      return InitializeGit().then((value) => new WorkspaceData(value))
+    },
+    createRuntimePlugin(input: RuntimePluginInput) {
+      return CreateRuntimePlugin(input).then((value) => new WorkspaceData(value))
+    },
+    deleteRuntimePlugin(id, confirmed) {
+      return DeleteRuntimePlugin(id, confirmed).then((value) => new WorkspaceData(value))
+    },
+    createPluginLink(input: PluginLinkInput) {
+      return CreatePluginLink(input).then((value) => new WorkspaceData(value))
+    },
+    deletePluginLink(caller, id, confirmed) {
+      return DeletePluginLink(caller, id, confirmed).then((value) => new WorkspaceData(value))
+    },
+    selectTargetProfile() {
+      return SelectTargetProfile()
     },
     cancelCLI() {
       return CancelCLI()
+    },
+    async listRuntimeArtifacts() {
+      return (await ListRuntimeArtifacts()).map((value) => value)
+    },
+    async registerRuntimeArtifact(id, version, platform, binaryPath) {
+      return (await RegisterRuntimeArtifact(id, version, platform, binaryPath))
+    },
+    async trustRuntimeArtifact(id, version, platform, digest) {
+      return (await TrustRuntimeArtifact(id, version, platform, digest))
+    },
+    readRuntimePluginMetadata(pluginID, view) {
+      return ReadRuntimePluginMetadata(pluginID, view)
     },
     prepareRemoteHandoff(target) {
       return PrepareRemoteHandoff(target)
@@ -121,6 +166,30 @@ export function createWailsStudioAPI(): StudioAPI {
     async gitDiff(path) {
       return new GitDiff(await ReadGitDiff(path))
     },
+    async gitConflict(path) {
+      return new GitConflict(await ReadGitConflict(path))
+    },
+    gitResolveConflict(path, side, confirmed) {
+      return GitResolveConflict(path, side, confirmed)
+    },
+    gitStage(paths, confirmed) {
+      return GitStage(paths, confirmed)
+    },
+    gitUnstage(paths, confirmed) {
+      return GitUnstage(paths, confirmed)
+    },
+    gitCommitStaged(message, confirmed) {
+      return GitCommitStaged(message, confirmed)
+    },
+    async gitStashes(limit) {
+      return (await GitStashes(limit)).map((stash) => new GitStashDataModel(stash))
+    },
+    gitStash(message, includeUntracked, confirmed) {
+      return GitStash(message, includeUntracked, confirmed)
+    },
+    gitApplyStash(index, drop, confirmed) {
+      return GitApplyStash(index, drop, confirmed)
+    },
     async gitBranches() {
       return (await GitBranches()).map((branch) => new GitBranch(branch))
     },
@@ -142,6 +211,19 @@ export function createWailsStudioAPI(): StudioAPI {
     gitPush(remote, branch, confirmed) {
       return GitPush(remote, branch, confirmed)
     },
+    gitMerge(branch, confirmed) {
+      return GitMerge(branch, confirmed)
+    },
+    gitRebase(branch, confirmed) {
+      return GitRebase(branch, confirmed)
+    },
+    gitCherryPick(commit, confirmed) {
+      return GitCherryPick(commit, confirmed)
+    },
+    gitAbort(operation, confirmed) {
+      return GitAbort(operation, confirmed)
+    },
+    selectRuntimeArtifactBinary() { return SelectRuntimeArtifactBinary() },
   }
 }
 

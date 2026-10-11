@@ -10,6 +10,13 @@ Project не хранит копию Core SQLite, Core credentials или secret
 содержит source references, modules, schemas и локальные metadata, необходимые
 для сборки config bundle универсальным `liapoldus` CLI.
 
+Studio умеет создать новый Project из Home: пользователь задаёт `id` и имя,
+выбирает родительскую папку, а host сам создаёт внутри неё новую директорию с
+именем `id` и записывает минимальный canonical `project.yaml`. Родительская
+папка может быть непустой. Studio не принимает произвольный shell и не
+перезаписывает уже существующую директорию проекта; после создания Project
+сразу открывается в workspace.
+
 ## 2. Целевая структура
 
 Эта структура является каноническим Project-контрактом CLI. Studio не вводит
@@ -166,8 +173,11 @@ Value: modules/auth-flow
 Action: Open in Logic Modules
 ```
 
-Base Studio не обязана быть полноценной code IDE. Редактор module/source должен
-принадлежать специализированному Studio plugin.
+Studio не является полноценной IDE, но production shell предоставляет bounded
+CodeMirror 6 tabs для YAML, JSON, Markdown и text: search, undo/redo, dirty
+state, conflict-safe save и `Cmd/Ctrl+S`. Бинарные и неподдерживаемые форматы
+открываются через native external-editor adapter. Runtime plugin executable не
+загружается в renderer.
 
 Для любого файла доступны системный default application, выбор приложения и
 per-file/per-type association. Studio передаёт native path через OS launcher,

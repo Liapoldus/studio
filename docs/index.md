@@ -52,6 +52,8 @@ Studio не:
 | [CLI integration](cli-integration) | Process boundary, JSONL events, local Core и remote handoff |
 | [Studio plugins](studio-plugins) | Extension host, marketplace, capabilities и lifecycle |
 | [Traffic inspector](traffic-inspector) | Observation reports, redaction и protocol diagnostics |
+| [Docker runtime](docker-runtime) | Local Docker provider, runtime manifest и trust boundary |
+| [Build workspace](build-workspace) | Topology, artifacts, Compose plan и runtime controls |
 | [Production readiness](production-readiness) | Release evidence, security gates и promotion policy |
 | [Режимы и безопасность](security-and-modes) | Desktop, permissions, secrets и failure isolation |
 | [Production release](release) | Platform packaging, reproducibility, QA и recovery |

@@ -6,7 +6,7 @@
 
 - macOS arm64/x64: signed and notarized `.app`/DMG;
 - Windows x64/arm64 where Wails toolchain supports it: signed installer;
-- Linux x64: AppImage и проверочный package artifact.
+- Linux x64: reproducibly assembled AppImage и проверочный package artifact.
 
 Desktop WebView runtime остаётся частью packaged application. Web distribution
 Studio не выпускается.
@@ -21,8 +21,14 @@ Release build pins:
 - frontend dependencies;
 - platform packaging tools.
 
-CI publishes build metadata, source revision and artifact digest. Local builds do
-not silently alter checked-in generated bindings.
+Linux AppImage tooling is pinned to `appimagetool` 1.9.1 and the dated
+`type2-runtime` 20251108 runtime; CI verifies both SHA-256 digests before
+building the AppDir.
+
+CI publishes a versioned provenance manifest with source revision, platform,
+signed/unsigned status, file sizes and SHA-256 digest for every packaged file;
+the checksum set is generated after that manifest. Local builds do not silently
+alter checked-in generated bindings.
 
 ## 3. Quality gates
 
@@ -50,13 +56,16 @@ Every release candidate runs:
 
 `.github/workflows/verify.yml` содержит отдельную package matrix для Linux
 amd64, Windows amd64 и macOS arm64. Linux job устанавливает `bubblewrap` для
-sandbox smoke/runtime prerequisites. Она устанавливает pinned Go/Node/Wails,
+sandbox smoke/runtime prerequisites, downloads the pinned AppImage tool/runtime
+and requires the generated AppImage in package smoke. Она устанавливает pinned Go/Node/Wails,
 запускает platform Go test/vet и `scripts/desktop/package-smoke.mjs`, собирает
 Go build, Wails bindings reproducibility, frontend lint, native Wails package и
 `scripts/desktop/package-smoke.mjs`, публикует build artifact для smoke/QA. Release
 workflow `.github/workflows/release.yml` запускается вручную с `sign=true` и
 использует certificate-backed secrets для macOS codesign/notarization и
-Windows Authenticode. Перед production build workflow fail-closed проверяет
+Windows Authenticode. После подписи выполняются `codesign --verify` плюс
+`stapler validate` на macOS и `signtool verify /pa` для каждого Windows
+`.exe`. Перед production build workflow fail-closed проверяет
 `STUDIO_PLUGIN_TRUST_ROOTS`, `STUDIO_PLUGIN_REQUIRE_SIGNATURES=true` и
 `STUDIO_PLUGIN_SANDBOX_MODE=required`; trust roots передаются только через
 GitHub Actions secret и никогда не печатаются в логе. Без `sign=true` workflow
@@ -72,5 +81,7 @@ exits.
 
 Production desktop configuration must provide `STUDIO_PLUGIN_TRUST_ROOTS` and
 `STUDIO_PLUGIN_REQUIRE_SIGNATURES=true`, and set
-`STUDIO_PLUGIN_SANDBOX_MODE=required`; local development may omit these and
-still install unsigned packages only after explicit user trust.
+`STUDIO_PLUGIN_SANDBOX_MODE=required`. Signed builds bake the latter two policy
+values into the binary as a fail-closed default; trust roots remain an external
+deployment secret. Local development may omit these and still install unsigned
+packages only after explicit user trust.

@@ -6,27 +6,63 @@ export function CancelCLI():Promise<void>;
 
 export function ClientPreferences():Promise<string>;
 
+export function CreatePluginLink(arg1:models.PluginLinkInput):Promise<models.Workspace>;
+
+export function CreateProject(arg1:string,arg2:string,arg3:string):Promise<models.Workspace>;
+
+export function CreateRuntimePlugin(arg1:models.RuntimePluginInput):Promise<models.Workspace>;
+
+export function DeletePluginLink(arg1:string,arg2:string,arg3:boolean):Promise<models.Workspace>;
+
+export function DeleteRuntimePlugin(arg1:string,arg2:boolean):Promise<models.Workspace>;
+
 export function Diagnostics():Promise<Array<models.Diagnostic>>;
 
 export function EditorAssociations():Promise<string>;
 
 export function ExportTrafficReport():Promise<string>;
 
+export function GitAbort(arg1:string,arg2:boolean):Promise<void>;
+
+export function GitApplyStash(arg1:number,arg2:boolean,arg3:boolean):Promise<void>;
+
 export function GitBranches():Promise<Array<models.GitBranch>>;
 
 export function GitCheckout(arg1:string,arg2:boolean):Promise<void>;
 
+export function GitCherryPick(arg1:string,arg2:boolean):Promise<void>;
+
 export function GitCommit(arg1:string,arg2:Array<string>,arg3:boolean):Promise<string>;
+
+export function GitCommitStaged(arg1:string,arg2:boolean):Promise<string>;
+
+export function GitConflict(arg1:string):Promise<models.GitConflict>;
 
 export function GitDiff(arg1:string):Promise<models.GitDiff>;
 
 export function GitHistory(arg1:number):Promise<Array<models.GitCommit>>;
 
+export function GitMerge(arg1:string,arg2:boolean):Promise<void>;
+
 export function GitPull(arg1:string,arg2:string,arg3:boolean):Promise<void>;
 
 export function GitPush(arg1:string,arg2:string,arg3:boolean):Promise<void>;
 
+export function GitRebase(arg1:string,arg2:boolean):Promise<void>;
+
 export function GitRemotes():Promise<Array<models.GitRemote>>;
+
+export function GitResolveConflict(arg1:string,arg2:string,arg3:boolean):Promise<void>;
+
+export function GitStage(arg1:Array<string>,arg2:boolean):Promise<void>;
+
+export function GitStash(arg1:string,arg2:boolean,arg3:boolean):Promise<string>;
+
+export function GitStashes(arg1:number):Promise<Array<models.GitStash>>;
+
+export function GitUnstage(arg1:Array<string>,arg2:boolean):Promise<void>;
+
+export function InitializeGit():Promise<models.Workspace>;
 
 export function InspectStudioPlugin(arg1:string):Promise<string>;
 
@@ -37,6 +73,8 @@ export function InstalledStudioPluginManifests():Promise<string>;
 export function InstalledStudioPlugins():Promise<Array<models.InstalledPluginState>>;
 
 export function ListProjects():Promise<Array<models.Project>>;
+
+export function ListRuntimeArtifacts():Promise<Array<models.ArtifactReference>>;
 
 export function OpenFileExternally(arg1:string,arg2:string):Promise<void>;
 
@@ -52,15 +90,25 @@ export function ReadProjectSchema(arg1:string):Promise<Array<number>>;
 
 export function ReadProjectSettings(arg1:string,arg2:string):Promise<Array<number>>;
 
+export function ReadRuntimePluginMetadata(arg1:string,arg2:string):Promise<string>;
+
 export function ReadStudioPluginSurface(arg1:string,arg2:string,arg3:string):Promise<string>;
 
 export function ReadWorkspaceState():Promise<models.WorkspaceState>;
+
+export function RegisterRuntimeArtifact(arg1:string,arg2:string,arg3:string,arg4:string):Promise<models.ArtifactReference>;
 
 export function RemoveStudioPlugin(arg1:string,arg2:string):Promise<void>;
 
 export function RunCLI(arg1:Array<string>):Promise<void>;
 
+export function RunStudioCommand(arg1:string,arg2:string,arg3:string,arg4:string):Promise<void>;
+
 export function RunStudioPluginTool(arg1:string,arg2:string,arg3:string,arg4:Array<string>):Promise<string>;
+
+export function RunStudioRuntimeCommand(arg1:string,arg2:string):Promise<void>;
+
+export function SaveClientLocale(arg1:string):Promise<void>;
 
 export function SaveClientPreferences(arg1:string):Promise<void>;
 
@@ -68,9 +116,15 @@ export function SaveEditorAssociation(arg1:string,arg2:string):Promise<void>;
 
 export function SelectExternalEditor():Promise<string>;
 
+export function SelectProjectCreationDirectory():Promise<string>;
+
 export function SelectProjectDirectory():Promise<string>;
 
+export function SelectRuntimeArtifactBinary():Promise<string>;
+
 export function SelectStudioPluginPackage():Promise<string>;
+
+export function SelectTargetProfile():Promise<string>;
 
 export function StartStudioPluginProcess(arg1:string,arg2:string):Promise<string>;
 
@@ -78,7 +132,11 @@ export function StopStudioPluginProcess(arg1:string,arg2:string):Promise<void>;
 
 export function StudioPluginProcessStatus(arg1:string,arg2:string):Promise<string>;
 
+export function ToolchainStatus():Promise<models.ToolchainStatus>;
+
 export function TrafficRecords():Promise<Array<models.TrafficRecordView>>;
+
+export function TrustRuntimeArtifact(arg1:string,arg2:string,arg3:string,arg4:string):Promise<models.ArtifactReference>;
 
 export function Workspace():Promise<models.Workspace>;
 

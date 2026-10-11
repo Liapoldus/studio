@@ -35,6 +35,19 @@ const generated = `export namespace models {
     subject: string;
     constructor(source: any = {}) {}
   }
+  export class GitConflictSide {
+    content: string;
+    available: boolean;
+    truncated: boolean;
+    constructor(source: any = {}) {}
+  }
+  export class GitConflict {
+    path: string;
+    base: GitConflictSide;
+    ours: GitConflictSide;
+    theirs: GitConflictSide;
+    constructor(source: any = {}) {}
+  }
   export class GitDiff {
     path: string;
     patch: string;
@@ -45,6 +58,12 @@ const generated = `export namespace models {
     name: string;
     fetchUrl: string;
     pushUrl: string;
+    constructor(source: any = {}) {}
+  }
+  export class GitStash {
+    ref: string;
+    message: string;
+    createdAt: string;
     constructor(source: any = {}) {}
   }
   export class GitStatus {
@@ -105,6 +124,26 @@ const generated = `export namespace models {
     links: PluginLink[];
     constructor(source: any = {}) {}
   }
+  export class PluginLinkInput {
+    id: string;
+    caller: string;
+    target: string;
+    contractVersion: string;
+    methods: string[];
+    transport: string;
+    requestSchemaPath: string;
+    responseSchemaPath: string;
+    contractSchemaPath: string;
+    securityProfile: string;
+    timeoutMillis: number;
+    retryLimit: number;
+    requestLimitBytes: number;
+    responseLimitBytes: number;
+    disabledMethods: string[];
+    compatibility: string;
+    redactionPolicy: string;
+    constructor(source: any = {}) {}
+  }
   export class ProductInfo {
     name: string;
     description: string;
@@ -121,6 +160,21 @@ const generated = `export namespace models {
     path: string;
     kind: string;
     bytes: number;
+    constructor(source: any = {}) {}
+  }
+  export class RuntimePluginInput {
+    id: string;
+    name: string;
+    version: string;
+    manifestVersion: string;
+    settingsSchemaPath: string;
+    constructor(source: any = {}) {}
+  }
+  export class ToolchainStatus {
+    cliPath: string;
+    cliVersion: string;
+    errorCode: string;
+    cliAvailable: boolean;
     constructor(source: any = {}) {}
   }
   export class TrafficRecordView {

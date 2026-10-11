@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/Liapoldus/studio/internal/domain/models"
+	gitrepo "github.com/Liapoldus/studio/internal/infrastructure/git"
 )
 
 func TestOpenReadsCanonicalProjectTree(t *testing.T) {
@@ -36,6 +37,9 @@ func TestOpenReadsCanonicalProjectTree(t *testing.T) {
 	}
 	if value.Project == nil || value.Project.ID != "demo" || value.Project.Name != "Demo Project" {
 		t.Fatalf("project identity: %+v", value.Project)
+	}
+	if value.Git.Changes == nil {
+		t.Fatal("git changes must be an empty array when Git is unavailable")
 	}
 	if len(value.Files) != 5 {
 		t.Fatalf("source files: %+v", value.Files)
@@ -75,5 +79,61 @@ func TestOpenRequiresManifestAndHonorsCancellation(t *testing.T) {
 func TestOpenRejectsInvalidRoot(t *testing.T) {
 	if _, err := (Source{}).Open(context.Background(), "relative"); !errors.Is(err, models.ErrInvalidProject) {
 		t.Fatalf("accepted relative root: %v", err)
+	}
+}
+
+func TestCreateCreatesCanonicalProjectDirectoryUnderSelectedParent(t *testing.T) {
+	parent := t.TempDir()
+	if err := os.WriteFile(filepath.Join(parent, ".DS_Store"), []byte("metadata"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	workspace, err := (Source{}).Create(context.Background(), parent, "demo", "Demo Project")
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := filepath.Join(parent, "demo")
+	if workspace.Project == nil || workspace.Project.ID != "demo" || workspace.Project.Name != "Demo Project" {
+		t.Fatalf("created project: %+v", workspace.Project)
+	}
+	data, err := os.ReadFile(filepath.Join(root, "project.yaml")) //nolint:gosec // root is created under t.TempDir().
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "id: \"demo\"\nname: \"Demo Project\"\nversion: 1\n" {
+		t.Fatalf("unexpected manifest: %s", data)
+	}
+}
+
+func TestCreateInitializesGitForNewProject(t *testing.T) {
+	parent := t.TempDir()
+	workspace, err := (Source{Git: gitrepo.Repository{}}).Create(context.Background(), parent, "demo", "Demo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !workspace.Git.Available {
+		t.Fatalf("new project Git is unavailable: %+v", workspace.Git)
+	}
+	if info, statErr := os.Stat(filepath.Join(parent, "demo", ".git")); statErr != nil || !info.IsDir() {
+		t.Fatalf("new project has no .git directory: %v", statErr)
+	}
+}
+
+func TestCreateRejectsExistingTargetAndUnsafeIdentity(t *testing.T) {
+	parent := t.TempDir()
+	if err := os.Mkdir(filepath.Join(parent, "demo"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := (Source{}).Create(context.Background(), parent, "demo", "Demo"); !errors.Is(err, ErrProjectDirectoryExists) {
+		t.Fatalf("accepted existing project directory: %v", err)
+	}
+	if _, err := (Source{}).Create(context.Background(), parent, "demo/name", "Demo"); !errors.Is(err, ErrInvalidProjectIdentity) {
+		t.Fatalf("accepted unsafe identity: %v", err)
+	}
+}
+
+func TestCreateRejectsMissingParent(t *testing.T) {
+	parent := filepath.Join(t.TempDir(), "missing")
+	if _, err := (Source{}).Create(context.Background(), parent, "demo", "Demo"); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("accepted missing parent: %v", err)
 	}
 }

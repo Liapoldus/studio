@@ -135,7 +135,7 @@ func (h *Host) Manifests(ctx context.Context) ([]models.PluginInspection, error)
 	}
 	result := make([]models.PluginInspection, 0, len(installed))
 	for _, state := range installed {
-		manifest, manifestErr := readInstalledManifest(state.Path)
+		manifest, manifestErr := h.Installer.verifyInstalled(state.Path)
 		if manifestErr != nil {
 			continue
 		}
@@ -163,7 +163,7 @@ func (h *Host) Surface(ctx context.Context, id, version, surfaceID string) (stri
 		if !state.Enabled {
 			return "", ErrPluginDisabled
 		}
-		manifest, manifestErr := readInstalledManifest(state.Path)
+		manifest, manifestErr := h.Installer.verifyInstalled(state.Path)
 		if manifestErr != nil {
 			return "", manifestErr
 		}
@@ -218,7 +218,7 @@ func (h *Host) RunTool(ctx context.Context, id, version, toolID, projectRoot str
 	if !installed.Enabled {
 		return models.ToolExecutionResult{}, ErrPluginDisabled
 	}
-	manifest, err := readInstalledManifest(installed.Path)
+	manifest, err := h.Installer.verifyInstalled(installed.Path)
 	if err != nil {
 		return models.ToolExecutionResult{}, err
 	}
@@ -353,7 +353,7 @@ func (h *Host) installedManifest(ctx context.Context, id, version string) (model
 	}
 	for _, state := range plugins {
 		if state.ID == id && state.Version == version {
-			manifest, manifestErr := readInstalledManifest(state.Path)
+			manifest, manifestErr := h.Installer.verifyInstalled(state.Path)
 			return state, manifest, manifestErr
 		}
 	}
@@ -372,28 +372,3 @@ func (h *Host) requirePermissions(ctx context.Context, state models.InstalledPlu
 }
 
 func processKey(id, version string) string { return id + "@" + version }
-
-func readInstalledManifest(root string) (models.StudioPluginManifest, error) {
-	if !filepath.IsAbs(root) || strings.ContainsRune(root, '\x00') {
-		return models.StudioPluginManifest{}, models.ErrInvalidStudioPlugin
-	}
-	cleanRoot := filepath.Clean(root)
-	rootInfo, err := os.Lstat(cleanRoot)
-	if err != nil || !rootInfo.IsDir() || rootInfo.Mode()&os.ModeSymlink != 0 {
-		return models.StudioPluginManifest{}, models.ErrInvalidStudioPlugin
-	}
-	manifestPath := filepath.Join(cleanRoot, "manifest.json")
-	manifestInfo, err := os.Lstat(manifestPath)
-	if err != nil || manifestInfo.Mode()&os.ModeSymlink != 0 {
-		return models.StudioPluginManifest{}, models.ErrInvalidStudioPlugin
-	}
-	data, err := os.ReadFile(manifestPath) //nolint:gosec // manifestPath is inside a verified Studio-managed package.
-	if err != nil {
-		return models.StudioPluginManifest{}, err
-	}
-	var manifest models.StudioPluginManifest
-	if err := json.Unmarshal(data, &manifest); err != nil {
-		return models.StudioPluginManifest{}, models.ErrInvalidStudioPlugin
-	}
-	return manifest, nil
-}

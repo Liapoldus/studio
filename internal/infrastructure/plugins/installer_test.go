@@ -54,6 +54,16 @@ func TestInstallerRejectsTraversal(t *testing.T) {
 	}
 }
 
+func TestInstallerRejectsWindowsTraversalOnUnix(t *testing.T) {
+	packagePath := writePackage(t, map[string]string{
+		"manifest.json": `{"id":"runtime.tools","name":"Runtime Tools","version":"1.0.0"}`,
+		`..\escape`:     "no",
+	})
+	if _, err := (Installer{Directory: t.TempDir()}).Inspect(context.Background(), packagePath); !errors.Is(err, models.ErrInvalidStudioPlugin) {
+		t.Fatalf("accepted Windows traversal path: %v", err)
+	}
+}
+
 func TestInstallerRejectsUnsafeVersionPath(t *testing.T) {
 	packagePath := writePackage(t, map[string]string{
 		"manifest.json": `{"id":"runtime.tools","name":"Runtime Tools","version":"../escape"}`,
@@ -83,6 +93,21 @@ func TestInstallerRequiresAllDeclaredPermissions(t *testing.T) {
 	}
 	if _, err := installer.Install(context.Background(), packagePath, models.TrustDecision{Approved: true, GrantedPermissions: []string{"project.read", "reports.read"}}); err != nil {
 		t.Fatalf("approved permissions rejected: %v", err)
+	}
+}
+
+func TestInstallerRequiresDeclaredActionTool(t *testing.T) {
+	missingTool := writePackage(t, map[string]string{
+		"manifest.json": `{"id":"runtime.surface","name":"Surface","version":"1.0.0","surfaces":[{"id":"run","kind":"command","title":"Run","toolId":"missing"}]}`,
+	})
+	if _, err := (Installer{Directory: t.TempDir()}).Inspect(context.Background(), missingTool); !errors.Is(err, models.ErrInvalidStudioPlugin) {
+		t.Fatalf("accepted command surface with undeclared tool: %v", err)
+	}
+	missingCommandTool := writePackage(t, map[string]string{
+		"manifest.json": `{"id":"runtime.surface","name":"Surface","version":"1.0.0","surfaces":[{"id":"run","kind":"command","title":"Run"}]}`,
+	})
+	if _, err := (Installer{Directory: t.TempDir()}).Inspect(context.Background(), missingCommandTool); !errors.Is(err, models.ErrInvalidStudioPlugin) {
+		t.Fatalf("accepted command surface without tool: %v", err)
 	}
 }
 
@@ -137,6 +162,17 @@ func TestInstallerRequiresSignatureInReleaseMode(t *testing.T) {
 	installer := Installer{Directory: t.TempDir(), RequireSignatures: true}
 	if _, err := installer.Inspect(context.Background(), packagePath); !errors.Is(err, ErrPluginSignatureRequired) {
 		t.Fatalf("unsigned release package accepted: %v", err)
+	}
+}
+
+func TestInstallerRequiresExecutableArtifactInReleaseMode(t *testing.T) {
+	packagePath := writePackage(t, map[string]string{
+		"manifest.json": `{"id":"runtime.release","name":"Release Runtime","version":"1.0.0","tools":[{"id":"runtime.compiler","version":"1.0.0","executable":"bin/compiler"}]}`,
+		"bin/compiler":  "binary",
+	})
+	installer := Installer{Directory: t.TempDir(), RequireSignatures: true}
+	if _, err := installer.Inspect(context.Background(), packagePath); !errors.Is(err, models.ErrInvalidStudioPlugin) {
+		t.Fatalf("release package without executable digest was accepted: %v", err)
 	}
 }
 
