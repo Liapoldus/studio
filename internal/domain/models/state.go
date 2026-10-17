@@ -50,6 +50,28 @@ type InstalledStudioPluginState struct {
 	Signed  bool
 }
 
+// StudioPluginEditorBinding is a global user-selected mapping from a
+// service-declared button ID to an installed plugin page.
+type StudioPluginEditorBinding struct {
+	ButtonID  string `json:"buttonId"`
+	PluginID  string `json:"pluginId"`
+	SurfaceID string `json:"surfaceId"`
+}
+
+func ValidStudioPluginBindingID(value string) bool {
+	if value == "" || len(value) > 128 {
+		return false
+	}
+	for _, ch := range value {
+		switch {
+		case ch >= 'a' && ch <= 'z', ch >= 'A' && ch <= 'Z', ch >= '0' && ch <= '9', ch == '.', ch == '_', ch == '-':
+		default:
+			return false
+		}
+	}
+	return true
+}
+
 type TrustState struct {
 	Digest             string
 	Reason             string

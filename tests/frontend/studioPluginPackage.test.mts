@@ -21,7 +21,7 @@ await test('Studio plugin preview exposes safe summary and omits package paths a
   assert.deepEqual(parsed, {
     id: 'liapoldus.server-editor', name: 'Server Editor', version: '1.2.0', studioRange: '>=0.1.0', digest, signed: true,
     permissions: ['service.settings.read', 'service.settings.write'], grantedPermissions: [],
-    surfaces: [{ id: 'server-editor', kind: 'page', title: 'Server', route: 'ui/index.html' }], toolIds: ['server.migrate'],
+    surfaces: [{ id: 'server-editor', kind: 'page', context: 'workspace', title: 'Server', route: 'ui/index.html' }], toolIds: ['server.migrate'],
   })
   assert.equal(JSON.stringify(parsed).includes('/private/path'), false)
   assert.equal(JSON.stringify(parsed).includes('ed25519'), false)
@@ -53,7 +53,7 @@ await test('installed plugin version grouping never duplicates a version', () =>
 
 await test('preview preserves declared command surfaces without treating them as navigable pages', () => {
   const value = { ...inspection, manifest: { ...inspection.manifest, surfaces: [{ id: 'compile', kind: 'command', title: 'Compile' }] } }
-  assert.deepEqual(parseStudioPluginInspection(JSON.stringify(value)).surfaces, [{ id: 'compile', kind: 'command', title: 'Compile', route: '' }])
+  assert.deepEqual(parseStudioPluginInspection(JSON.stringify(value)).surfaces, [{ id: 'compile', kind: 'command', context: 'workspace', title: 'Compile', route: '' }])
 })
 
 await test('Studio plugin inspection rejects invalid digests, traversal routes and duplicate permissions', () => {

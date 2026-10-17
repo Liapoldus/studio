@@ -8,7 +8,7 @@ const digest = `sha256:${'b'.repeat(64)}`
 const manifest = {
   id: 'liapoldus.server-editor', name: 'Server Editor', version: '0.3.0', studioRange: '>=0.1.0',
   permissions: ['service.settings.read', 'service.settings.write'],
-  surfaces: [{ id: 'server-editor', kind: 'page', title: 'Server', route: 'ui/index.html' }],
+  surfaces: [{ id: 'server-editor', kind: 'page', context: 'service', title: 'Server', route: 'ui/index.html' }],
   tools: [],
 }
 
@@ -28,7 +28,7 @@ await test('Studio plugin install forwards the reviewed digest and exact permiss
 
   assert.deepEqual(installArgs, ['/private/package/path', digest, true, 'Reviewed local package', manifest.permissions])
   assert.deepEqual(useStudioStore.getState().studioPluginSurfaces, [{
-    studioPluginId: manifest.id, version: manifest.version, id: 'server-editor', title: 'Server', route: 'ui/index.html',
+    studioPluginId: manifest.id, version: manifest.version, id: 'server-editor', title: 'Server', route: 'ui/index.html', context: 'service',
     permissions: manifest.permissions, grantedPermissions: manifest.permissions,
   }])
 })
@@ -161,12 +161,12 @@ await test('registry refresh rebinds duplicate version tabs to the newest packag
     activeTabId: 'studio-plugin:liapoldus.server-editor:0.3.16:server-editor',
   })
   useStudioStore.getState().setStudioPluginSurfaces([
-    { studioPluginId: manifest.id, version: '0.3.16', id: 'server-editor', title: 'Server old', route: 'old/index.html' },
-    { studioPluginId: manifest.id, version: '0.3.29', id: 'server-editor', title: 'Server', route: 'ui/index.html' },
+    { studioPluginId: manifest.id, version: '0.3.16', context: 'service', id: 'server-editor', title: 'Server old', route: 'old/index.html' },
+    { studioPluginId: manifest.id, version: '0.3.29', context: 'service', id: 'server-editor', title: 'Server', route: 'ui/index.html' },
   ])
   const state = useStudioStore.getState()
-  assert.deepEqual(state.tabs.map((tab) => tab.id), ['canvas', 'studio-plugin:liapoldus.server-editor:0.3.29:server-editor'])
-  assert.equal(state.activeTabId, 'studio-plugin:liapoldus.server-editor:0.3.29:server-editor')
+  assert.deepEqual(state.tabs.map((tab) => tab.id), ['canvas', 'studio-plugin:liapoldus.server-editor:0.3.29:server-editor:server'])
+  assert.equal(state.activeTabId, 'studio-plugin:liapoldus.server-editor:0.3.29:server-editor:server')
   assert.equal(state.tabs[1]?.serviceId, 'server')
   assert.equal(state.tabs[1]?.route, 'ui/index.html')
   useStudioStore.setState({ tabs: prior.tabs, activeTabId: prior.activeTabId, studioPluginSurfaces: prior.studioPluginSurfaces })
@@ -175,16 +175,16 @@ await test('registry refresh rebinds duplicate version tabs to the newest packag
 await test('workspace restore after plugin registry refresh also collapses old package tabs', () => {
   const prior = useStudioStore.getState()
   useStudioStore.getState().setStudioPluginSurfaces([
-    { studioPluginId: manifest.id, version: '0.3.29', id: 'server-editor', title: 'Server', route: 'ui/index.html' },
+    { studioPluginId: manifest.id, version: '0.3.29', context: 'service', id: 'server-editor', title: 'Server', route: 'ui/index.html' },
   ])
   useStudioStore.getState().setTabs([
     { id: 'canvas', kind: 'canvas', title: 'Canvas' },
-    { id: 'studio-plugin:liapoldus.server-editor:0.3.16:server-editor', kind: 'studio-plugin', title: 'Server', studioPluginId: manifest.id, studioPluginVersion: '0.3.16', surfaceId: 'server-editor', route: 'old/index.html', projectId: 'project-1' },
-    { id: 'studio-plugin:liapoldus.server-editor:0.3.27:server-editor', kind: 'studio-plugin', title: 'Server', studioPluginId: manifest.id, studioPluginVersion: '0.3.27', surfaceId: 'server-editor', route: 'old/index.html', projectId: 'project-1', serviceId: 'server' },
-  ], 'studio-plugin:liapoldus.server-editor:0.3.27:server-editor')
+    { id: 'studio-plugin:liapoldus.server-editor:0.3.16:server-editor:server', kind: 'studio-plugin', title: 'Server', studioPluginId: manifest.id, studioPluginVersion: '0.3.16', surfaceId: 'server-editor', route: 'old/index.html', projectId: 'project-1', serviceId: 'server' },
+    { id: 'studio-plugin:liapoldus.server-editor:0.3.27:server-editor:server', kind: 'studio-plugin', title: 'Server', studioPluginId: manifest.id, studioPluginVersion: '0.3.27', surfaceId: 'server-editor', route: 'old/index.html', projectId: 'project-1', serviceId: 'server' },
+  ], 'studio-plugin:liapoldus.server-editor:0.3.27:server-editor:server')
   const state = useStudioStore.getState()
-  assert.deepEqual(state.tabs.map((tab) => tab.id), ['canvas', 'studio-plugin:liapoldus.server-editor:0.3.29:server-editor'])
-  assert.equal(state.activeTabId, 'studio-plugin:liapoldus.server-editor:0.3.29:server-editor')
+  assert.deepEqual(state.tabs.map((tab) => tab.id), ['canvas', 'studio-plugin:liapoldus.server-editor:0.3.29:server-editor:server'])
+  assert.equal(state.activeTabId, 'studio-plugin:liapoldus.server-editor:0.3.29:server-editor:server')
   assert.equal(state.tabs[1]?.serviceId, 'server')
   useStudioStore.setState({ tabs: prior.tabs, activeTabId: prior.activeTabId, studioPluginSurfaces: prior.studioPluginSurfaces })
 })

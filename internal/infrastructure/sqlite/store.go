@@ -71,7 +71,7 @@ func (s *Store) initialize() (initErr error) {
 	if err := tx.QueryRowContext(ctx, "PRAGMA user_version").Scan(&version); err != nil {
 		return err
 	}
-	if version > 8 {
+	if version > 9 {
 		return ErrStorage
 	}
 	// Versions 1 from the pre-project Studio used `connections` and a
@@ -182,7 +182,61 @@ PRAGMA user_version = 7;`); err != nil {
 			return err
 		}
 	}
+	if version < 9 {
+		if _, err := tx.ExecContext(ctx, `CREATE TABLE studio_plugin_editor_bindings (
+ button_id TEXT PRIMARY KEY NOT NULL CHECK(length(button_id) BETWEEN 1 AND 128),
+ plugin_id TEXT NOT NULL CHECK(length(plugin_id) BETWEEN 1 AND 128),
+ surface_id TEXT NOT NULL CHECK(length(surface_id) BETWEEN 1 AND 128)
+); PRAGMA user_version = 9;`); err != nil {
+			return err
+		}
+	}
 	return tx.Commit()
+}
+
+func (s *Store) ListStudioPluginEditorBindings(ctx context.Context) (result []models.StudioPluginEditorBinding, err error) {
+	rows, err := s.db.QueryContext(ctx, "SELECT button_id, plugin_id, surface_id FROM studio_plugin_editor_bindings ORDER BY button_id")
+	if err != nil {
+		return nil, storageError(ctx, err)
+	}
+	defer func() {
+		if closeErr := rows.Close(); closeErr != nil && err == nil {
+			err = storageError(ctx, closeErr)
+		}
+	}()
+	result = []models.StudioPluginEditorBinding{}
+	for rows.Next() {
+		var item models.StudioPluginEditorBinding
+		if scanErr := rows.Scan(&item.ButtonID, &item.PluginID, &item.SurfaceID); scanErr != nil {
+			return nil, storageError(ctx, scanErr)
+		}
+		result = append(result, item)
+	}
+	return result, storageError(ctx, rows.Err())
+}
+
+func (s *Store) ReplaceStudioPluginEditorBindings(ctx context.Context, bindings []models.StudioPluginEditorBinding) (err error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return storageError(ctx, err)
+	}
+	defer func() {
+		if rollbackErr := tx.Rollback(); rollbackErr != nil && !errors.Is(rollbackErr, sql.ErrTxDone) && err == nil {
+			err = storageError(ctx, rollbackErr)
+		}
+	}()
+	if _, err = tx.ExecContext(ctx, "DELETE FROM studio_plugin_editor_bindings"); err != nil {
+		return storageError(ctx, err)
+	}
+	for _, item := range bindings {
+		if !models.ValidStudioPluginBindingID(item.ButtonID) || !models.ValidStudioPluginBindingID(item.PluginID) || !models.ValidStudioPluginBindingID(item.SurfaceID) {
+			return ErrStorage
+		}
+		if _, err = tx.ExecContext(ctx, "INSERT INTO studio_plugin_editor_bindings(button_id, plugin_id, surface_id) VALUES (?, ?, ?)", item.ButtonID, item.PluginID, item.SurfaceID); err != nil {
+			return storageError(ctx, err)
+		}
+	}
+	return storageError(ctx, tx.Commit())
 }
 
 func (s *Store) Close() error { return storageError(context.Background(), s.db.Close()) }

@@ -1,6 +1,7 @@
 export type StudioPluginPackageSurface = {
   id: string
   kind: 'page' | 'panel' | 'command'
+  context: 'workspace' | 'service'
   title: string
   route: string
 }
@@ -117,11 +118,12 @@ function parseSurfaces(source: unknown): StudioPluginPackageSurface[] {
     const value = record(entry, 'surface')
     const id = requiredString(value.id, 'surface id', 128)
     const kind = requiredString(value.kind, 'surface kind', 16)
+    const context = value.context === undefined ? 'workspace' : requiredString(value.context, 'surface context', 16)
     const title = requiredString(value.title, 'surface title', 160)
     const route = value.route === undefined ? '' : requiredString(value.route, 'surface route', 512)
-    if (!identifierPattern.test(id) || (kind !== 'page' && kind !== 'panel' && kind !== 'command')) throw new Error('Invalid Studio plugin surface')
+    if (!identifierPattern.test(id) || (kind !== 'page' && kind !== 'panel' && kind !== 'command') || (context !== 'workspace' && context !== 'service')) throw new Error('Invalid Studio plugin surface')
     if (route && (route.startsWith('/') || route.includes('\\') || route.split('/').some((part) => !part || part === '.' || part === '..'))) throw new Error('Invalid Studio plugin surface route')
-    return { id, kind, title, route }
+    return { id, kind, context, title, route }
   })
 }
 

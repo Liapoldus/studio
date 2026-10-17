@@ -290,6 +290,10 @@ export function SaveServiceSettingsDraft(arg1, arg2, arg3, arg4) {
   return window['go']['wails']['App']['SaveServiceSettingsDraft'](arg1, arg2, arg3, arg4);
 }
 
+export function SaveStudioPluginEditorBindings(arg1) {
+  return window['go']['wails']['App']['SaveStudioPluginEditorBindings'](arg1);
+}
+
 export function SelectCLIExecutable() {
   return window['go']['wails']['App']['SelectCLIExecutable']();
 }
@@ -328,6 +332,10 @@ export function StartStudioPluginProcess(arg1, arg2) {
 
 export function StopStudioPluginProcess(arg1, arg2) {
   return window['go']['wails']['App']['StopStudioPluginProcess'](arg1, arg2);
+}
+
+export function StudioPluginEditorBindings() {
+  return window['go']['wails']['App']['StudioPluginEditorBindings']();
 }
 
 export function StudioPluginProcessStatus(arg1, arg2) {

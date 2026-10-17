@@ -23,7 +23,13 @@ await test('project-local migration previews, checks revision and recovers exact
     const next = await migrateWorkspace({ projectRoot: root })
     assert.equal(next.changed, false)
     const migrated: unknown = JSON.parse(await readFile(path, 'utf8'))
-    const expected: unknown = JSON.parse(original.toString('utf8').replace('workspace/v3', 'workspace/v4').replaceAll('"plugins"', '"studio-plugins"'))
+    const expected = JSON.parse(original.toString('utf8')) as { tabs: { schemaVersion: string; activeTabId: string; tabs: Record<string, unknown>[] } }
+    expected.tabs.schemaVersion = 'workspace/v5'
+    expected.tabs.activeTabId = 'studio-plugins'
+    expected.tabs.tabs = expected.tabs.tabs.map((tab) => tab.id === 'plugins' && tab.kind === 'plugins'
+      ? { ...tab, id: 'studio-plugins', kind: 'studio-plugins' }
+      : tab)
+    expected.tabs.tabs.push({ id: 'canvas', kind: 'canvas', title: 'Canvas' })
     assert.deepEqual(migrated, expected)
     await migrateWorkspace({ projectRoot: root, mode: 'recover', expectedDigest: next.digest, recoveryDigest: preview.digest })
     assert.deepEqual(await readFile(path), original)

@@ -9,12 +9,13 @@ var (
 )
 
 type StudioPluginSurface struct {
-	ID     string `json:"id"`
-	Kind   string `json:"kind"`
-	Title  string `json:"title"`
-	Route  string `json:"route,omitempty"`
-	Schema string `json:"schema,omitempty"`
-	ToolID string `json:"toolId,omitempty"`
+	ID      string `json:"id"`
+	Kind    string `json:"kind"`
+	Context string `json:"context"`
+	Title   string `json:"title"`
+	Route   string `json:"route,omitempty"`
+	Schema  string `json:"schema,omitempty"`
+	ToolID  string `json:"toolId,omitempty"`
 }
 
 type StudioPluginArtifact struct {

@@ -1795,6 +1795,39 @@ func (a *App) ReadStudioPluginSurface(id, version, surfaceID string) (string, er
 	return a.plugins.Surface(a.context(), id, version, surfaceID)
 }
 
+func (a *App) StudioPluginEditorBindings() (string, error) {
+	if a.desktop == nil {
+		return "[]", nil
+	}
+	items, err := a.desktop.ListStudioPluginEditorBindings(a.context())
+	if err != nil {
+		return "", err
+	}
+	encoded, err := json.Marshal(items)
+	return string(encoded), err
+}
+
+func (a *App) SaveStudioPluginEditorBindings(encoded string) error {
+	if a.desktop == nil || len(encoded) > 64*1024 {
+		return models.ErrInvalidStudioPlugin
+	}
+	var items []models.StudioPluginEditorBinding
+	if err := json.Unmarshal([]byte(encoded), &items); err != nil || items == nil || len(items) > 256 {
+		return models.ErrInvalidStudioPlugin
+	}
+	seen := make(map[string]struct{}, len(items))
+	for _, item := range items {
+		if !models.ValidStudioPluginBindingID(item.ButtonID) || !models.ValidStudioPluginBindingID(item.PluginID) || !models.ValidStudioPluginBindingID(item.SurfaceID) {
+			return models.ErrInvalidStudioPlugin
+		}
+		if _, duplicate := seen[item.ButtonID]; duplicate {
+			return models.ErrInvalidStudioPlugin
+		}
+		seen[item.ButtonID] = struct{}{}
+	}
+	return a.desktop.ReplaceStudioPluginEditorBindings(a.context(), items)
+}
+
 // RunStudioPluginTool executes only a tool declared by a verified installed
 // package. The plugin host owns executable validation, timeout and redaction;
 // the renderer receives a JSON result, never a process handle or environment.

@@ -19,12 +19,13 @@ import { useStudioStore } from '../stores/studio'
 import type { StudioPluginSurface } from '../stores/studio'
 import { createStudioBridgeSessionID, isStudioPluginSurfaceReadyMessage, parseStudioPluginBridgeRequest, studioPluginBridgeFailureCode, studioPluginPermissionGranted, studioPluginSurfaceAssetURL, studioServiceEditorBridgeVersion, withPeerCatalogDeadline } from '../models/pluginSurface'
 import { latestStudioPluginSurfaces } from '../models/studioPluginPackage'
+import { resolveServiceEditorButtons } from '../models/serviceEditorButtons'
 import { groupRuntimeArtifacts, runtimeReplicasForService, runtimeServiceActionConfirmationText } from '../models/runtime'
 import { BrandMark } from '../ui/BrandMark'
 
 export function ActivityBar({ activeId, t, onNavigate, surfaces, onOpenSurface }: { activeId: string | null; t: Copy; onNavigate: (item: TabKind) => void; surfaces: StudioPluginSurface[]; onOpenSurface: (surface: StudioPluginSurface) => void }) {
   const entries: Array<[TabKind, typeof Boxes, string]> = [['canvas', Boxes, t.graph], ['git', GitCompareArrows, t.git], ['reports', Activity, t.reports], ['studio-plugins', Puzzle, t.studioPlugins], ['problems', CircleAlert, t.problems], ['output', Terminal, 'Output']]
-  const currentSurfaces = latestStudioPluginSurfaces(surfaces)
+  const currentSurfaces = latestStudioPluginSurfaces(surfaces.filter((surface) => surface.context === 'workspace'))
   return <nav className="activity-bar" aria-label={t.home}>{entries.map(([id, Icon, label]) => <button type="button" key={id} className={`activity-button ${activeId === id ? 'active' : ''}`} title={label} aria-label={label} aria-current={activeId === id ? 'page' : undefined} onClick={() => { onNavigate(id); }}><Icon size={18} /></button>)}{currentSurfaces.length > 0 && <span className="activity-divider" />}{currentSurfaces.map((surface) => { const id = `studio-plugin:${surface.studioPluginId}:${surface.version}:${surface.id}`; return <button type="button" key={id} className={`activity-button ${activeId === id ? 'active' : ''}`} title={`${surface.studioPluginId} · ${surface.title}`} aria-label={`${surface.studioPluginId} · ${surface.title}`} aria-current={activeId === id ? 'page' : undefined} onClick={() => { onOpenSurface(surface); }}><Puzzle size={16} /></button> })}</nav>
 }
 
@@ -77,7 +78,7 @@ export function StudioPluginsSidebar({ workspace, t, surfaces, onOpen }: { works
   const navigate = useStudioStore((state) => state.navigate)
   const setView = useStudioStore((state) => state.setView)
   const [pluginMenu, setPluginMenu] = useState(false)
-  const currentSurfaces = latestStudioPluginSurfaces(surfaces)
+  const currentSurfaces = latestStudioPluginSurfaces(surfaces.filter((surface) => surface.context === 'workspace'))
 
   return (
     <aside className="context-sidebar" onContextMenu={(event) => { event.preventDefault(); setPluginMenu(true) }}>
@@ -222,12 +223,21 @@ export function Inspector({ controller, workspace, selected, output }: { control
   const locale = useStudioStore((state) => state.locale)
   const target = useStudioStore((state) => state.target)
   const [pendingServiceAction, setPendingServiceAction] = useState<'stop' | 'restart' | null>(null)
+  const [editorButtons, setEditorButtons] = useState<Array<{ id: string; key: string; label: { ru: string; en: string }; description: { ru: string; en: string } }>>([])
+  const pluginSurfaces = useStudioStore((state) => state.studioPluginSurfaces)
+  useEffect(() => {
+    let active = true
+    if (!service || !workspace.project?.id) { setEditorButtons([]); return () => { active = false } }
+    void controller.readServiceEditorButtons(workspace.project.id, service.id).then((buttons) => { if (active) setEditorButtons(buttons) }).catch(() => { if (active) setEditorButtons([]) })
+    return () => { active = false }
+  }, [controller, service?.id, workspace.project?.id])
   if (!service && !link) return <aside className="inspector"><div className="inspector-empty"><CircleDot size={18} /><span>{locale === 'ru' ? 'Выберите узел или связь' : 'Select a node or link'}</span></div></aside>
   return <><aside className="inspector"><div className="inspector-panel">
     <div className="inspector-heading"><span>{service ? (locale === 'ru' ? 'Свойства сервиса' : 'Service properties') : (locale === 'ru' ? 'Контракт связи' : 'Link contract')}</span><button className="icon-button small" title={locale === 'ru' ? 'Удалить' : 'Delete'} onClick={() => { if (service) void controller.deleteNodes([service.id]); if (link) void controller.deleteEdges([link.id]) }}><Trash2 size={15} /></button></div>
     {service && <>
       <InspectorSection title={locale === 'ru' ? 'Идентификация' : 'Identity'}><h2>{service.name}</h2><code>{service.id}</code><InspectorField label="Version" value={service.version} /><InspectorField label="Manifest" value={service.manifestVersion} /><InspectorField label="Readiness" value={readiness} /></InspectorSection>
       <InspectorSection title={locale === 'ru' ? 'Настройки' : 'Settings'}><ServiceSettingsInspector controller={controller} service={service} locale={locale} /></InspectorSection>
+      {editorButtons.length > 0 && <ServiceEditorButtons controller={controller} service={service} projectID={workspace.project?.id ?? ''} locale={locale} buttons={editorButtons} surfaces={pluginSurfaces} />}
       <InspectorSection title={locale === 'ru' ? 'Применение конфигурации' : 'Configuration rollout'}>
         {replicas.length === 0 ? <span className="muted">{locale === 'ru' ? 'Статус реплик недоступен.' : 'Replica status is unavailable.'}</span> : replicas.map((replica) => <div className="inspector-field" key={replica.replicaId}>
           <span>{replica.replicaId} · {configurationStateLabel(replica.configurationState, locale)}</span>
@@ -241,6 +251,14 @@ export function Inspector({ controller, workspace, selected, output }: { control
     </>}
     {link && <LinkContractInspector controller={controller} link={link} locale={locale} />}
   </div></aside>{service && pendingServiceAction && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setPendingServiceAction(null) }}><section className="dialog" role="alertdialog" aria-modal="true" aria-labelledby="service-runtime-action-heading" aria-describedby="service-runtime-action-description"><div className="dialog-heading"><div><span className="eyebrow">{locale === 'ru' ? `Локальный target · ${target}` : `Local target · ${target}`}</span><h2 id="service-runtime-action-heading">{locale === 'ru' ? `${pendingServiceAction === 'stop' ? 'Остановить' : 'Перезапустить'} ${service.name}?` : `${pendingServiceAction === 'stop' ? 'Stop' : 'Restart'} ${service.name}?`}</h2></div><button type="button" className="icon-button" aria-label={locale === 'ru' ? 'Отмена' : 'Cancel'} onClick={() => { setPendingServiceAction(null) }}><X size={16} /></button></div><p id="service-runtime-action-description" className="dialog-hint">{runtimeServiceActionConfirmationText(pendingServiceAction, service.id, service.name, target, locale)}</p><div className="dialog-actions"><button type="button" className="secondary-button" autoFocus onClick={() => { setPendingServiceAction(null) }}>{locale === 'ru' ? 'Отмена' : 'Cancel'}</button><button type="button" className="primary-button" onClick={() => { const action = pendingServiceAction; setPendingServiceAction(null); void controller.runtimeCommand(action === 'stop' ? 'runtime.stop' : 'runtime.restart', service.id) }}>{locale === 'ru' ? `${pendingServiceAction === 'stop' ? 'Остановить' : 'Перезапустить'} ${service.id}` : `${pendingServiceAction === 'stop' ? 'Stop' : 'Restart'} ${service.id}`}</button></div></section></div>}</>
+}
+
+function ServiceEditorButtons({ controller, service, projectID, locale, buttons, surfaces }: { controller: StudioController; service: RuntimeService; projectID: string; locale: Locale; buttons: Array<{ id: string; key: string; label: { ru: string; en: string }; description: { ru: string; en: string } }>; surfaces: StudioPluginSurface[] }) {
+  const [bindings, setBindings] = useState<Array<{ buttonId: string; pluginId: string; surfaceId: string }>>([])
+  useEffect(() => { let active = true; void controller.studioPluginEditorBindings().then((items) => { if (active) setBindings(items) }).catch(() => { if (active) setBindings([]) }); return () => { active = false } }, [controller])
+  const entries = resolveServiceEditorButtons(buttons, bindings, surfaces)
+  if (entries.length === 0) return null
+  return <InspectorSection title={locale === 'ru' ? 'Редакторы сервиса' : 'Service editors'}><div className="inspector-actions">{entries.map(({ button, surface }) => <button type="button" className="secondary-button compact" key={button.id} title={button.description[locale]} onClick={() => { useStudioStore.getState().openStudioPluginSurface(surface, { projectId: projectID, serviceId: service.id }) }}>{button.label[locale]}</button>)}</div></InspectorSection>
 }
 
 function configurationStateLabel(state: import('../api/types').RuntimeReplicaStatus['configurationState'], locale: Locale): string {
@@ -931,11 +949,15 @@ export function StudioPluginSurfaceFrame({ tab, controller, surface, project, se
   const frame = useRef<HTMLIFrameElement>(null)
   const locale = useStudioStore((state) => state.locale)
   const [frameState, setFrameState] = useState<'loading' | 'ready' | 'failed'>('loading')
+  const [failureCode, setFailureCode] = useState('surface.handshake_timeout')
+  const [retryCount, setRetryCount] = useState(0)
   const sessionID = useMemo(() => createStudioBridgeSessionID(), [tab.id])
   const src = studioPluginSurfaceAssetURL(tab)
   useEffect(() => {
+    setFrameState('loading')
+    setFailureCode('surface.handshake_timeout')
     const target = frame.current?.contentWindow
-    const timeout = window.setTimeout(() => { setFrameState('failed'); }, 8000)
+    const timeout = window.setTimeout(() => { setFailureCode('surface.handshake_timeout'); setFrameState('failed') }, 8000)
     let connected = false
     let pending = 0
     const requestTimes: number[] = []
@@ -1105,7 +1127,7 @@ export function StudioPluginSurfaceFrame({ tab, controller, surface, project, se
     // stays mounted. The load callback handles initial navigation.
     notifyReady()
     return () => { window.clearTimeout(timeout); window.removeEventListener('message', onMessage) }
-  }, [controller, locale, project?.id, project?.name, service?.id, service?.name, service?.version, sessionID, surface, tab.id])
+  }, [controller, locale, project?.id, project?.name, retryCount, service?.id, service?.name, service?.version, sessionID, surface, tab.id])
   function notifyReady() {
     const target = frame.current?.contentWindow
     if (!target) return
@@ -1116,7 +1138,8 @@ export function StudioPluginSurfaceFrame({ tab, controller, surface, project, se
       context: { project: project ? { id: project.id, name: project.name } : null, service: service ? { id: service.id, name: service.name, version: service.version } : null, locale },
     }, '*')
   }
-  return <section className="plugin-surface-workspace"><div className="plugin-surface-toolbar"><span>{tab.title}</span><span className="muted">{frameState === 'loading' ? 'Loading surface…' : frameState === 'ready' ? 'Connected' : 'Surface unavailable'}</span></div>{src ? <iframe ref={frame} title={tab.title} src={src} sandbox="allow-scripts" referrerPolicy="no-referrer" onLoad={notifyReady} onError={() => { setFrameState('failed'); }} /> : <div className="report-empty"><AlertTriangle size={18} /><span>Plugin surface route is invalid.</span></div>}</section>
+  const copy = locale === 'ru'
+  return <section className="plugin-surface-workspace"><div className="plugin-surface-toolbar"><span>{tab.title}</span><span className="muted" role="status">{frameState === 'loading' ? (copy ? 'Загрузка редактора…' : 'Loading editor…') : frameState === 'ready' ? (copy ? 'Подключено' : 'Connected') : (copy ? 'Поверхность недоступна' : 'Surface unavailable')}</span></div>{surface?.context === 'service' && !service ? <div className="plugin-surface-empty" role="alert"><AlertTriangle size={22} /><h2>{copy ? 'Контекст сервиса недоступен' : 'Service context unavailable'}</h2><p>{copy ? 'Откройте редактор кнопкой выбранного сервиса в Inspector.' : 'Open this editor from the selected service in the Inspector.'}</p></div> : !src ? <div className="plugin-surface-empty" role="alert"><AlertTriangle size={22} /><p>surface.invalid_route</p></div> : <><iframe key={retryCount} ref={frame} title={tab.title} src={src} sandbox="allow-scripts" referrerPolicy="no-referrer" onLoad={notifyReady} onError={() => { setFailureCode('surface.asset_load_failed'); setFrameState('failed') }} />{frameState === 'failed' && <div className="plugin-surface-error" role="alert"><AlertTriangle size={20} /><h2>{copy ? 'Не удалось открыть поверхность' : 'Surface unavailable'}</h2><p>{copy ? 'Плагин не завершил безопасное подключение к Studio.' : 'The plugin did not complete its secure Studio handshake.'}</p><code>{failureCode}</code><button type="button" className="secondary-button compact" onClick={() => { setFrameState('loading'); setRetryCount((count) => count + 1) }}>{copy ? 'Повторить' : 'Retry'}</button></div>}</>}</section>
 }
 
 export function ReportsView({ controller, t }: { controller: StudioController; t: Copy }) {

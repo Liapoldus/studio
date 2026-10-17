@@ -48,7 +48,7 @@ function recordConfigurationDraftEdit(
   }
 }
 
-export type StudioPluginSurface = { studioPluginId: string; version: string; id: string; title: string; route: string; permissions?: string[]; grantedPermissions?: string[] }
+export type StudioPluginSurface = { studioPluginId: string; version: string; id: string; title: string; route: string; context: 'workspace' | 'service'; permissions?: string[]; grantedPermissions?: string[] }
 
 function reconcileStudioPluginTabs(
   tabs: WorkspaceTab[],
@@ -76,14 +76,16 @@ function reconcileStudioPluginTabs(
       if (tab.id === activeTabId) nextActiveTabId = null
       continue
     }
+    const scopedServiceId = current.context === 'service' ? tab.serviceId : undefined
     const next: WorkspaceTab = {
       ...tab,
-      id: `studio-plugin:${current.studioPluginId}:${current.version}:${current.id}`,
+      id: `studio-plugin:${current.studioPluginId}:${current.version}:${current.id}${scopedServiceId ? `:${scopedServiceId}` : ''}`,
       title: current.title,
       studioPluginId: current.studioPluginId,
       studioPluginVersion: current.version,
       surfaceId: current.id,
       route: current.route,
+      context: current.context,
     }
     const existingIndex = tabIndexByID.get(next.id)
     if (existingIndex === undefined) {
@@ -425,8 +427,10 @@ export const useStudioStore = create<StudioState>((set, get) => ({
     return { tabs: [...state.tabs, tab], activeTabId: tab.id, view: 'workspace' }
   }) },
   openStudioPluginSurface: (surface, context) => { set((state) => {
-    const id = `studio-plugin:${surface.studioPluginId}:${surface.version}:${surface.id}`
-    const tab: WorkspaceTab = { id, kind: 'studio-plugin', title: surface.title, studioPluginId: surface.studioPluginId, studioPluginVersion: surface.version, surfaceId: surface.id, route: surface.route, ...(context?.projectId ? { projectId: context.projectId } : {}), ...(context?.serviceId ? { serviceId: context.serviceId } : {}) }
+    const serviceId = context?.serviceId
+    if (surface.context === 'service' && !serviceId || surface.context === 'workspace' && serviceId) return state
+    const id = `studio-plugin:${surface.studioPluginId}:${surface.version}:${surface.id}${surface.context === 'service' ? `:${serviceId ?? ''}` : ''}`
+    const tab: WorkspaceTab = { id, kind: 'studio-plugin', title: surface.title, studioPluginId: surface.studioPluginId, studioPluginVersion: surface.version, surfaceId: surface.id, route: surface.route, context: surface.context, ...(context?.projectId ? { projectId: context.projectId } : {}), ...(context?.serviceId ? { serviceId: context.serviceId } : {}) }
     const existingIndex = state.tabs.findIndex((current) => current.id === id)
     const tabs = existingIndex < 0 ? [...state.tabs, tab] : state.tabs.map((current, index) => index === existingIndex ? tab : current)
     return { tabs, activeTabId: id, view: 'workspace' }

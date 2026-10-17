@@ -481,6 +481,12 @@ func validateManifest(manifest models.StudioPluginManifest, files []string, requ
 		if strings.TrimSpace(surface.ID) == "" || !map[string]bool{"page": true, "panel": true, "inspector": true, "form": true, "command": true}[surface.Kind] {
 			return models.ErrInvalidStudioPlugin
 		}
+		if surface.Context != "" && surface.Context != "workspace" && surface.Context != "service" {
+			return models.ErrInvalidStudioPlugin
+		}
+		if surface.Context == "service" && (surface.Kind != "page" || surface.Route == "") {
+			return models.ErrInvalidStudioPlugin
+		}
 		if surface.Route != "" {
 			if surface.Kind != "page" && surface.Kind != "panel" {
 				return models.ErrInvalidStudioPlugin

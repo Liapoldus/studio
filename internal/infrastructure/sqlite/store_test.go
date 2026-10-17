@@ -103,7 +103,7 @@ func TestSchemaVersionAndPermissions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = db.ExecContext(context.Background(), "PRAGMA user_version = 9"); err != nil {
+	if _, err = db.ExecContext(context.Background(), "PRAGMA user_version = 10"); err != nil {
 		t.Fatal(err)
 	}
 	if closeErr := db.Close(); closeErr != nil {
@@ -142,6 +142,36 @@ func TestCLIPathPreferencePersistsWithoutOverwritingOtherClientState(t *testing.
 	state, err = store.ReadClientState(ctx)
 	if err != nil || state.CLIPath != "" {
 		t.Fatalf("cleared CLI path: %+v, %v", state, err)
+	}
+}
+
+func TestStudioPluginEditorBindingsPersistGloballyAndRejectDuplicateButtons(t *testing.T) {
+	store, err := Open(filepath.Join(t.TempDir(), "client.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if closeErr := store.Close(); closeErr != nil {
+			t.Error(closeErr)
+		}
+	}()
+	input := []models.StudioPluginEditorBinding{{ButtonID: "server.endpoints", PluginID: "liapoldus.server-editor", SurfaceID: "server-editor"}}
+	err = store.ReplaceStudioPluginEditorBindings(context.Background(), input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	items, err := store.ListStudioPluginEditorBindings(context.Background())
+	if err != nil || len(items) != 1 || items[0] != input[0] {
+		t.Fatalf("bindings=%#v err=%v", items, err)
+	}
+	duplicate := []models.StudioPluginEditorBinding{input[0], input[0]}
+	err = store.ReplaceStudioPluginEditorBindings(context.Background(), duplicate)
+	if err == nil {
+		t.Fatal("accepted duplicate global button assignment")
+	}
+	items, err = store.ListStudioPluginEditorBindings(context.Background())
+	if err != nil || len(items) != 1 {
+		t.Fatalf("failed replacement should roll back: %#v err=%v", items, err)
 	}
 }
 

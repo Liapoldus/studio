@@ -79,7 +79,11 @@ func serveStudioPluginAsset(writer http.ResponseWriter, request *http.Request, p
 		// verified package files, so external module scripts are otherwise blocked.
 		// Permit executable code only from the local Wails origin; network access
 		// remains disabled and the iframe still has no same-origin privilege.
-		writer.Header().Set("Content-Security-Policy", "default-src 'none'; script-src wails://wails; style-src 'self' wails://wails 'unsafe-inline'; img-src 'self' wails://wails data: blob:; font-src 'self' wails://wails data:; media-src 'self' wails://wails data:; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'")
+		// Wails' macOS WebView serves local assets from
+		// Wails uses multiple local hosts across desktop platforms and assigns
+		// ephemeral ports on macOS. Permit resources only from its custom local
+		// scheme; network connections remain disabled in the plugin frame.
+		writer.Header().Set("Content-Security-Policy", "default-src 'none'; script-src wails:; style-src 'self' wails: 'unsafe-inline'; img-src 'self' wails: data: blob:; font-src 'self' wails: data:; media-src 'self' wails: data:; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'")
 	}
 	writer.Header().Set("Content-Length", fmt.Sprint(len(data)))
 	writer.WriteHeader(http.StatusOK)

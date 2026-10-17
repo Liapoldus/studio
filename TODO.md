@@ -2064,3 +2064,14 @@ content.
   После сборки candidate требуется обязательный Studio trust gate для нового
   CLI binary. Затем повторить только Server replacement, Core Status, endpoint
   Add/Delete draft, curl и Echo logs; не повторять VitePress/общие unit suites.
+# Service-bound StudioPlugin editors — implementation checkpoint — 2026-10-17
+
+- SDK now validates and canonicalizes `service-editor-buttons/v1`; Server
+  declares stable `server.endpoints`. Core and typed CLI continue relaying the
+  descriptor as JSON metadata.
+- Studio surfaces distinguish `workspace` and `service`; service pages are
+  excluded from rail navigation. Global SQLite mappings connect service button
+  IDs to installed plugin pages. Inspector renders only mapped buttons whose
+  plugin surface is installed and opens the exact service context.
+- Remaining acceptance: owner checks, package `.50`, complete Studio checks,
+  macOS WebView handshake, package trust confirmation and integrated commit/push.

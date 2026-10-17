@@ -105,6 +105,8 @@ export interface StudioAPI {
   diagnostics(): Promise<Diagnostic[]>
   installedStudioPlugins(): Promise<InstalledStudioPluginState[]>
   installedStudioPluginManifests(): Promise<string>
+  studioPluginEditorBindings(): Promise<string>
+  saveStudioPluginEditorBindings(bindings: string): Promise<void>
   readStudioPluginSurface(studioPluginId: string, version: string, surfaceId: string): Promise<string>
   runStudioPluginTool(studioPluginId: string, version: string, toolId: string, args: string[]): Promise<string>
   startStudioPluginProcess(studioPluginId: string, version: string): Promise<string>

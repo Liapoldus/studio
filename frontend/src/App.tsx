@@ -116,8 +116,8 @@ export default function App({ api }: Props) {
     useStudioStore.getState().navigate(kind)
   }
   function openPluginSurface(surface: StudioPluginSurface) {
-    const serviceId = selected?.kind === 'service' ? selected.id : undefined
-    openStudioPluginSurface(surface, { projectId: workspace?.project?.id, serviceId })
+    if (surface.context !== 'workspace') return
+    openStudioPluginSurface(surface, { projectId: workspace?.project?.id })
   }
   function dismissError() { setError(null) }
   function beginTabDrag(event: DragEvent<HTMLDivElement>, id: string) {
@@ -220,6 +220,7 @@ export default function App({ api }: Props) {
     {commandOpen && <CommandPalette controller={controller} t={t} onSettings={() => { setView('settings'); }} />}
     {createOpen && <CreateProjectDialog controller={controller} t={t} />}
     {serviceOpen && showWorkspace && <ServiceDialog controller={controller} t={t} />}
+
   </div>
 }
 

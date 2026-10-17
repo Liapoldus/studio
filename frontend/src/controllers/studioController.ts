@@ -8,6 +8,7 @@ import { configurationSchemaDifferencePaths, configurationSchemasMatch, parseCom
 import { serviceConfigurationProvenanceDifferences } from '../models/serviceConfigurationProvenance'
 import { studioPluginBridgeFailureCode } from '../models/pluginSurface'
 import { parseInstalledStudioPluginInspections, parseStudioPluginInspection, type StudioPluginPackageInfo } from '../models/studioPluginPackage'
+import { parseServiceEditorButtons, type ServiceEditorButtonCandidate } from '../models/serviceEditorButtons'
 import { useStudioStore } from '../stores/studio'
 
 export type StudioController = ReturnType<typeof createStudioController>
@@ -1176,7 +1177,7 @@ export function createStudioController(api: StudioAPI) {
     try {
       const packages = await installedStudioPluginPackages()
       const surfaces = packages.flatMap((plugin) => plugin.surfaces.filter((surface) => surface.route).map((surface) => ({
-        studioPluginId: plugin.id, version: plugin.version, id: surface.id, title: surface.title, route: surface.route,
+        studioPluginId: plugin.id, version: plugin.version, id: surface.id, title: surface.title, route: surface.route, context: surface.context,
         permissions: plugin.permissions, grantedPermissions: plugin.grantedPermissions,
       })))
       store().setStudioPluginSurfaces(surfaces)
@@ -1184,6 +1185,32 @@ export function createStudioController(api: StudioAPI) {
   }
   async function installedStudioPluginPackages(): Promise<StudioPluginPackageInfo[]> {
     return parseInstalledStudioPluginInspections(await api.installedStudioPluginManifests())
+  }
+  async function studioPluginEditorBindings(): Promise<Array<{ buttonId: string; pluginId: string; surfaceId: string }>> {
+    const value: unknown = JSON.parse(await api.studioPluginEditorBindings())
+    if (!Array.isArray(value) || value.length > 256) return []
+    const bindings: Array<{ buttonId: string; pluginId: string; surfaceId: string }> = []
+    for (const item of value) {
+      if (!isRecord(item) || typeof item.buttonId !== 'string' || typeof item.pluginId !== 'string' || typeof item.surfaceId !== 'string') continue
+      bindings.push({ buttonId: item.buttonId, pluginId: item.pluginId, surfaceId: item.surfaceId })
+    }
+    return bindings
+  }
+  async function saveStudioPluginEditorBindings(bindings: Array<{ buttonId: string; pluginId: string; surfaceId: string }>): Promise<void> {
+    await api.saveStudioPluginEditorBindings(JSON.stringify(bindings))
+  }
+  async function serviceEditorButtonCandidates(): Promise<ServiceEditorButtonCandidate[]> {
+    const workspace = store().workspace
+    const projectID = workspace?.project?.id
+    if (!workspace || !projectID) return []
+    const results = await Promise.all(workspace.graph.services.map(async (service) => {
+      try { return (await readServiceEditorButtons(projectID, service.id)).map((button) => ({ ...button, serviceId: service.id, serviceName: service.name })) }
+      catch { return [] }
+    }))
+    return results.flat()
+  }
+  async function readServiceEditorButtons(projectID: string, serviceID: string) {
+    return parseServiceEditorButtons(await queueCoreMetadataRead(() => api.readRuntimeServiceMetadata(projectID, serviceID, 'manifest')), serviceID)
   }
   async function selectStudioPluginPackage(): Promise<string> {
     return api.selectStudioPluginPackage()
@@ -1219,7 +1246,7 @@ export function createStudioController(api: StudioAPI) {
       }
     } catch (reason: unknown) { fail(reason, `Не удалось выполнить ${command} для ${serviceID}`) }
   }
-  return { api, refresh, refreshGraph, refreshRuntimeStatuses, openProject, createProject, openFileExternally, run, cancelCLI, runtimeCommand, initializeGit, loadServiceSettingsDraft, importServiceSettingsSchema, previewServiceSettingsSchema, refreshServiceSettingsSchema, refreshServiceSettingsContract, persistServiceSettingsDraft, undoServiceSettingsDraft, redoServiceSettingsDraft, saveServiceSettingsDraft, applyServiceSettings, retryFailedServiceSettings, reconcileApplyRecovery, discardServiceSettingsDraft, pluginReadServiceSettings, pluginReadServiceConfigurationUI, pluginReadServiceResource, pluginReadServiceAdminSurface, pluginSelectServiceResourceArtifact, importProjectCertificateResource, pluginPublishServiceResource, pluginWatchServiceResourceOperation, pluginReadServicePeerCatalog, verifyServicePeerContract, readServiceResourceCatalog, pluginPatchServiceSettings, pluginSaveServiceSettings, addService, createLink, updateServiceLink, deleteNodes, deleteEdges, persistNodePosition, persistWorkspace, setLocale, setTheme, loadDiagnostics, loadTraffic, exportTrafficReport, listArtifacts, registerArtifact, trustArtifact, removeArtifact, bindRuntimeServiceArtifact, serviceMetadata, loadStudioPluginSurfaces, installedStudioPluginPackages, selectStudioPluginPackage, inspectStudioPluginPackage, installStudioPluginPackage, removeStudioPluginPackage }
+  return { api, refresh, refreshGraph, refreshRuntimeStatuses, openProject, createProject, openFileExternally, run, cancelCLI, runtimeCommand, initializeGit, loadServiceSettingsDraft, importServiceSettingsSchema, previewServiceSettingsSchema, refreshServiceSettingsSchema, refreshServiceSettingsContract, persistServiceSettingsDraft, undoServiceSettingsDraft, redoServiceSettingsDraft, saveServiceSettingsDraft, applyServiceSettings, retryFailedServiceSettings, reconcileApplyRecovery, discardServiceSettingsDraft, pluginReadServiceSettings, pluginReadServiceConfigurationUI, pluginReadServiceResource, pluginReadServiceAdminSurface, pluginSelectServiceResourceArtifact, importProjectCertificateResource, pluginPublishServiceResource, pluginWatchServiceResourceOperation, pluginReadServicePeerCatalog, verifyServicePeerContract, readServiceResourceCatalog, pluginPatchServiceSettings, pluginSaveServiceSettings, addService, createLink, updateServiceLink, deleteNodes, deleteEdges, persistNodePosition, persistWorkspace, setLocale, setTheme, loadDiagnostics, loadTraffic, exportTrafficReport, listArtifacts, registerArtifact, trustArtifact, removeArtifact, bindRuntimeServiceArtifact, serviceMetadata, loadStudioPluginSurfaces, installedStudioPluginPackages, studioPluginEditorBindings, saveStudioPluginEditorBindings, serviceEditorButtonCandidates, readServiceEditorButtons, selectStudioPluginPackage, inspectStudioPluginPackage, installStudioPluginPackage, removeStudioPluginPackage }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

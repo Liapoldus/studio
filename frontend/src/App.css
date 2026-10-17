@@ -302,9 +302,16 @@
 .report-exported { color: var(--text-secondary); font-size: 10px; }
 
 /* Sandboxed Studio-plugin surface */
-.plugin-surface-workspace { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; }
+.plugin-surface-workspace { position: relative; display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; }
 .plugin-surface-toolbar { display: flex; min-height: 36px; align-items: center; justify-content: space-between; gap: 8px; padding: 0 12px; border-bottom: 1px solid var(--border); color: var(--text-secondary); font-size: 10px; }
+.plugin-service-picker { display: flex; align-items: center; gap: 8px; color: var(--text-secondary); }
+.plugin-service-picker select { min-width: 220px; max-width: 360px; padding: 5px 8px; }
 .plugin-surface-workspace iframe { width: 100%; min-height: 0; flex: 1; border: 0; background: var(--surface); }
+.plugin-surface-empty, .plugin-surface-error { display: flex; min-height: 0; flex: 1; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 24px; color: var(--text-secondary); text-align: center; }
+.plugin-surface-empty h2, .plugin-surface-error h2 { margin: 0; color: var(--text); font-size: 16px; }
+.plugin-surface-empty p, .plugin-surface-error p { margin: 0; }
+.plugin-surface-error { position: absolute; inset: 36px 0 0; background: color-mix(in srgb, var(--surface) 94%, transparent); }
+.plugin-surface-error code { color: var(--text-secondary); }
 .studio-plugin-workspace { min-width: 0; min-height: 0; overflow: auto; padding: 22px; }
 .studio-plugin-workspace > .settings-header { max-width: 900px; margin-bottom: 14px; }
 .studio-plugin-workspace .settings-section { max-width: 900px; margin: 0 0 12px; }
@@ -338,6 +345,11 @@
 .plugin-installed-digest { overflow-wrap: anywhere; color: var(--muted); font-size: 9px; }
 .plugin-installed-meta { display: flex; gap: 12px; }
 .plugin-open-surfaces, .plugin-installed-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.plugin-binding-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(120px, 200px); align-items: center; gap: 10px; margin-top: 8px; font-size: 10px; }
+.plugin-binding-row > span { display: grid; gap: 3px; min-width: 0; }
+.plugin-binding-row small { overflow-wrap: anywhere; color: var(--muted); }
+.plugin-binding-control { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 5px; }
+.plugin-binding-row select { min-width: 0; }
 .plugin-installed-actions { justify-content: flex-end; }
 .plugin-version-history { border-top: 1px solid var(--border); padding-top: 7px; color: var(--text-secondary); font-size: 10px; }
 .plugin-version-history summary { display: flex; align-items: center; gap: 8px; cursor: pointer; list-style: none; }

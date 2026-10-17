@@ -25,9 +25,23 @@ iframe не получает CLI, Core или Service SDK client.
 bridge security corpus и UI acceptance пока не пройдены. См. [целевой план
 конфигуратора](./plan#7-studio-plugin-sdk--server-extension).
 
+Service runtime может объявить `editorButtons` версии
+`service-editor-buttons/v1` в Core-backed manifest. Это декларативный список
+stable IDs вида `<service-id>.<key>` с локализованными RU/EN label/description;
+он не содержит кода или callback. В глобальных настройках Studio кнопки
+назначаются на страницы установленных plugin packages. Назначения хранятся
+глобально и не удаляются, если кнопка временно отсутствует в открытом Project.
+
+Plugin page задаёт `context: workspace|service`. Workspace surface открывается
+из левого rail. Service surface открывается кнопкой назначенного сервиса в
+Inspector, с точным Project/service context; она скрыта в левом rail. При
+отсутствии назначенного установленного плагина кнопка не показывается.
+
 Server StudioPlugin использует live `service-configuration-ui/v1` descriptor:
 показывает локализованные группы/описания и соблюдает SDK-порядок controls в
-listener settings и специализированном endpoint/request editor. Descriptor
+listener settings и специализированном endpoint/request editor во вкладке
+Server Editor. Inspector содержит только кнопку запуска редактора, а не
+редактирование endpoints. Descriptor
 только дополняет Server-owned JSON Schema и не становится локальной копией
 контракта; неизвестные или недоступные metadata не ослабляют schema validation.
 
@@ -108,7 +122,9 @@ plugin HTML/JS не исполняется.
 UI-surface — вторая форма surface, при которой plugin поставляет HTML/JS/CSS и
 Studio исполняет его в изолированном `<iframe sandbox="allow-scripts">`. Это
 разрешено для UI **любого установленного Studio-плагина** (не только
-подписанного) и запускается кнопкой в левом rail. Контракт границы:
+подписанного). Workspace surface запускается из левого rail, service surface —
+кнопкой сервиса в Inspector после назначения в настройках плагина. Контракт
+границы:
 
 - только `<iframe sandbox="allow-scripts">`; `allow-same-origin`,
   `allow-popups`, forms и любые дополнительные sandbox-токены не добавляются;

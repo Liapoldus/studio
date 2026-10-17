@@ -265,7 +265,7 @@ await test('malformed apply recovery markers restore fail-closed', async () => {
 })
 
 await test('Studio plugin workspace tabs retain the project and selected service context', async () => {
-  const surface = { studioPluginId: 'liapoldus.server-editor', version: '0.3.16', id: 'server-editor', title: 'Server', route: 'server-editor/ui/index.html' }
+  const surface = { studioPluginId: 'liapoldus.server-editor', version: '0.3.16', id: 'server-editor', title: 'Server', route: 'server-editor/ui/index.html', context: 'service' as const }
   useStudioStore.setState({ tabs: initialWorkspaceTabs(), activeTabId: 'canvas', view: 'workspace' })
   useStudioStore.getState().openStudioPluginSurface(surface, { projectId: 'server-echo-studio', serviceId: 'server' })
   const tab = useStudioStore.getState().tabs.find((item) => item.kind === 'studio-plugin')
@@ -279,8 +279,8 @@ await test('Studio plugin workspace tabs retain the project and selected service
   assert.equal(restored.tabs.find((item) => item.kind === 'studio-plugin')?.serviceId, 'server')
 
   useStudioStore.getState().openStudioPluginSurface(surface, { projectId: 'server-echo-studio', serviceId: 'echo' })
-  assert.equal(useStudioStore.getState().tabs.filter((item) => item.kind === 'studio-plugin').length, 1)
-  assert.equal(useStudioStore.getState().tabs.find((item) => item.kind === 'studio-plugin')?.serviceId, 'echo')
+  assert.equal(useStudioStore.getState().tabs.filter((item) => item.kind === 'studio-plugin').length, 2)
+  assert.equal(useStudioStore.getState().tabs.find((item) => item.kind === 'studio-plugin' && item.serviceId === 'echo')?.serviceId, 'echo')
   useStudioStore.setState({ tabs: initialWorkspaceTabs(), activeTabId: 'canvas', view: 'workspace' })
 })
 

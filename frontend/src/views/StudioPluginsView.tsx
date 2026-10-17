@@ -5,6 +5,8 @@ import type { StudioPluginPackageInfo } from '../models/studioPluginPackage'
 import { groupStudioPluginVersions } from '../models/studioPluginPackage'
 import type { Copy } from '../models/copy'
 import type { StudioPluginSurface } from '../stores/studio'
+import type { ServiceEditorButtonCandidate } from '../models/serviceEditorButtons'
+import { useStudioStore } from '../stores/studio'
 
 type Props = {
   controller: StudioController
@@ -14,6 +16,7 @@ type Props = {
 }
 
 export function StudioPluginsView({ controller, t, surfaces, onOpen }: Props) {
+  const locale = useStudioStore((state) => state.locale)
   const [installed, setInstalled] = useState<StudioPluginPackageInfo[]>([])
   const [packagePath, setPackagePath] = useState('')
   const [inspection, setInspection] = useState<StudioPluginPackageInfo | null>(null)
@@ -24,15 +27,29 @@ export function StudioPluginsView({ controller, t, surfaces, onOpen }: Props) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
+  const [buttonCandidates, setButtonCandidates] = useState<ServiceEditorButtonCandidate[]>([])
+  const [editorBindings, setEditorBindings] = useState<Array<{ buttonId: string; pluginId: string; surfaceId: string }>>([])
   const groups = groupStudioPluginVersions(installed)
 
   async function refreshInstalled() {
     try {
       setInstalled(await controller.installedStudioPluginPackages())
+      setButtonCandidates(await controller.serviceEditorButtonCandidates())
+      setEditorBindings(await controller.studioPluginEditorBindings())
       setError('')
     } catch (failure: unknown) {
       setError(messageOf(failure))
     }
+  }
+
+  async function assignButton(buttonId: string, pluginId: string, surfaceId: string) {
+    const next = editorBindings.filter((item) => item.buttonId !== buttonId)
+    if (surfaceId) next.push({ buttonId, pluginId, surfaceId })
+    setEditorBindings(next)
+    setBusy(true)
+    try { await controller.saveStudioPluginEditorBindings(next); setNotice(locale === 'ru' ? 'Назначение кнопки сохранено.' : 'Button assignment saved.') }
+    catch (failure: unknown) { setError(messageOf(failure)) }
+    finally { setBusy(false) }
   }
 
   useEffect(() => { void refreshInstalled() }, [controller])
@@ -141,7 +158,15 @@ export function StudioPluginsView({ controller, t, surfaces, onOpen }: Props) {
         <code className="plugin-installed-digest">{plugin.digest}</code>
         <div className="plugin-installed-meta"><span>{plugin.surfaces.length} · {t.pluginSurfaces.toLowerCase()}</span><span>{plugin.toolIds.length} · {t.pluginTools.toLowerCase()}</span></div>
         {plugin.grantedPermissions.length > 0 && <div className="plugin-capabilities">{plugin.grantedPermissions.map((permission) => <code key={permission}>{permission}</code>)}</div>}
-        {plugin.surfaces.length > 0 && <div className="plugin-open-surfaces">{plugin.surfaces.filter((surface) => surface.route).map((surface) => {
+        {buttonCandidates.length > 0 && <div className="plugin-editor-bindings"><h3>{locale === 'ru' ? 'Кнопки редактора сервиса' : 'Service editor buttons'}</h3>{buttonCandidates.map((button) => {
+          const assigned = editorBindings.find((item) => item.buttonId === button.id)
+          const pageSurfaces = plugin.surfaces.filter((surface) => surface.context === 'service' && surface.kind === 'page' && surface.route)
+          if (pageSurfaces.length === 0) return null
+          const currentSurface = assigned?.pluginId === plugin.id ? assigned.surfaceId : ''
+          const defaultSurface = currentSurface || (pageSurfaces.length === 1 ? pageSurfaces[0]?.id ?? '' : '')
+          return <div className="plugin-binding-row" key={button.id}><span><strong>{button.label[locale]}</strong><small>{button.serviceName} · <code>{button.id}</code>{assigned && assigned.pluginId !== plugin.id ? ` · ${locale === 'ru' ? `сейчас: ${assigned.pluginId}` : `current: ${assigned.pluginId}`}` : ''}</small></span><div className="plugin-binding-control"><select aria-label={`${button.id} plugin page`} value={defaultSurface} onChange={(event) => { void assignButton(button.id, plugin.id, event.target.value) }}><option value="">{locale === 'ru' ? 'Не назначена' : 'Not assigned'}</option>{pageSurfaces.map((surface) => <option key={surface.id} value={surface.id}>{surface.title}</option>)}</select>{(!assigned || assigned.pluginId !== plugin.id) && pageSurfaces.length === 1 && <button type="button" className="secondary-button compact" disabled={busy} onClick={() => { void assignButton(button.id, plugin.id, defaultSurface) }}>{assigned ? (locale === 'ru' ? 'Переназначить' : 'Reassign') : (locale === 'ru' ? 'Назначить' : 'Assign')}</button>}</div></div>
+        })}</div>}
+        {plugin.surfaces.length > 0 && <div className="plugin-open-surfaces">{plugin.surfaces.filter((surface) => surface.context === 'workspace' && surface.route).map((surface) => {
           const activeSurface = surfaces.find((item) => item.studioPluginId === plugin.id && item.version === plugin.version && item.id === surface.id)
           return activeSurface ? <button type="button" className="secondary-button compact" key={surface.id} onClick={() => { onOpen(activeSurface) }}>{surface.title}</button> : null
         })}</div>}

@@ -194,9 +194,21 @@ schema и HTTP contracts остаются owned в `services/server/`; паке�
 имеют remotes; их не менять и не использовать как активных consumers до явной
 разморозки.
 
-Server extension даёт компактный Inspector и полноценную editor tab с typed
-HTTP endpoint/request/response controls. Любое чтение/изменение Project draft,
-валидация и apply выполняются только через typed host API Studio. Запрещены
+StudioPlugin surface явно задаёт `context: workspace|service`. `workspace`
+surfaces открываются из left rail; `service` surfaces там не показываются.
+Service SDK публикует декларативный `service-editor-buttons/v1` в live
+manifest: stable button key, namespaced service ID, локализованные подпись и
+описание, без callbacks или исполняемого кода. В глобальных настройках Studio
+пользователь связывает ID кнопки с установленным plugin page; единственная
+service page может быть выбрана сразу. Связи сохраняются глобально в SQLite и
+переживают временное отсутствие кнопки в текущем Project.
+
+Inspector выбранного сервиса показывает только кнопки с установленным
+назначенным плагином. Нажатие открывает вкладку с контекстом точного Project и
+Service. Server extension содержит полный typed HTTP endpoint/request/response
+редактор во вкладке; endpoint editor не встраивается в Inspector. Любое
+чтение/изменение Project draft, валидация и apply выполняются только через
+typed host API Studio. Запрещены
 прямой filesystem/Wails access, собственные Core/Service SDK HTTP clients и
 обход общего Zustand draft. Минимальный `studio-service-editor/v1` bridge уже
 поддерживает redacted settings read, schema-safe общий draft и сохранение

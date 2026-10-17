@@ -58,7 +58,7 @@ func TestStudioPluginAssetHandlerScopesFilesAndSetsSandboxPolicy(t *testing.T) {
 		t.Fatalf("ordinary asset navigation unexpectedly enabled CORS: %q", got)
 	}
 	policy := response.Header().Get("Content-Security-Policy")
-	for _, required := range []string{"default-src 'none'", "script-src wails://wails", "connect-src 'none'", "frame-ancestors 'self'"} {
+	for _, required := range []string{"default-src 'none'", "script-src wails:", "connect-src 'none'", "frame-ancestors 'self'"} {
 		if !strings.Contains(policy, required) {
 			t.Errorf("CSP does not include %q: %s", required, policy)
 		}

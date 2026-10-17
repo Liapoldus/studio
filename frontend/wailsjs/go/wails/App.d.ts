@@ -146,6 +146,8 @@ export function SaveEditorAssociation(arg1:string,arg2:string):Promise<void>;
 
 export function SaveServiceSettingsDraft(arg1:string,arg2:string,arg3:string,arg4:string):Promise<void>;
 
+export function SaveStudioPluginEditorBindings(arg1:string):Promise<void>;
+
 export function SelectCLIExecutable():Promise<string>;
 
 export function SelectExternalEditor():Promise<string>;
@@ -165,6 +167,8 @@ export function SelectTargetProfile():Promise<string>;
 export function StartStudioPluginProcess(arg1:string,arg2:string):Promise<string>;
 
 export function StopStudioPluginProcess(arg1:string,arg2:string):Promise<void>;
+
+export function StudioPluginEditorBindings():Promise<string>;
 
 export function StudioPluginProcessStatus(arg1:string,arg2:string):Promise<string>;
 

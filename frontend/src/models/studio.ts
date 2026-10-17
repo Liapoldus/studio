@@ -13,6 +13,7 @@ export type WorkspaceTab = {
   studioPluginVersion?: string
   surfaceId?: string
   route?: string
+  context?: 'workspace' | 'service'
   projectId?: string
   serviceId?: string
 }

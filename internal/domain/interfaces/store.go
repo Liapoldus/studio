@@ -25,4 +25,6 @@ type DesktopStore interface {
 	SaveEditorAssociation(context.Context, models.EditorAssociation) error
 	ListEditorAssociations(context.Context) ([]models.EditorAssociation, error)
 	DeleteEditorAssociation(context.Context, string) error
+	ListStudioPluginEditorBindings(context.Context) ([]models.StudioPluginEditorBinding, error)
+	ReplaceStudioPluginEditorBindings(context.Context, []models.StudioPluginEditorBinding) error
 }
