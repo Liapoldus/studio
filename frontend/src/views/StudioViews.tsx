@@ -19,7 +19,7 @@ import { useStudioStore } from '../stores/studio'
 import type { StudioPluginSurface } from '../stores/studio'
 import { createStudioBridgeSessionID, isStudioPluginSurfaceReadyMessage, parseStudioPluginBridgeRequest, studioPluginBridgeFailureCode, studioPluginPermissionGranted, studioPluginSurfaceAssetURL, studioServiceEditorBridgeVersion, withPeerCatalogDeadline } from '../models/pluginSurface'
 import { latestStudioPluginSurfaces } from '../models/studioPluginPackage'
-import { resolveServiceEditorButtons } from '../models/serviceEditorButtons'
+import { resolveServiceEditorButtons, serviceInspectorHiddenSettingsPaths } from '../models/serviceEditorButtons'
 import { groupRuntimeArtifacts, runtimeReplicasForService, runtimeServiceActionConfirmationText } from '../models/runtime'
 import { BrandMark } from '../ui/BrandMark'
 
@@ -257,7 +257,7 @@ function ServiceEditorButtons({ controller, service, projectID, locale, buttons,
   const [bindings, setBindings] = useState<Array<{ buttonId: string; pluginId: string; surfaceId: string }>>([])
   useEffect(() => { let active = true; void controller.studioPluginEditorBindings().then((items) => { if (active) setBindings(items) }).catch(() => { if (active) setBindings([]) }); return () => { active = false } }, [controller])
   const entries = resolveServiceEditorButtons(buttons, bindings, surfaces)
-  if (entries.length === 0) return null
+  if (entries.length === 0) return <InspectorSection title={locale === 'ru' ? 'Редактор сервиса' : 'Service editor'}><p className="muted">{locale === 'ru' ? 'Установите плагин-редактор и назначьте ему эту кнопку в настройках плагинов Studio.' : 'Install an editor plugin and assign this button to it in Studio plugin settings.'}</p></InspectorSection>
   return <InspectorSection title={locale === 'ru' ? 'Редакторы сервиса' : 'Service editors'}><div className="inspector-actions">{entries.map(({ button, surface }) => <button type="button" className="secondary-button compact" key={button.id} title={button.description[locale]} onClick={() => { useStudioStore.getState().openStudioPluginSurface(surface, { projectId: projectID, serviceId: service.id }) }}>{button.label[locale]}</button>)}</div></InspectorSection>
 }
 
@@ -394,6 +394,7 @@ function ServiceSettingsInspector({ controller, service, locale }: { controller:
       .filter((entry): entry is { field: ServiceConfigurationUIField; schema: JsonObject } => Boolean(entry.schema && schemaControl(entry.schema) !== 'object' && !sensitiveSchema(entry.schema, entry.field.segments.at(-1)) && configurationSchemaRenderable(schema, entry.schema, configurationValueAtPath(values, entry.field.segments)))),
   })).filter((group) => group.fields.length > 0)
   const explicitPaths = new Set(explicitGroups.flatMap((group) => group.fields.map(({ field }) => field.path)))
+  for (const path of serviceInspectorHiddenSettingsPaths(service.id)) explicitPaths.add(path)
   return <ServiceResourceContext.Provider value={resourceContext}><ServicePeerContext.Provider value={peerContext}><div className="schema-settings">
     {applyRecoveryStatus !== 'none' && <p className="inline-error" role="status">{applyRecoveryOperationId ? (locale === 'ru' ? 'Core operation ещё не сверена. Сначала проверьте её состояние:' : 'The Core operation is not reconciled yet. Check its state before retrying:') : applyRecoveryStatus === 'applying' ? (locale === 'ru' ? 'Применение не подтверждено. Проверьте Core и явно подтвердите повторное применение.' : 'Apply completion is unconfirmed. Check Core and explicitly confirm a retry.') : (locale === 'ru' ? 'Изменения Project не подтверждены в Core. Проверьте состояние и явно подтвердите применение.' : 'Project changes are not confirmed in Core. Check runtime state and explicitly confirm apply.')}{applyRecoveryOperationId && <> <code>{applyRecoveryOperationId}</code> <button type="button" className="secondary-button compact" disabled={cliStreamState !== 'idle'} onClick={() => { void controller.reconcileApplyRecovery() }}>{cliStreamState !== 'idle' ? (locale === 'ru' ? 'Проверяю…' : 'Checking…') : (locale === 'ru' ? 'Проверить операцию' : 'Check operation')}</button></>}</p>}
     {draft.configurationContractState === 'pending' && <p className="muted" role="status">{locale === 'ru' ? 'Сверяем схему Project с live-контрактом сервиса через Core…' : 'Comparing the Project schema with the live service contract through Core…'}</p>}

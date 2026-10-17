@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { parseServiceEditorButtons, resolveServiceEditorButtons } from '../../frontend/src/models/serviceEditorButtons.ts'
+import { parseServiceEditorButtons, resolveServiceEditorButtons, serviceInspectorHiddenSettingsPaths } from '../../frontend/src/models/serviceEditorButtons.ts'
 
 const manifest = JSON.stringify({
   id: 'server',
@@ -33,4 +33,9 @@ await test('shows a button only for its installed service-context surface', () =
   const serviceSurface = { ...workspaceSurface, context: 'service' as const }
   assert.equal(resolveServiceEditorButtons(buttons, bindings, [serviceSurface]).length, 1)
   assert.deepEqual(resolveServiceEditorButtons(buttons, bindings, []), [])
+})
+
+await test('keeps Server endpoint settings inside the Server editor surface', () => {
+  assert.deepEqual(serviceInspectorHiddenSettingsPaths('server'), ['/config/routes'])
+  assert.deepEqual(serviceInspectorHiddenSettingsPaths('echo'), [])
 })

@@ -32,6 +32,11 @@ export function resolveServiceEditorButtons<T extends ServiceEditorSurface>(butt
   })
 }
 
+/** Server endpoint settings belong to its service editor surface, not the generic Inspector form. */
+export function serviceInspectorHiddenSettingsPaths(serviceID: string): string[] {
+  return serviceID === 'server' ? ['/config/routes'] : []
+}
+
 function localized(value: unknown): { ru: string; en: string } | null {
   const item = record(value)
   if (!item || !onlyKeys(item, ['ru', 'en']) || typeof item.ru !== 'string' || typeof item.en !== 'string' || !item.ru.trim() || !item.en.trim() || item.ru.length > 2048 || item.en.length > 2048 || /[\0\r\n]/u.test(item.ru) || /[\0\r\n]/u.test(item.en)) return null
