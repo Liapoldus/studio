@@ -68,24 +68,44 @@ type GitRemote struct {
 	PushURL  string `json:"pushUrl"`
 }
 
-// RuntimePlugin is a project-owned runtime plugin instance. Studio never
-// loads the plugin executable into the renderer.
-type RuntimePlugin struct {
-	ID                 string   `json:"id"`
-	Name               string   `json:"name"`
-	Version            string   `json:"version"`
-	ManifestVersion    string   `json:"manifestVersion"`
-	ServicePath        string   `json:"servicePath"`
-	SettingsPath       string   `json:"settingsPath"`
-	SettingsSchemaPath string   `json:"settingsSchemaPath"`
-	LinkPaths          []string `json:"linkPaths"`
-	ProblemCount       int      `json:"problemCount"`
-	Configured         bool     `json:"configured"`
+// RuntimeService is a project-owned runtime service instance. Studio never
+// loads the service executable into the renderer.
+//
+//nolint:govet // Field order is a reviewed JSON/Wails contract; keep generated bindings stable.
+type RuntimeService struct {
+	ID                 string                    `json:"id"`
+	Name               string                    `json:"name"`
+	Version            string                    `json:"version"`
+	ManifestVersion    string                    `json:"manifestVersion"`
+	ServicePath        string                    `json:"servicePath"`
+	SettingsPath       string                    `json:"settingsPath"`
+	SettingsSchemaPath string                    `json:"settingsSchemaPath"`
+	LinkPaths          []string                  `json:"linkPaths"`
+	ProblemCount       int                       `json:"problemCount"`
+	Configured         bool                      `json:"configured"`
+	Artifact           *ServiceArtifactReference `json:"artifact,omitempty"`
 }
 
-// PluginLink is a generic projection of a versioned plugin-to-plugin contract.
+// ServiceArtifactReference is the non-secret, project-owned identity of an
+// already-built service binary. Local paths and trust decisions stay in the
+// CLI-owned artifact registry.
+type ServiceArtifactReference struct {
+	ID       string `json:"id"`
+	Version  string `json:"version"`
+	Platform string `json:"platform"`
+	Digest   string `json:"digest"`
+}
+
+type ServiceArtifactInput struct {
+	ID       string `json:"id"`
+	Version  string `json:"version"`
+	Platform string `json:"platform"`
+	Digest   string `json:"digest"`
+}
+
+// ServiceLink is a generic projection of a versioned service-to-service contract.
 // The source JSON remains authoritative and is edited by a schema surface.
-type PluginLink struct {
+type ServiceLink struct {
 	ResponseSchemaPath string   `json:"responseSchemaPath"`
 	Target             string   `json:"target"`
 	ContractVersion    string   `json:"contractVersion"`
@@ -107,12 +127,12 @@ type PluginLink struct {
 	Valid              bool     `json:"valid"`
 }
 
-type PluginGraph struct {
-	Plugins []RuntimePlugin `json:"plugins"`
-	Links   []PluginLink    `json:"links"`
+type ServiceGraph struct {
+	Services []RuntimeService `json:"services"`
+	Links    []ServiceLink    `json:"links"`
 }
 
-type RuntimePluginInput struct {
+type RuntimeServiceInput struct {
 	ID                 string `json:"id"`
 	Name               string `json:"name"`
 	Version            string `json:"version"`
@@ -121,7 +141,7 @@ type RuntimePluginInput struct {
 }
 
 //nolint:govet // field order mirrors the versioned JSON contract.
-type PluginLinkInput struct {
+type ServiceLinkInput struct {
 	ID                 string   `json:"id"`
 	Caller             string   `json:"caller"`
 	Target             string   `json:"target"`
@@ -146,7 +166,7 @@ type PluginLinkInput struct {
 // reports.
 type Workspace struct {
 	Project *Project      `json:"project"`
-	Graph   PluginGraph   `json:"graph"`
+	Graph   ServiceGraph  `json:"graph"`
 	Files   []ProjectFile `json:"files"`
 	Git     GitStatus     `json:"git"`
 }

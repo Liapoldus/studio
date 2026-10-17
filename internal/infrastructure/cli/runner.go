@@ -101,11 +101,24 @@ func stream(ctx context.Context, command *exec.Cmd, stdout io.ReadCloser, stderr
 	scanner := bufio.NewScanner(stdout)
 	buffer := make([]byte, 64*1024)
 	scanner.Buffer(buffer, 1024*1024)
+	terminalType := ""
+	var lastDiagnostic models.CLIEvent
 	for scanner.Scan() {
 		var event models.CLIEvent
 		if err := json.Unmarshal(scanner.Bytes(), &event); err != nil || !event.Valid() {
 			emit(ctx, events, models.CLIEvent{SchemaVersion: "cli-events/v1", Type: "diagnostic", Severity: "error", Code: "cli.protocol", Message: ErrCLIProtocol.Error()})
 			continue
+		}
+		if event.Type == "diagnostic" && (event.Severity == "warning" || event.Severity == "error") {
+			lastDiagnostic = event
+		}
+		if event.Type == "run.failed" && strings.TrimSpace(event.Message) == "" && lastDiagnostic.Type == "diagnostic" {
+			event.Code = lastDiagnostic.Code
+			event.Message = lastDiagnostic.Message
+			event.Severity = "error"
+		}
+		if event.Type == "run.completed" || event.Type == "run.failed" || event.Type == "run.cancelled" {
+			terminalType = event.Type
 		}
 		emit(ctx, events, event)
 	}
@@ -125,10 +138,14 @@ func stream(ctx context.Context, command *exec.Cmd, stdout io.ReadCloser, stderr
 		if errors.As(err, &exitError) {
 			code = exitError.ExitCode()
 		}
-		emit(ctx, events, models.CLIEvent{SchemaVersion: "cli-events/v1", Type: "run.failed", Severity: "error", Code: "cli.exit", Message: "liapoldus exited with an error", ExitCode: code})
+		if terminalType != "run.failed" && terminalType != "run.cancelled" {
+			emit(ctx, events, models.CLIEvent{SchemaVersion: "cli-events/v1", Type: "run.failed", Severity: "error", Code: "cli.exit", Message: "liapoldus exited with an error", ExitCode: code})
+		}
 		return
 	}
-	emit(ctx, events, models.CLIEvent{SchemaVersion: "cli-events/v1", Type: "run.completed", ExitCode: 0})
+	if terminalType == "" {
+		emit(ctx, events, models.CLIEvent{SchemaVersion: "cli-events/v1", Type: "run.completed", ExitCode: 0})
+	}
 }
 
 func emit(ctx context.Context, events chan<- models.CLIEvent, event models.CLIEvent) {

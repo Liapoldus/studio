@@ -48,6 +48,7 @@ type TrafficRecordView struct {
 
 type Report struct {
 	SchemaVersion          string          `json:"schemaVersion"`
+	ImportedAt             string          `json:"importedAt,omitempty"`
 	ProjectID              string          `json:"projectId"`
 	Repository             string          `json:"repository"`
 	CommitSHA              string          `json:"commitSha"`
@@ -60,4 +61,56 @@ type Report struct {
 	TrafficReportReference string          `json:"trafficReportReference,omitempty"`
 	Replicas               []ReplicaResult `json:"replicas,omitempty"`
 	Traffic                []TrafficRecord `json:"traffic,omitempty"`
+}
+
+// ReportSummary is a renderer-safe projection for the workspace Inspector. It
+// intentionally excludes replica messages and all request/response payloads.
+type ReportSummary struct {
+	OperationID          string `json:"operationId"`
+	Target               string `json:"target"`
+	CommitSHA            string `json:"commitSha"`
+	Generation           string `json:"generation"`
+	BundleDigest         string `json:"bundleDigest"`
+	CLIVersion           string `json:"cliVersion"`
+	CoreAPICompatibility string `json:"coreApiCompatibility"`
+	ImportedAt           string `json:"importedAt"`
+	State                string `json:"state"`
+	ReplicaCount         int    `json:"replicaCount"`
+	ReadyReplicas        int    `json:"readyReplicas"`
+}
+
+func LatestReportSummary(reports []Report, projectID string) *ReportSummary {
+	var latest *Report
+	for index := range reports {
+		report := &reports[index]
+		if report.ProjectID != projectID || report.ImportedAt == "" {
+			continue
+		}
+		if latest == nil || report.ImportedAt > latest.ImportedAt || report.ImportedAt == latest.ImportedAt && report.OperationID > latest.OperationID {
+			latest = report
+		}
+	}
+	if latest == nil {
+		return nil
+	}
+	summary := &ReportSummary{
+		OperationID: latest.OperationID, Target: latest.Target, CommitSHA: latest.CommitSHA,
+		Generation: latest.Generation, BundleDigest: latest.BundleDigest, CLIVersion: latest.CLIVersion,
+		CoreAPICompatibility: latest.CoreAPICompatibility, ImportedAt: latest.ImportedAt,
+		ReplicaCount: len(latest.Replicas), State: "unknown",
+	}
+	for _, replica := range latest.Replicas {
+		if replica.State == "ready" {
+			summary.ReadyReplicas++
+		}
+	}
+	if summary.ReplicaCount > 0 {
+		summary.State = "not-ready"
+		if summary.ReadyReplicas == summary.ReplicaCount {
+			summary.State = "ready"
+		} else if summary.ReadyReplicas > 0 {
+			summary.State = "degraded"
+		}
+	}
+	return summary
 }

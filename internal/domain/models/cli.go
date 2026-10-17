@@ -1,6 +1,7 @@
 package models
 
 import (
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"path/filepath"
@@ -14,16 +15,25 @@ var ErrInvalidCLIHandoff = errors.New("invalid CLI handoff")
 // renderer never constructs arbitrary CLI argv; the host turns one intent into
 // a project-scoped CLIRequest.
 type CLIIntent struct {
-	Command     string `json:"command"`
-	Target      string `json:"target,omitempty"`
-	OperationID string `json:"operationId,omitempty"`
-	ProfilePath string `json:"profilePath,omitempty"`
-	ArtifactID  string `json:"artifactId,omitempty"`
-	Version     string `json:"version,omitempty"`
-	Platform    string `json:"platform,omitempty"`
-	BinaryPath  string `json:"binaryPath,omitempty"`
-	Digest      string `json:"digest,omitempty"`
-	ServiceID   string `json:"serviceId,omitempty"`
+	Command         string `json:"command"`
+	Target          string `json:"target,omitempty"`
+	OperationID     string `json:"operationId,omitempty"`
+	ProfilePath     string `json:"profilePath,omitempty"`
+	ArtifactID      string `json:"artifactId,omitempty"`
+	Version         string `json:"version,omitempty"`
+	Platform        string `json:"platform,omitempty"`
+	BinaryPath      string `json:"binaryPath,omitempty"`
+	Digest          string `json:"digest,omitempty"`
+	ServiceID       string `json:"serviceId,omitempty"`
+	ResourceID      string `json:"resourceId,omitempty"`
+	PageID          string `json:"pageId,omitempty"`
+	ActionID        string `json:"actionId,omitempty"`
+	ArtifactPath    string `json:"artifactPath,omitempty"`
+	ContentType     string `json:"contentType,omitempty"`
+	MetadataPath    string `json:"metadataPath,omitempty"`
+	RequestFilePath string `json:"requestFilePath,omitempty"`
+	IfMatch         string `json:"ifMatch,omitempty"`
+	IdempotencyKey  string `json:"idempotencyKey,omitempty"`
 }
 
 type CLIRequest struct {
@@ -89,7 +99,7 @@ func (i CLIIntent) Validate() error {
 	if strings.TrimSpace(i.Command) == "" || strings.ContainsAny(i.Command, "\x00\r\n") {
 		return ErrInvalidCLIRequest
 	}
-	for _, value := range []string{i.Target, i.OperationID, i.ProfilePath, i.ArtifactID, i.Version, i.Platform, i.BinaryPath, i.Digest, i.ServiceID} {
+	for _, value := range []string{i.Target, i.OperationID, i.ProfilePath, i.ArtifactID, i.Version, i.Platform, i.BinaryPath, i.Digest, i.ServiceID, i.ResourceID, i.PageID, i.ActionID, i.ArtifactPath, i.ContentType, i.MetadataPath, i.RequestFilePath, i.IfMatch, i.IdempotencyKey} {
 		if strings.ContainsAny(value, "\x00\r\n") {
 			return ErrInvalidCLIRequest
 		}
@@ -132,6 +142,30 @@ func validateCLICommand(args []string) error {
 	if len(args) == 4 && args[0] == "core" && isOneOf(args[1], "start", "stop", "restart", "status", "logs") && args[2] == "--target" {
 		return requireLocalTarget(args[3])
 	}
+	if len(args) == 5 && args[0] == "core" && args[1] == "settings" && args[2] == "inspect" && args[3] == "--target" {
+		return requireLocalTarget(args[4])
+	}
+	if len(args) == 8 && args[0] == "core" && args[1] == "settings" && args[2] == "update" && args[3] == "--target" && args[4] == "local" && args[5] == "--request-file" && args[7] == "--confirm" {
+		if err := requireLocalTarget(args[4]); err != nil {
+			return err
+		}
+		return validCLIAbsoluteFilePath(args[6])
+	}
+	if len(args) == 5 && args[0] == "core" && args[1] == "binary" && args[2] == "inspect" && args[3] == "--path" {
+		return validCLIAbsoluteFilePath(args[4])
+	}
+	if len(args) == 10 && args[0] == "core" && args[1] == "binary" && args[2] == "update" && args[3] == "--target" && args[4] == "local" && args[5] == "--path" && args[7] == "--digest" && args[9] == "--confirm" {
+		if err := requireLocalTarget(args[4]); err != nil {
+			return err
+		}
+		if err := validCLIAbsoluteFilePath(args[6]); err != nil {
+			return err
+		}
+		if !validSHA256Digest(args[8]) {
+			return ErrInvalidCLIRequest
+		}
+		return nil
+	}
 	if len(args) == 4 && args[0] == "credential" && args[1] == "status" && args[2] == "--target" {
 		return requireLocalTarget(args[3])
 	}
@@ -162,6 +196,24 @@ func validateCLICommand(args []string) error {
 		}
 		return requireLocalTarget(args[6])
 	}
+	if len(args) == 6 && args[0] == "dev" && args[1] == "plan" && args[2] == "--project" && args[4] == "--target" {
+		if err := validCLIAbsoluteProjectPath(args[3]); err != nil {
+			return err
+		}
+		return requireLocalTarget(args[5])
+	}
+	if len(args) == 8 && args[0] == "dev" && args[1] == "apply" && args[2] == "--project" && args[4] == "--target" && args[6] == "--confirm" && args[7] == "--wait" {
+		if err := validCLIAbsoluteProjectPath(args[3]); err != nil {
+			return err
+		}
+		return requireLocalTarget(args[5])
+	}
+	if len(args) == 9 && args[0] == "dev" && args[1] == "apply" && args[2] == "--project" && args[4] == "--target" && args[6] == "--confirm" && args[7] == "--wait" && args[8] == "--retry-failed" {
+		if err := validCLIAbsoluteProjectPath(args[3]); err != nil {
+			return err
+		}
+		return requireLocalTarget(args[5])
+	}
 	if len(args) == 4 && args[0] == "observe" && args[1] == "traffic" && args[2] == "--target" {
 		return requireLocalTarget(args[3])
 	}
@@ -171,13 +223,22 @@ func validateCLICommand(args []string) error {
 		}
 		return requireLocalTarget(args[5])
 	}
-	if len(args) == 3 && args[0] == "plugin" && args[1] == "artifact" && args[2] == "list" {
+	if len(args) == 3 && args[0] == "service" && args[1] == "artifact" && args[2] == "list" {
 		return nil
 	}
-	if len(args) == 9 && args[0] == "plugin" && args[1] == "artifact" && args[2] == "inspect" && args[3] == "--id" && args[5] == "--version" && args[7] == "--platform" {
+	if len(args) == 9 && args[0] == "service" && args[1] == "artifact" && args[2] == "remove" && args[3] == "--id" && args[5] == "--version" && args[7] == "--platform" {
+		if err := validCLIIdentifier(args[4]); err != nil {
+			return err
+		}
+		if args[6] == "" || args[8] == "" || strings.ContainsAny(args[6]+args[8], "\x00\r\n") {
+			return ErrInvalidCLIRequest
+		}
+		return nil
+	}
+	if len(args) == 9 && args[0] == "service" && args[1] == "artifact" && args[2] == "inspect" && args[3] == "--id" && args[5] == "--version" && args[7] == "--platform" {
 		return validCLIIdentifier(args[4])
 	}
-	if len(args) == 11 && args[0] == "plugin" && args[1] == "artifact" && args[2] == "register" && args[3] == "--id" && args[5] == "--version" && args[7] == "--platform" && args[9] == "--path" {
+	if len(args) == 11 && args[0] == "service" && args[1] == "artifact" && args[2] == "register" && args[3] == "--id" && args[5] == "--version" && args[7] == "--platform" && args[9] == "--path" {
 		if err := validCLIIdentifier(args[4]); err != nil {
 			return err
 		}
@@ -186,7 +247,7 @@ func validateCLICommand(args []string) error {
 		}
 		return nil
 	}
-	if len(args) == 11 && args[0] == "plugin" && args[1] == "artifact" && args[2] == "trust" && args[3] == "--id" && args[5] == "--version" && args[7] == "--platform" && args[9] == "--digest" {
+	if len(args) == 11 && args[0] == "service" && args[1] == "artifact" && args[2] == "trust" && args[3] == "--id" && args[5] == "--version" && args[7] == "--platform" && args[9] == "--digest" {
 		if err := validCLIIdentifier(args[4]); err != nil {
 			return err
 		}
@@ -195,26 +256,74 @@ func validateCLICommand(args []string) error {
 		}
 		return nil
 	}
-	if len(args) == 5 && args[0] == "plugin" && isOneOf(args[1], "inspect", "manifest", "schema", "status") && args[3] == "--target" {
+	if len(args) == 5 && args[0] == "service" && isOneOf(args[1], "inspect", "manifest", "schema", "status") && args[3] == "--target" {
 		if err := validCLIIdentifier(args[2]); err != nil {
 			return err
 		}
 		return requireLocalTarget(args[4])
 	}
+	if len(args) == 6 && args[0] == "service" && args[1] == "admin-surface" && args[2] == "inspect" && args[4] == "--target" {
+		if err := validCLIIdentifier(args[3]); err != nil {
+			return err
+		}
+		return requireLocalTarget(args[5])
+	}
+	if len(args) == 8 && args[0] == "service" && args[1] == "resource" && args[2] == "list" && args[4] == "--resource" && args[6] == "--target" {
+		if err := validCLIIdentifier(args[3]); err != nil {
+			return err
+		}
+		if err := validCLIIdentifier(args[5]); err != nil {
+			return err
+		}
+		return requireLocalTarget(args[7])
+	}
+	if (len(args) == 20 || len(args) == 22) && args[0] == "service" && args[1] == "resource" && args[2] == "publish" &&
+		args[4] == "--project" && args[6] == "--page" && args[8] == "--action" && args[10] == "--artifact-file" &&
+		args[12] == "--content-type" && args[14] == "--metadata-file" {
+		if err := validCLIIdentifier(args[3]); err != nil {
+			return err
+		}
+		for _, identifier := range []string{args[7], args[9]} {
+			if err := validCLIIdentifier(identifier); err != nil {
+				return err
+			}
+		}
+		for _, projectPath := range []string{args[11], args[15]} {
+			if err := validCLIProjectPath(projectPath); err != nil || strings.Contains(projectPath, `\`) {
+				return ErrInvalidCLIRequest
+			}
+		}
+		idempotencyKeyIndex, targetFlagIndex, targetIndex := 17, 18, 19
+		if len(args) == 22 {
+			if args[16] != "--if-match" || strings.TrimSpace(args[17]) == "" || strings.ContainsAny(args[17], "\x00\r\n") {
+				return ErrInvalidCLIRequest
+			}
+			idempotencyKeyIndex, targetFlagIndex, targetIndex = 19, 20, 21
+		}
+		if args[targetFlagIndex] != "--target" {
+			return ErrInvalidCLIRequest
+		}
+		for _, value := range []string{args[5], args[13], args[idempotencyKeyIndex]} {
+			if strings.TrimSpace(value) == "" || strings.ContainsAny(value, "\x00\r\n") {
+				return ErrInvalidCLIRequest
+			}
+		}
+		return requireLocalTarget(args[targetIndex])
+	}
 	if len(args) == 8 && args[0] == "runtime" && isOneOf(args[1], "plan", "start", "stop", "restart", "status", "logs", "inspect") && args[2] == "--project" && args[4] == "--revision" && args[6] == "--target" {
 		if err := validCLIAbsoluteProjectPath(args[3]); err != nil {
 			return err
 		}
-		if args[5] != "HEAD" {
+		if args[5] != "HEAD" && args[5] != "WORKING_TREE" {
 			return ErrInvalidCLIRequest
 		}
 		return requireLocalTarget(args[7])
 	}
-	if len(args) == 10 && args[0] == "runtime" && isOneOf(args[1], "restart", "logs", "inspect") && args[2] == "--project" && args[4] == "--revision" && args[6] == "--target" && args[8] == "--service" {
+	if len(args) == 10 && args[0] == "runtime" && isOneOf(args[1], "start", "stop", "restart", "logs", "inspect") && args[2] == "--project" && args[4] == "--revision" && args[6] == "--target" && args[8] == "--service" {
 		if err := validCLIAbsoluteProjectPath(args[3]); err != nil {
 			return err
 		}
-		if args[5] != "HEAD" {
+		if args[5] != "HEAD" && args[5] != "WORKING_TREE" {
 			return ErrInvalidCLIRequest
 		}
 		if err := requireLocalTarget(args[7]); err != nil {
@@ -223,6 +332,25 @@ func validateCLICommand(args []string) error {
 		return validCLIIdentifier(args[9])
 	}
 	return ErrInvalidCLIRequest
+}
+
+func validCLIAbsoluteFilePath(value string) error {
+	if !filepath.IsAbs(value) || filepath.Clean(value) == string(filepath.Separator) {
+		return ErrInvalidCLIRequest
+	}
+	return nil
+}
+
+func validSHA256Digest(value string) bool {
+	if len(value) != len("sha256:")+64 || !strings.HasPrefix(value, "sha256:") {
+		return false
+	}
+	digest := value[len("sha256:"):]
+	if strings.ToLower(digest) != digest {
+		return false
+	}
+	_, err := hex.DecodeString(digest)
+	return err == nil
 }
 
 func requireLocalTarget(target string) error {

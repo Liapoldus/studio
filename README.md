@@ -1,9 +1,15 @@
 # Liapoldus Studio
 
+Runtime сущности — Services; расширения редактора — StudioPlugins.
+Control plane: Studio → CLI → Core → Service SDK REST
+(`github.com/Liapoldus/service-sdk/v2`). Data plane: независимые Services → Wool
+(`github.com/Liapoldus/wool/v3`). Major versions сохранены; старые runtime
+`plugin` CLI-команды и API aliases не поддерживаются.
+
 Liapoldus Studio — отдельная среда разработки проектов Liapoldus. Она управляет
 файлами проекта, локальным состоянием, Git-версиями и импортированными отчётами
 универсального `liapoldus` CLI. Studio не запускает Core и не вызывает Core или
-plugin API напрямую: управляющий путь проходит только через typed CLI intents.
+service API напрямую: управляющий путь проходит только через typed CLI intents.
 
 ## Запуск
 
@@ -12,7 +18,7 @@ plugin API напрямую: управляющий путь проходит т
 | Desktop | `main.go` | Wails bindings | проект, дерево файлов, локальные Git-операции и отчёты CLI |
 
 React-приложение использует Wails bindings через адаптер
-`frontend/src/api/wails.ts`. Core credentials, Core endpoint и plugin REST URLs
+`frontend/src/api/wails.ts`. Core credentials, Core endpoint и service REST URLs
 не попадают в renderer. Local runtime выполняется standalone `liapoldus` CLI;
 Studio передаёт только typed command intents, а remote deployment остаётся CLI/CI
 ответственностью.
@@ -21,7 +27,7 @@ Studio передаёт только typed command intents, а remote deployment
 
 - `internal/domain/models`, `internal/domain/interfaces` — модели и порты;
 - `internal/application` — прикладные сценарии product/workspace и typed
-  cli/plugin/report use cases;
+  CLI/service/report use cases;
 - `internal/infrastructure` — конфигурация и технические адаптеры;
 - `internal/presentation/wails` — desktop presentation adapter;
 - `main.go` — composition root приложения.
@@ -32,8 +38,10 @@ Studio передаёт только typed command intents, а remote deployment
 Frontend embed находится в `internal/infrastructure/assets/desktop`.
 Product metadata хранится в Go (`internal/infrastructure/product/reader.go`),
 без JSON asset/parser; native tests фиксируют значения и защиту от изменения
-slices вызывающим кодом. Docker adapter и plugin SDK client в Studio отсутствуют:
+slices вызывающим кодом. Docker adapter и Service SDK client в Studio отсутствуют:
 единственный runtime/control-plane исполнитель — standalone CLI.
+Studio не имеет встроенного текстового редактора; файлы открываются во внешнем
+редакторе. UI-поверхности Studio-плагинов — sandboxed iframe-вкладки.
 
 ## Разработка
 
@@ -60,11 +68,10 @@ artifacts, quality lint, native Go tests, typed TS tests, vet и Go build.
 tests (после frontend сборок); `make check-race` — native Go race tests.
 Полный packaged desktop build: `make desktop-build`.
 
-Go quality lint закреплён на golangci-lint **v2.5.0**; Makefile устанавливает
-его в ignored `.tools/` и проверяет версию. Config verify использует локальную
-схему `tools/lint/schema.json`, взятую из upstream tag v2.5.0
-(`jsonschema/golangci.jsonschema.json`, только JSON minification); сеть нужна
-для первой установки зависимостей, а не для повторной проверки config.
+Go quality lint закреплён на golangci-lint **v2.14.0**; Makefile устанавливает
+его в ignored `.tools/` и проверяет версию. Config verify использует встроенную
+в закреплённый анализатор схему конфигурации. Выбранная версия собрана с Go 1.26,
+как и текущие модули Studio; сеть нужна для первой установки зависимостей.
 Корневой `.golangci.yml` включает
 20 анализаторов (в том числе contextcheck/noctx, staticcheck/all, gosec, errcheck/check-blank,
 govet/all, SQL resource checks) и отдельную проверку gofmt. Проверяются все
@@ -112,15 +119,15 @@ project атомарно очищает selection. Данные сохраняю
 Editor associations, installed plugin metadata и trust decisions также принадлежат
 этой базе. Workspace layout/tabs/filters хранятся только в project-local
 `.studio/workspace.json`; redacted recoverable CLI/plugin diagnostics принадлежат
-`.studio/diagnostics.jsonl`. Core settings, credentials и plugin settings здесь
+`.studio/diagnostics.jsonl`. Core settings, credentials и service settings здесь
 не хранятся. Application theme (`system`, `light`, `dark`) хранится в global
 SQLite и применяется host-controlled renderer theme tokens.
 
-Открытые задачи и границы каркаса перечислены в [TODO.md](TODO.md).
+Открытые задачи и границы каркаса перечислены в [TODO.md](TODO.md); целевая архитектура и этапы — в [plan.md](plan.md). См. также [docs/index.md](docs/index.md).
 
-Целевая продуктовая модель Studio, project/file tree, runtime plugin graph,
+Целевая продуктовая модель Studio, project/file tree, runtime service graph,
 CLI boundary, Studio plugins, traffic reports и Mermaid-схемы описаны в разделе
 [docs/](docs/index.md). Документ имеет статус проектной спецификации и не
-заменяет контракты Core или Plugin SDK.
+заменяет контракты Core или Service SDK.
 
 Лицензия проекта — GNU AGPL-3.0-only; полный текст находится в [LICENSE](LICENSE).

@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/Liapoldus/studio/internal/domain/models"
@@ -102,7 +103,7 @@ func TestSchemaVersionAndPermissions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = db.ExecContext(context.Background(), "PRAGMA user_version = 7"); err != nil {
+	if _, err = db.ExecContext(context.Background(), "PRAGMA user_version = 9"); err != nil {
 		t.Fatal(err)
 	}
 	if closeErr := db.Close(); closeErr != nil {
@@ -110,6 +111,86 @@ func TestSchemaVersionAndPermissions(t *testing.T) {
 	}
 	if _, err = Open(path); !errors.Is(err, ErrStorage) {
 		t.Fatalf("accepted future schema: %v", err)
+	}
+}
+
+func TestCLIPathPreferencePersistsWithoutOverwritingOtherClientState(t *testing.T) {
+	store, err := Open(filepath.Join(t.TempDir(), "client.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if closeErr := store.Close(); closeErr != nil {
+			t.Error(closeErr)
+		}
+	}()
+	ctx := context.Background()
+	if err = store.SaveClientState(ctx, models.ClientState{Theme: "dark", Locale: "en"}); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(t.TempDir(), "liapoldus")
+	if err = store.SaveCLIPath(ctx, path); err != nil {
+		t.Fatal(err)
+	}
+	state, err := store.ReadClientState(ctx)
+	if err != nil || state.CLIPath != path || state.Theme != "dark" || state.Locale != "en" {
+		t.Fatalf("client state after saving CLI path: %+v, %v", state, err)
+	}
+	if err = store.SaveCLIPath(ctx, ""); err != nil {
+		t.Fatal(err)
+	}
+	state, err = store.ReadClientState(ctx)
+	if err != nil || state.CLIPath != "" {
+		t.Fatalf("cleared CLI path: %+v, %v", state, err)
+	}
+}
+
+func TestServiceSettingsDraftPersistenceAndProjectCascade(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "client.sqlite")
+	store, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if closeErr := store.Close(); closeErr != nil {
+			t.Error(closeErr)
+		}
+	}()
+	project, err := models.NewProject("draft-project", "Draft project", filepath.Join(t.TempDir(), "project"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if saveErr := store.SaveProject(ctx, project); saveErr != nil {
+		t.Fatal(saveErr)
+	}
+	draft := models.ServiceSettingsDraft{
+		ServiceID: "server", SettingsPath: "services/server/settings.json", SchemaPath: "schemas/server.json",
+		BaseDigest: "sha256:" + strings.Repeat("a", 64), PatchJSON: `{"listen":{"port":19080}}`,
+	}
+	if saveErr := store.SaveServiceSettingsDraft(ctx, project.ID, draft); saveErr != nil {
+		t.Fatal(saveErr)
+	}
+	loaded, exists, err := store.ReadServiceSettingsDraft(ctx, project.ID, draft.ServiceID)
+	if err != nil || !exists || loaded != draft {
+		t.Fatalf("persisted draft: %+v exists=%t err=%v", loaded, exists, err)
+	}
+	if closeErr := store.Close(); closeErr != nil {
+		t.Fatal(closeErr)
+	}
+	store, err = Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	loaded, exists, err = store.ReadServiceSettingsDraft(ctx, project.ID, draft.ServiceID)
+	if err != nil || !exists || loaded != draft {
+		t.Fatalf("draft was not durable across reopen: %+v exists=%t err=%v", loaded, exists, err)
+	}
+	if deleteErr := store.DeleteProject(ctx, project.ID); deleteErr != nil {
+		t.Fatal(deleteErr)
+	}
+	if _, exists, err := store.ReadServiceSettingsDraft(ctx, project.ID, draft.ServiceID); err != nil || exists {
+		t.Fatalf("project deletion did not cascade to draft: exists=%t err=%v", exists, err)
 	}
 }
 
@@ -131,11 +212,11 @@ func TestDesktopMetadataV2Persistence(t *testing.T) {
 	if saveErr := store.SaveProject(ctx, project); saveErr != nil {
 		t.Fatal(saveErr)
 	}
-	plugin := models.InstalledPluginState{ID: "runtime.tools", Version: "1.2.0", Digest: "sha256:abc", Path: "/tmp/plugin", Enabled: true, Signed: true}
-	if saveErr := store.SaveInstalledPlugin(ctx, plugin); saveErr != nil {
+	plugin := models.InstalledStudioPluginState{ID: "runtime.tools", Version: "1.2.0", Digest: "sha256:abc", Path: "/tmp/plugin", Enabled: true, Signed: true}
+	if saveErr := store.SaveInstalledStudioPlugin(ctx, plugin); saveErr != nil {
 		t.Fatal(saveErr)
 	}
-	plugins, err := store.ListInstalledPlugins(ctx)
+	plugins, err := store.ListInstalledStudioPlugins(ctx)
 	if err != nil || len(plugins) != 1 || plugins[0] != plugin {
 		t.Fatalf("plugins: %+v %v", plugins, err)
 	}
@@ -153,6 +234,13 @@ func TestDesktopMetadataV2Persistence(t *testing.T) {
 	associations, err := store.ListEditorAssociations(ctx)
 	if err != nil || len(associations) != 1 || associations[0] != association {
 		t.Fatalf("associations: %+v %v", associations, err)
+	}
+	if deleteErr := store.DeleteEditorAssociation(ctx, association.Pattern); deleteErr != nil {
+		t.Fatal(deleteErr)
+	}
+	associations, err = store.ListEditorAssociations(ctx)
+	if err != nil || len(associations) != 0 {
+		t.Fatalf("association was not deleted: %+v %v", associations, err)
 	}
 	// Workspace navigation state is intentionally not stored in global SQLite;
 	// it belongs to the project-local .studio/workspace.json store.

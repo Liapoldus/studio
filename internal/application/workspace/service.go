@@ -38,6 +38,33 @@ func (s *Service) Open(ctx context.Context, root string) (models.Workspace, erro
 	return workspace, nil
 }
 
+// OpenByID reads a registered Project without changing the active desktop
+// selection. Typed background operations use it so a delayed settings save
+// cannot be redirected to whichever Project is currently visible.
+func (s *Service) OpenByID(ctx context.Context, id string) (models.Workspace, error) {
+	if id == "" {
+		return models.Workspace{}, models.ErrInvalidProject
+	}
+	projects, err := s.projects.ListProjects(ctx)
+	if err != nil {
+		return models.Workspace{}, err
+	}
+	for _, project := range projects {
+		if project.ID != id {
+			continue
+		}
+		workspace, openErr := s.source.Open(ctx, project.RootPath)
+		if openErr != nil {
+			return models.Workspace{}, openErr
+		}
+		if workspace.Project == nil || workspace.Project.ID != id {
+			return models.Workspace{}, models.ErrInvalidProject
+		}
+		return workspace, nil
+	}
+	return models.Workspace{}, models.ErrInvalidProject
+}
+
 func (s *Service) Create(ctx context.Context, root, id, name string) (models.Workspace, error) {
 	workspace, err := s.source.Create(ctx, root, id, name)
 	if err != nil {
@@ -63,7 +90,7 @@ func (s *Service) Current(ctx context.Context) (models.Workspace, error) {
 	if state.SelectedProjectID == "" {
 		return models.Workspace{
 			Files: []models.ProjectFile{},
-			Graph: models.PluginGraph{Plugins: []models.RuntimePlugin{}, Links: []models.PluginLink{}},
+			Graph: models.ServiceGraph{Services: []models.RuntimeService{}, Links: []models.ServiceLink{}},
 			Git:   models.GitStatus{Changes: []models.GitChange{}},
 		}, nil
 	}
@@ -78,7 +105,7 @@ func (s *Service) Current(ctx context.Context) (models.Workspace, error) {
 	}
 	return models.Workspace{
 		Files: []models.ProjectFile{},
-		Graph: models.PluginGraph{Plugins: []models.RuntimePlugin{}, Links: []models.PluginLink{}},
+		Graph: models.ServiceGraph{Services: []models.RuntimeService{}, Links: []models.ServiceLink{}},
 		Git:   models.GitStatus{Changes: []models.GitChange{}},
 	}, nil
 }

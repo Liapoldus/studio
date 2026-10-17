@@ -34,6 +34,28 @@ func TestRunnerParsesJSONLEventsAndExit(t *testing.T) {
 	}
 }
 
+func TestRunnerPreservesActionableFailureWithoutDuplicatingTerminalEvent(t *testing.T) {
+	request := models.CLIRequest{ProjectRoot: t.TempDir(), Args: []string{"validate"}}
+	runner := Runner{CommandFactory: func(_ context.Context, args []string) *exec.Cmd {
+		return &exec.Cmd{Path: os.Args[0], Args: append([]string{os.Args[0], "-test.run=TestCLIFailureHelperProcess", "--"}, args...)}
+	}}
+	t.Setenv("STUDIO_CLI_FAILURE_HELPER", "1")
+	events, err := runner.Run(context.Background(), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var values []models.CLIEvent
+	for event := range events {
+		values = append(values, event)
+	}
+	if len(values) != 2 || values[0].Type != "diagnostic" || values[1].Type != "run.failed" {
+		t.Fatalf("expected one diagnostic and one terminal failure, got %+v", values)
+	}
+	if values[1].Code != "docker_mount_source_unavailable" || values[1].Message != "Core state mount source is unavailable: [redacted path]" {
+		t.Fatalf("terminal event lost actionable safe diagnostic: %+v", values[1])
+	}
+}
+
 func TestRunnerRejectsInvalidRequest(t *testing.T) {
 	if _, err := (Runner{}).Run(context.Background(), models.CLIRequest{ProjectRoot: "relative", Args: []string{"validate"}}); !errors.Is(err, models.ErrInvalidCLIRequest) {
 		t.Fatalf("expected invalid request, got %v", err)
@@ -84,6 +106,19 @@ func TestCLIHelperProcess(t *testing.T) {
 		os.Exit(1)
 	}
 	os.Exit(0)
+}
+
+func TestCLIFailureHelperProcess(t *testing.T) {
+	if os.Getenv("STUDIO_CLI_FAILURE_HELPER") != "1" {
+		return
+	}
+	if _, err := os.Stdout.WriteString(`{"schemaVersion":"cli-events/v1","type":"diagnostic","severity":"error","code":"docker_mount_source_unavailable","message":"Core state mount source is unavailable: [redacted path]"}` + "\n"); err != nil {
+		os.Exit(1)
+	}
+	if _, err := os.Stdout.WriteString(`{"schemaVersion":"cli-events/v1","type":"run.failed","severity":"error","exitCode":5}` + "\n"); err != nil {
+		os.Exit(1)
+	}
+	os.Exit(5)
 }
 
 func TestCLICancelHelperProcess(t *testing.T) {

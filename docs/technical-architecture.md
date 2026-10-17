@@ -13,7 +13,9 @@ Studio запускается только как Wails desktop application. Web
 Frontend structure and state boundaries are specified in
 [frontend-architecture.md](frontend-architecture.md): models remain pure,
 Zustand stores contain only state/reducers, controllers own Wails/CLI/Git
-effects, and views remain rendering-only.
+effects, and views remain rendering-only. Desktop shell — tabbed workspace
+(Zed-style frameless top bar), activity rail as tab openers, schema-driven
+Inspector, Home (no project) and global Settings page.
 
 ## 2. Runtime boundaries
 
@@ -25,19 +27,20 @@ flowchart LR
     APP --> DB["Studio SQLite"]
     APP --> CLI["liapoldus subprocess"]
     CLI --> CORE["local Core / remote handoff"]
-    APP --> EXT["external editor"]
-    APP --> HOST["Studio plugin host"]
+    APP --> EXT["external editor (OS/default, global, per-mask)"]
+    APP --> HOST["Studio plugin host (sandboxed iframe UI surfaces)"]
     HOST --> TOOLS["companion tools"]
 ```
 
 Правила границы:
 
 - React не читает filesystem и не запускает процессы напрямую;
+- Клик по файлу → всегда внешний редактор (CodeMirror не используется).
 - Studio не открывает Core SQLite и не вызывает Core Management API напрямую;
-- все Core operations проходят через `liapoldus` CLI;
+- все Core operations проходят через `liapoldus` CLI (только typed CLI intents);
 - control plane имеет единственную форму `Studio → CLI → Core Management API →
-  Plugin SDK REST API`; CLI не знает plugin REST endpoints;
-- data plane остаётся прямым: `Server → pluginprotocol → Echo`, без CLI/Core
+  Service SDK REST API`; CLI не знает service REST endpoints;
+- data plane остаётся прямым: `Server → wool → Echo`, без CLI/Core
   proxy для business traffic;
 - local Core допускает start/stop/status/logs/plan/apply через CLI;
 - remote deployment превращается в CLI handoff;
@@ -57,7 +60,24 @@ flowchart LR
   завершает операцию fail-closed. Renderer получает resolved schema через
   typed `ReadProjectSchema`, а sensitive defaults/examples/const/enum не
   попадают в frontend;
-- Core/runtime plugin binaries не загружаются в Studio.
+- открытые произвольные объекты (`additionalProperties: true`) обычно
+  недоступны для замены. Для schema-owned JSON documents владелец может явно
+  объявить `x-studio-json-document: true`: draft тогда использует отдельную
+  bounded replace-operation, Go host ограничивает глубину/число узлов и
+  разворачивает её до обычного JSON document до записи Project. Маркер не
+  сохраняется в canonical settings; произвольные незамаркированные map/object
+  остаются закрытыми;
+- массивы с sensitive/readOnly полями не заменяются renderer целиком. Для них
+  renderer отправляет bounded `set/remove/move/duplicate` operations; Go
+  применяет их к canonical settings, сохраняя скрытые values. `set` проходит
+  schema safety validation, structural operations проверяют индексы и
+  `minItems/maxItems`. Typed resource picker разрешает manifest-declared
+  `service-admin` catalogs через CLI/Core и Project `file`/`certificate`
+  references через host index; file paths остаются внутри Project, hidden и
+  credential-like paths исключаются, а certificate catalog возвращает только
+  ссылки на проверенные публичные X.509 certificates. Picker не передаёт
+  содержимое файлов или ключи и всё ещё не создаёт protected object-array items.
+- Core/runtime service binaries не загружаются в Studio.
 
 ## 3. Go layers
 
@@ -71,7 +91,7 @@ internal/application
   versioning/    status, diff, commit, branch and conflict workflows
   workspace/     canvas graph, selection, layout and reports
   cli/           typed command/event/report orchestration
-  plugins/       package, manifest, trust and surface lifecycle
+  plugins/       package, manifest, trust and surface lifecycle (UI surface hosting)
 
 internal/infrastructure
   filesystem/    path-safe project file access
@@ -80,7 +100,7 @@ internal/infrastructure
   projectstate/  `.studio/` project-local state
   cli/           liapoldus process adapter and toolchain probe
   plugins/       package installer and process host
-  desktop/       external editor and OS integration
+  desktop/       external editor and OS integration (OS default + global + per-mask)
 
 internal/presentation/wails
   typed bindings, event subscriptions and desktop composition root
@@ -95,9 +115,8 @@ contain Git, filesystem, CLI or plugin business logic.
 ```go
 type ProjectRepository interface {
     Open(ctx context.Context, root string) (ProjectSnapshot, error)
-    ReadFile(ctx context.Context, project ProjectID, path RelativePath) ([]byte, error)
-    WriteFile(ctx context.Context, project ProjectID, path RelativePath, data []byte) error
     Tree(ctx context.Context, project ProjectID) ([]ProjectFile, error)
+    UpdateServiceLink(ctx context.Context, project ProjectID, link ServiceLink) error
 }
 
 type FileSystem interface {
@@ -130,10 +149,10 @@ type GitRepository interface {
 }
 
 type GraphRepository interface {
-    CreateRuntimePlugin(ctx context.Context, root string, input RuntimePluginInput) error
-    DeleteRuntimePlugin(ctx context.Context, root, id string, confirmed bool) error
-    CreatePluginLink(ctx context.Context, root string, input PluginLinkInput) error
-    DeletePluginLink(ctx context.Context, root, caller, id string, confirmed bool) error
+    CreateRuntimeService(ctx context.Context, root string, input RuntimeServiceInput) error
+    DeleteRuntimeService(ctx context.Context, root, id string, confirmed bool) error
+    CreateServiceLink(ctx context.Context, root string, input ServiceLinkInput) error
+    DeleteServiceLink(ctx context.Context, root, caller, id string, confirmed bool) error
 }
 
 type CliRunner interface {
@@ -144,9 +163,9 @@ type ToolchainProbe interface {
     Status(ctx context.Context) ToolchainStatus
 }
 
-type PluginPackageInstaller interface {
+type StudioPluginPackageInstaller interface {
     Inspect(ctx context.Context, packagePath string) (PackageInspection, error)
-    Install(ctx context.Context, packagePath string, trust TrustDecision) (InstalledPlugin, error)
+    Install(ctx context.Context, packagePath string, trust TrustDecision) (InstalledStudioPlugin, error)
     Remove(ctx context.Context, pluginID string) error
 }
 
@@ -181,7 +200,9 @@ Project.
 
 Публичные модели должны быть versioned и сериализуемыми. Нельзя отдавать
 frontend внутренние `sql.Rows`, `exec.Cmd`, absolute secret paths или raw
-credentials.
+credentials. Вкладки персистятся в project-local `.studio/workspace.json`
+по схеме `workspace/v5` (закрываемые, drag-reorder, без pin). Встроенный file manager
+и отдельная runtime-страница удалены; lifecycle доступен в top bar и Settings.
 
 ## 5. State ownership
 
@@ -191,15 +212,24 @@ credentials.
 | Git history | Git repository | `.git` |
 | Canvas/layout/tabs | Studio project state | `.studio/` |
 | Known projects/theme | Studio client | OS application SQLite; theme is `system`, `light` or `dark` |
-| Installed local plugins | Studio package registry | OS application SQLite + package directory |
-| External editor associations | Studio host | OS application SQLite; executable path only |
+| Service settings drafts | Studio client | OS application SQLite; schema-validated safe patch only, keyed by Project/service; no full settings document or secrets |
+| Installed local plugins | Studio package registry | OS application SQLite + package directory (UI surfaces размещаются sandboxed iframe-вкладками) |
+| External editor associations | Studio host | OS application SQLite; executable path only (OS default + global + per-mask) |
 | Local Core state | Core + CLI | CLI/Core storage |
 | Deploy/traffic evidence | CLI/Core report | `.studio/reports/` |
 | Recoverable failures | Studio diagnostic projection | `.studio/diagnostics.jsonl` |
 
-Runtime plugin readiness is an ephemeral UI projection from the typed CLI
-`plugin status` response backed by Core Management API. It is not persisted in
+Runtime service readiness is an ephemeral UI projection from the typed CLI
+`service status` response backed by Core Management API. It is not persisted in
 `.studio/` and becomes `unknown` when that query is unavailable or malformed.
+Секреты не ходят в raw виде во frontend; все изменения Service Link проходят
+через новый Go binding `UpdateServiceLink`. UI-поверхности Studio-плагинов
+исполняются в `<iframe sandbox="allow-scripts">` без `allow-same-origin`,
+без доступа к Wails bindings, файловой системе и Node; обмен — только через
+`postMessage` bridge; ассеты плагина отдаются path-confined через Wails
+AssetServer; декларация UI-surface — external (`wool`), interim
+`StudioPluginSurface.Route`; CSP frame-src ограничен; Studio не загружает
+runtime service executables.
 
 `.studio/` исключается из bundle. Reports сохраняются только после redaction.
 

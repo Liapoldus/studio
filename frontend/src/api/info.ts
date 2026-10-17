@@ -9,19 +9,23 @@ import type {
   GitStash as GitStashData,
   GitStatus as GitStatusData,
   Diagnostic as DiagnosticData,
-  InstalledPluginState as InstalledPluginStateData,
+  InstalledStudioPluginState as InstalledStudioPluginStateData,
   ProjectFile as ProjectFileData,
   Project as ProjectData,
-  PluginGraph as PluginGraphData,
-  PluginLink as PluginLinkData,
+  ServiceGraph as ServiceGraphData,
+  ServiceLink as ServiceLinkData,
+  ServiceSettingsSchemaPreview as ServiceSettingsSchemaPreviewData,
+  ServiceArtifactReference as ServiceArtifactReferenceData,
   ProductInfo as ProductInfoData,
-  RuntimePlugin as RuntimePluginData,
+  RuntimeService as RuntimeServiceData,
   ToolchainStatus as ToolchainStatusData,
   TrafficRecordView as TrafficRecordViewData,
   Workspace as WorkspaceData,
   WorkspaceState as WorkspaceStateData,
   ArtifactReference as ArtifactReferenceData,
 } from './types'
+
+export type { ReportSummary } from './types'
 
 // Wails generates unchecked constructors. This Studio-owned boundary keeps its
 // exported models.ProductInfo factory while validating incoming values.
@@ -265,7 +269,7 @@ export class GitStatus implements GitStatusData {
   }
 }
 
-export class InstalledPluginState implements InstalledPluginStateData {
+export class InstalledStudioPluginState implements InstalledStudioPluginStateData {
   id: string
   version: string
   digest: string
@@ -284,7 +288,7 @@ export class InstalledPluginState implements InstalledPluginStateData {
   }
 }
 
-export class RuntimePlugin implements RuntimePluginData {
+export class RuntimeService implements RuntimeServiceData {
   id: string
   name: string
   version: string
@@ -295,23 +299,40 @@ export class RuntimePlugin implements RuntimePluginData {
   configured: boolean
   problemCount: number
   linkPaths: string[]
+  artifact?: ServiceArtifactReference
 
   constructor(source: unknown = {}) {
-    const value = object(source, 'runtime plugin')
-    this.id = stringField(value, 'id', 'runtime plugin')
-    this.name = stringField(value, 'name', 'runtime plugin')
-    this.version = stringField(value, 'version', 'runtime plugin')
-    this.manifestVersion = stringField(value, 'manifestVersion', 'runtime plugin')
-    this.servicePath = stringField(value, 'servicePath', 'runtime plugin')
-    this.settingsPath = stringField(value, 'settingsPath', 'runtime plugin')
-    this.settingsSchemaPath = stringField(value, 'settingsSchemaPath', 'runtime plugin')
-    this.configured = booleanField(value, 'configured', 'runtime plugin')
-    this.problemCount = numberField(value, 'problemCount', 'runtime plugin')
-    this.linkPaths = stringArrayField(value, 'linkPaths', 'runtime plugin')
+    const value = object(source, 'runtime service')
+    this.id = stringField(value, 'id', 'runtime service')
+    this.name = stringField(value, 'name', 'runtime service')
+    this.version = stringField(value, 'version', 'runtime service')
+    this.manifestVersion = stringField(value, 'manifestVersion', 'runtime service')
+    this.servicePath = stringField(value, 'servicePath', 'runtime service')
+    this.settingsPath = stringField(value, 'settingsPath', 'runtime service')
+    this.settingsSchemaPath = stringField(value, 'settingsSchemaPath', 'runtime service')
+    this.configured = booleanField(value, 'configured', 'runtime service')
+    this.problemCount = numberField(value, 'problemCount', 'runtime service')
+    this.linkPaths = stringArrayField(value, 'linkPaths', 'runtime service')
+    if ('artifact' in value && value.artifact !== undefined && value.artifact !== null) this.artifact = new ServiceArtifactReference(value.artifact)
   }
 }
 
-export class PluginLink implements PluginLinkData {
+export class ServiceArtifactReference implements ServiceArtifactReferenceData {
+  id: string
+  version: string
+  platform: string
+  digest: string
+
+  constructor(source: unknown = {}) {
+    const value = object(source, 'service artifact reference')
+    this.id = stringField(value, 'id', 'service artifact reference')
+    this.version = stringField(value, 'version', 'service artifact reference')
+    this.platform = stringField(value, 'platform', 'service artifact reference')
+    this.digest = stringField(value, 'digest', 'service artifact reference')
+  }
+}
+
+export class ServiceLink implements ServiceLinkData {
   id: string
   caller: string
   target: string
@@ -333,37 +354,37 @@ export class PluginLink implements PluginLinkData {
   redactionPolicy: string
 
   constructor(source: unknown = {}) {
-    const value = object(source, 'plugin link')
-    this.id = stringField(value, 'id', 'plugin link')
-    this.caller = stringField(value, 'caller', 'plugin link')
-    this.target = stringField(value, 'target', 'plugin link')
-    this.contractVersion = stringField(value, 'contractVersion', 'plugin link')
-    this.methods = stringArrayField(value, 'methods', 'plugin link')
-    this.transport = stringField(value, 'transport', 'plugin link')
-    this.sourcePath = stringField(value, 'sourcePath', 'plugin link')
-    this.requestSchemaPath = stringField(value, 'requestSchemaPath', 'plugin link')
-    this.contractSchemaPath = stringField(value, 'contractSchemaPath', 'plugin link')
-    this.responseSchemaPath = stringField(value, 'responseSchemaPath', 'plugin link')
-    this.securityProfile = stringField(value, 'securityProfile', 'plugin link')
-    this.timeoutMillis = numberField(value, 'timeoutMillis', 'plugin link')
-    this.retryLimit = numberField(value, 'retryLimit', 'plugin link')
-    this.requestLimitBytes = numberField(value, 'requestLimitBytes', 'plugin link')
-    this.responseLimitBytes = numberField(value, 'responseLimitBytes', 'plugin link')
-    this.disabledMethods = stringArrayField(value, 'disabledMethods', 'plugin link')
-    this.compatibility = stringField(value, 'compatibility', 'plugin link')
-    this.redactionPolicy = stringField(value, 'redactionPolicy', 'plugin link')
-    this.valid = booleanField(value, 'valid', 'plugin link')
+    const value = object(source, 'service link')
+    this.id = stringField(value, 'id', 'service link')
+    this.caller = stringField(value, 'caller', 'service link')
+    this.target = stringField(value, 'target', 'service link')
+    this.contractVersion = stringField(value, 'contractVersion', 'service link')
+    this.methods = stringArrayField(value, 'methods', 'service link')
+    this.transport = stringField(value, 'transport', 'service link')
+    this.sourcePath = stringField(value, 'sourcePath', 'service link')
+    this.requestSchemaPath = stringField(value, 'requestSchemaPath', 'service link')
+    this.contractSchemaPath = stringField(value, 'contractSchemaPath', 'service link')
+    this.responseSchemaPath = stringField(value, 'responseSchemaPath', 'service link')
+    this.securityProfile = stringField(value, 'securityProfile', 'service link')
+    this.timeoutMillis = numberField(value, 'timeoutMillis', 'service link')
+    this.retryLimit = numberField(value, 'retryLimit', 'service link')
+    this.requestLimitBytes = numberField(value, 'requestLimitBytes', 'service link')
+    this.responseLimitBytes = numberField(value, 'responseLimitBytes', 'service link')
+    this.disabledMethods = stringArrayField(value, 'disabledMethods', 'service link')
+    this.compatibility = stringField(value, 'compatibility', 'service link')
+    this.redactionPolicy = stringField(value, 'redactionPolicy', 'service link')
+    this.valid = booleanField(value, 'valid', 'service link')
   }
 }
 
-export class PluginGraph implements PluginGraphData {
-  plugins: RuntimePlugin[]
-  links: PluginLink[]
+export class ServiceGraph implements ServiceGraphData {
+  services: RuntimeService[]
+  links: ServiceLink[]
 
   constructor(source: unknown = {}) {
-    const value = object(source, 'plugin graph')
-    this.plugins = arrayField(value, 'plugins', RuntimePlugin, 'plugin graph')
-    this.links = arrayField(value, 'links', PluginLink, 'plugin graph')
+    const value = object(source, 'service graph')
+    this.services = arrayField(value, 'services', RuntimeService, 'service graph')
+    this.links = arrayField(value, 'links', ServiceLink, 'service graph')
   }
 }
 
@@ -377,13 +398,13 @@ export class Workspace implements WorkspaceData {
     this.project = value.project === null || value.project === undefined ? null : new Project(value.project)
     this.files = arrayField(value, 'files', ProjectFile, 'workspace')
     this.git = new GitStatus(value.git)
-    this.graph = new PluginGraph(value.graph)
+    this.graph = new ServiceGraph(value.graph)
   }
 
-  graph: PluginGraph
+  graph: ServiceGraph
 }
 
-export class PluginLinkInput {
+export class ServiceLinkInput {
   id = ''
   caller = ''
   target = ''
@@ -402,17 +423,40 @@ export class PluginLinkInput {
   compatibility = ''
   redactionPolicy = ''
 
-  constructor(source: Partial<PluginLinkInput> = {}) { Object.assign(this, source) }
+  constructor(source: Partial<ServiceLinkInput> = {}) { Object.assign(this, source) }
 }
 
-export class RuntimePluginInput {
+export class ServiceSettingsSchemaPreview implements ServiceSettingsSchemaPreviewData {
+  schemaJson: string
+  schemaDigest: string
+  settingsDigest: string
+  draftDigest: string
+  valuesCompatible: boolean
+
+  constructor(source: unknown = {}) {
+    const value = object(source, 'service settings schema preview')
+    this.schemaJson = stringField(value, 'schemaJson', 'service settings schema preview')
+    this.schemaDigest = stringField(value, 'schemaDigest', 'service settings schema preview')
+    this.settingsDigest = stringField(value, 'settingsDigest', 'service settings schema preview')
+    this.draftDigest = stringField(value, 'draftDigest', 'service settings schema preview')
+    this.valuesCompatible = booleanField(value, 'valuesCompatible', 'service settings schema preview')
+    if (this.schemaJson.length > 1_048_576 ||
+      !/^sha256:[a-f0-9]{64}$/u.test(this.schemaDigest) ||
+      !/^sha256:[a-f0-9]{64}$/u.test(this.settingsDigest) ||
+      !/^sha256:[a-f0-9]{64}$/u.test(this.draftDigest)) {
+      throw new Error('Invalid Studio service settings schema preview')
+    }
+  }
+}
+
+export class RuntimeServiceInput {
   id = ''
   name = ''
   version = ''
   manifestVersion = ''
   settingsSchemaPath = ''
 
-  constructor(source: Partial<RuntimePluginInput> = {}) { Object.assign(this, source) }
+  constructor(source: Partial<RuntimeServiceInput> = {}) { Object.assign(this, source) }
 }
 
 export class TrafficRecordView implements TrafficRecordViewData {
@@ -509,4 +553,4 @@ export class WorkspaceState implements WorkspaceStateData {
 }
 
 
-export const models = { ArtifactReference, ProductInfo, Project, ProjectFile, ToolchainStatus, GitBranch, GitChange, GitDiff, GitConflictSide, GitConflict, GitStash, GitStatus, InstalledPluginState, RuntimePlugin, PluginLink, PluginGraph, TrafficRecordView, Workspace, WorkspaceState }
+export const models = { ArtifactReference, ProductInfo, Project, ProjectFile, ToolchainStatus, GitBranch, GitChange, GitDiff, GitConflictSide, GitConflict, GitStash, GitStatus, InstalledStudioPluginState, RuntimeService, ServiceLink, ServiceGraph, TrafficRecordView, Workspace, WorkspaceState }

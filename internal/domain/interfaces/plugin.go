@@ -6,9 +6,9 @@ import (
 	"github.com/Liapoldus/studio/internal/domain/models"
 )
 
-type PluginPackageInstaller interface {
-	Inspect(context.Context, string) (models.PluginInspection, error)
-	Install(context.Context, string, models.TrustDecision) (models.InstalledPlugin, error)
+type StudioPluginPackageInstaller interface {
+	Inspect(context.Context, string) (models.StudioPluginInspection, error)
+	Install(context.Context, string, models.TrustDecision) (models.InstalledStudioPlugin, error)
 }
 
 type CompanionToolRunner interface {
@@ -16,14 +16,15 @@ type CompanionToolRunner interface {
 }
 
 type StudioPluginHost interface {
-	Inspect(context.Context, string) (models.PluginInspection, error)
-	Install(context.Context, string, models.TrustDecision) (models.InstalledPlugin, error)
+	Inspect(context.Context, string) (models.StudioPluginInspection, error)
+	Install(context.Context, string, models.TrustDecision) (models.InstalledStudioPlugin, error)
 	Remove(context.Context, string, string) error
-	List(context.Context) ([]models.InstalledPluginState, error)
-	Manifests(context.Context) ([]models.PluginInspection, error)
+	List(context.Context) ([]models.InstalledStudioPluginState, error)
+	Manifests(context.Context) ([]models.StudioPluginInspection, error)
 	Surface(context.Context, string, string, string) (string, error)
+	SurfaceAsset(context.Context, string, string, string, string) ([]byte, string, error)
 	RunTool(context.Context, string, string, string, string, []string) (models.ToolExecutionResult, error)
-	StartProcess(context.Context, string, string, string) (models.PluginProcessStatus, error)
+	StartProcess(context.Context, string, string, string) (models.StudioPluginProcessStatus, error)
 	StopProcess(context.Context, string, string) error
-	ProcessStatus(context.Context, string, string) (models.PluginProcessStatus, error)
+	ProcessStatus(context.Context, string, string) (models.StudioPluginProcessStatus, error)
 }

@@ -5,11 +5,13 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
+	"github.com/wailsapp/wails/v2/pkg/options/mac"
 
 	"github.com/Liapoldus/studio/internal/application/product"
 	workspaceapp "github.com/Liapoldus/studio/internal/application/workspace"
@@ -76,13 +78,18 @@ func run() (runErr error) {
 	app := wailspresentation.NewApp(product.NewProductInfo(productInfo), workspace, desktopintegration.EditorLauncher{}, files, projectsettings.Store{Files: files}, clirunner.Runner{}, reportstore.Store{}, diagnosticstore.Store{}, pluginHost, gitrepo.Repository{}, clirunner.ToolchainProbe{}, projectstate.Store{}, store, projectsource.Mutations{})
 
 	err = wails.Run(&options.App{
-		Title:  "Liapoldus Studio",
-		Width:  1024,
-		Height: 768,
+		Title:     "Liapoldus Studio",
+		Width:     1280,
+		Height:    820,
+		MinWidth:  960,
+		MinHeight: 640,
+		Frameless: runtime.GOOS != "darwin",
+		Mac:       &mac.Options{TitleBar: mac.TitleBarHiddenInset()},
 		AssetServer: &assetserver.Options{
-			Assets: desktopassets.Files,
+			Assets:  desktopassets.Files,
+			Handler: wailspresentation.NewPluginAssetHandler(pluginHost),
 		},
-		BackgroundColour: &options.RGBA{R: 18, G: 24, B: 33, A: 1},
+		BackgroundColour: &options.RGBA{R: 255, G: 255, B: 255, A: 1},
 		OnStartup:        app.Startup,
 		Bind: []interface{}{
 			app,

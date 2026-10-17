@@ -32,14 +32,16 @@ func TestInstallerRequiresTrustAndInstallsAtomically(t *testing.T) {
 	if _, installErr := installer.Install(context.Background(), packagePath, models.TrustDecision{}); !errors.Is(installErr, ErrTrustRequired) {
 		t.Fatalf("expected trust requirement, got %v", installErr)
 	}
-	installed, err := installer.Install(context.Background(), packagePath, models.TrustDecision{Approved: true, Reason: "local package approval"})
+	trust := approvedPackageTrust(t, installer, packagePath, nil)
+	trust.Reason = "local package approval"
+	installed, err := installer.Install(context.Background(), packagePath, trust)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(filepath.Join(installed.Path, "manifest.json")); err != nil {
 		t.Fatal(err)
 	}
-	if _, duplicateErr := installer.Install(context.Background(), packagePath, models.TrustDecision{Approved: true}); !errors.Is(duplicateErr, ErrPluginAlreadyInstalled) {
+	if _, duplicateErr := installer.Install(context.Background(), packagePath, trust); !errors.Is(duplicateErr, ErrPluginAlreadyInstalled) {
 		t.Fatalf("duplicate version was not rejected safely: %v", duplicateErr)
 	}
 }
@@ -88,11 +90,26 @@ func TestInstallerRequiresAllDeclaredPermissions(t *testing.T) {
 		"manifest.json": `{"id":"runtime.permissions","name":"Runtime Permissions","version":"1.0.0","permissions":["project.read","reports.read"]}`,
 	})
 	installer := Installer{Directory: t.TempDir()}
-	if _, err := installer.Install(context.Background(), packagePath, models.TrustDecision{Approved: true, GrantedPermissions: []string{"project.read"}}); !errors.Is(err, models.ErrPermissionApprovalRequired) {
+	partialTrust := approvedPackageTrust(t, installer, packagePath, []string{"project.read"})
+	if _, err := installer.Install(context.Background(), packagePath, partialTrust); !errors.Is(err, models.ErrPermissionApprovalRequired) {
 		t.Fatalf("expected missing permission approval, got %v", err)
 	}
-	if _, err := installer.Install(context.Background(), packagePath, models.TrustDecision{Approved: true, GrantedPermissions: []string{"project.read", "reports.read"}}); err != nil {
+	fullTrust := approvedPackageTrust(t, installer, packagePath, []string{"project.read", "reports.read"})
+	if _, err := installer.Install(context.Background(), packagePath, fullTrust); err != nil {
 		t.Fatalf("approved permissions rejected: %v", err)
+	}
+}
+
+func TestInstallerBindsTrustApprovalToInspectedDigest(t *testing.T) {
+	first := writePackage(t, map[string]string{"manifest.json": `{"id":"runtime.bound","name":"Bound","version":"1.0.0"}`})
+	second := writePackage(t, map[string]string{"manifest.json": `{"id":"runtime.bound","name":"Bound","version":"1.0.0","permissions":["project.read"]}`})
+	installer := Installer{Directory: t.TempDir()}
+	trust := approvedPackageTrust(t, installer, first, nil)
+	if _, err := installer.Install(context.Background(), second, trust); !errors.Is(err, models.ErrStudioPluginDigestMismatch) {
+		t.Fatalf("approved digest did not bind the reviewed package: %v", err)
+	}
+	if _, err := installer.Install(context.Background(), first, models.TrustDecision{Approved: true}); !errors.Is(err, models.ErrStudioPluginDigestMismatch) {
+		t.Fatalf("approval without an inspected digest was accepted: %v", err)
 	}
 }
 
@@ -209,4 +226,15 @@ func writePackage(t *testing.T, entries map[string]string) string {
 		t.Fatal(err)
 	}
 	return path
+}
+
+func approvedPackageTrust(t *testing.T, inspector interface {
+	Inspect(context.Context, string) (models.StudioPluginInspection, error)
+}, packagePath string, permissions []string) models.TrustDecision {
+	t.Helper()
+	inspection, err := inspector.Inspect(context.Background(), packagePath)
+	if err != nil {
+		t.Fatalf("inspect package before trust approval: %v", err)
+	}
+	return models.TrustDecision{ExpectedDigest: inspection.Digest, Approved: true, GrantedPermissions: permissions}
 }

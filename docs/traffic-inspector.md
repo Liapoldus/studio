@@ -2,7 +2,7 @@
 
 ## 1. Purpose
 
-Traffic inspector помогает диагностировать plugin-to-plugin communication without
+Traffic inspector помогает диагностировать service-to-service communication without
 making Studio a Core client. Источник данных — CLI/Core observation report.
 
 ## 2. Data model
@@ -11,7 +11,7 @@ An observation record contains:
 
 - timestamp;
 - correlation id;
-- caller and target plugin ids;
+- caller and target service ids;
 - method/stream name;
 - transport and security profile;
 - request/response status;
@@ -22,7 +22,7 @@ An observation record contains:
 
 ## 3. Redaction
 
-Runtime plugin contract schemas declare fields as:
+Runtime service contract schemas declare fields as:
 
 - public;
 - sensitive;
@@ -38,7 +38,7 @@ depth.
 
 Traffic panel provides:
 
-- plugin/method/status/time filters;
+- service/method/status/time filters;
 - timeline and table views;
 - request/response split view;
 - schema validation badges;

@@ -71,7 +71,7 @@ func (s *Store) initialize() (initErr error) {
 	if err := tx.QueryRowContext(ctx, "PRAGMA user_version").Scan(&version); err != nil {
 		return err
 	}
-	if version > 6 {
+	if version > 8 {
 		return ErrStorage
 	}
 	// Versions 1 from the pre-project Studio used `connections` and a
@@ -162,6 +162,26 @@ PRAGMA user_version = 2;`); err != nil {
 			return err
 		}
 	}
+	if version < 7 {
+		if _, err := tx.ExecContext(ctx, `
+CREATE TABLE service_settings_drafts (
+ project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+ service_id TEXT NOT NULL CHECK(length(service_id) BETWEEN 1 AND 128),
+ settings_path TEXT NOT NULL CHECK(length(settings_path) > 0),
+ schema_path TEXT NOT NULL CHECK(length(schema_path) > 0),
+ base_digest TEXT NOT NULL CHECK(length(base_digest) = 71),
+ patch_json TEXT NOT NULL CHECK(length(patch_json) BETWEEN 2 AND 1048576),
+ PRIMARY KEY(project_id, service_id)
+);
+PRAGMA user_version = 7;`); err != nil {
+			return err
+		}
+	}
+	if version < 8 {
+		if _, err := tx.ExecContext(ctx, `ALTER TABLE client_state ADD COLUMN cli_path TEXT NOT NULL DEFAULT ''; PRAGMA user_version = 8;`); err != nil {
+			return err
+		}
+	}
 	return tx.Commit()
 }
 
@@ -216,6 +236,39 @@ func (s *Store) DeleteProject(ctx context.Context, id string) error {
 	return storageError(ctx, err)
 }
 
+func (s *Store) SaveServiceSettingsDraft(ctx context.Context, projectID string, value models.ServiceSettingsDraft) error {
+	if strings.TrimSpace(projectID) == "" || models.ValidateServiceSettingsDraft(value) != nil {
+		return models.ErrInvalidSettingsDraft
+	}
+	_, err := s.db.ExecContext(ctx, `INSERT INTO service_settings_drafts(project_id, service_id, settings_path, schema_path, base_digest, patch_json)
+VALUES (?, ?, ?, ?, ?, ?)
+ON CONFLICT(project_id, service_id) DO UPDATE SET settings_path=excluded.settings_path, schema_path=excluded.schema_path, base_digest=excluded.base_digest, patch_json=excluded.patch_json`,
+		projectID, value.ServiceID, value.SettingsPath, value.SchemaPath, value.BaseDigest, value.PatchJSON)
+	return storageError(ctx, err)
+}
+
+func (s *Store) ReadServiceSettingsDraft(ctx context.Context, projectID, serviceID string) (models.ServiceSettingsDraft, bool, error) {
+	var value models.ServiceSettingsDraft
+	err := s.db.QueryRowContext(ctx, `SELECT service_id, settings_path, schema_path, base_digest, patch_json
+FROM service_settings_drafts WHERE project_id = ? AND service_id = ?`, projectID, serviceID).Scan(
+		&value.ServiceID, &value.SettingsPath, &value.SchemaPath, &value.BaseDigest, &value.PatchJSON)
+	if errors.Is(err, sql.ErrNoRows) {
+		return models.ServiceSettingsDraft{}, false, nil
+	}
+	if err != nil {
+		return models.ServiceSettingsDraft{}, false, storageError(ctx, err)
+	}
+	if models.ValidateServiceSettingsDraft(value) != nil {
+		return models.ServiceSettingsDraft{}, false, ErrStorage
+	}
+	return value, true, nil
+}
+
+func (s *Store) DeleteServiceSettingsDraft(ctx context.Context, projectID, serviceID string) error {
+	_, err := s.db.ExecContext(ctx, "DELETE FROM service_settings_drafts WHERE project_id = ? AND service_id = ?", projectID, serviceID)
+	return storageError(ctx, err)
+}
+
 func (s *Store) SaveClientState(ctx context.Context, state models.ClientState) error {
 	theme, locale := "", ""
 	var err error
@@ -261,7 +314,8 @@ func (s *Store) SaveClientState(ctx context.Context, state models.ClientState) e
 func (s *Store) ReadClientState(ctx context.Context) (models.ClientState, error) {
 	var selected sql.NullString
 	var theme, locale string
-	err := s.db.QueryRowContext(ctx, "SELECT selected_project_id, theme, locale FROM client_state WHERE singleton = 1").Scan(&selected, &theme, &locale)
+	var cliPath string
+	err := s.db.QueryRowContext(ctx, "SELECT selected_project_id, theme, locale, cli_path FROM client_state WHERE singleton = 1").Scan(&selected, &theme, &locale, &cliPath)
 	if err != nil {
 		return models.ClientState{}, storageError(ctx, err)
 	}
@@ -271,10 +325,21 @@ func (s *Store) ReadClientState(ctx context.Context) (models.ClientState, error)
 	if locale == "" {
 		locale = "ru"
 	}
-	return models.ClientState{SelectedProjectID: selected.String, Theme: theme, Locale: locale}, nil
+	return models.ClientState{SelectedProjectID: selected.String, Theme: theme, Locale: locale, CLIPath: cliPath}, nil
 }
 
-func (s *Store) SaveInstalledPlugin(ctx context.Context, value models.InstalledPluginState) error {
+func (s *Store) SaveCLIPath(ctx context.Context, path string) error {
+	if strings.ContainsRune(path, '\x00') || (path != "" && !filepath.IsAbs(path)) {
+		return ErrStorage
+	}
+	if path != "" {
+		path = filepath.Clean(path)
+	}
+	_, err := s.db.ExecContext(ctx, "UPDATE client_state SET cli_path = ? WHERE singleton = 1", path)
+	return storageError(ctx, err)
+}
+
+func (s *Store) SaveInstalledStudioPlugin(ctx context.Context, value models.InstalledStudioPluginState) error {
 	if strings.TrimSpace(value.ID) == "" || strings.TrimSpace(value.Version) == "" || strings.TrimSpace(value.Digest) == "" || strings.TrimSpace(value.Path) == "" {
 		return ErrStorage
 	}
@@ -283,15 +348,15 @@ ON CONFLICT(id, version) DO UPDATE SET digest=excluded.digest, path=excluded.pat
 	return storageError(ctx, err)
 }
 
-func (s *Store) ListInstalledPlugins(ctx context.Context) (values []models.InstalledPluginState, readErr error) {
+func (s *Store) ListInstalledStudioPlugins(ctx context.Context) (values []models.InstalledStudioPluginState, readErr error) {
 	rows, err := s.db.QueryContext(ctx, "SELECT id, version, digest, path, enabled, signed FROM installed_plugins ORDER BY id, version")
 	if err != nil {
 		return nil, storageError(ctx, err)
 	}
 	defer func() { readErr = errors.Join(readErr, storageError(ctx, rows.Close())) }()
-	values = make([]models.InstalledPluginState, 0)
+	values = make([]models.InstalledStudioPluginState, 0)
 	for rows.Next() {
-		var value models.InstalledPluginState
+		var value models.InstalledStudioPluginState
 		var enabled, signed int
 		if err := rows.Scan(&value.ID, &value.Version, &value.Digest, &value.Path, &enabled, &signed); err != nil {
 			return nil, storageError(ctx, err)
@@ -305,7 +370,7 @@ func (s *Store) ListInstalledPlugins(ctx context.Context) (values []models.Insta
 	return values, nil
 }
 
-func (s *Store) DeleteInstalledPlugin(ctx context.Context, id, version string) error {
+func (s *Store) DeleteInstalledStudioPlugin(ctx context.Context, id, version string) error {
 	_, err := s.db.ExecContext(ctx, "DELETE FROM installed_plugins WHERE id = ? AND version = ?", id, version)
 	return storageError(ctx, err)
 }
@@ -368,6 +433,14 @@ func (s *Store) ListEditorAssociations(ctx context.Context) (values []models.Edi
 		return nil, storageError(ctx, err)
 	}
 	return values, nil
+}
+
+func (s *Store) DeleteEditorAssociation(ctx context.Context, pattern string) error {
+	if strings.TrimSpace(pattern) == "" {
+		return ErrStorage
+	}
+	_, err := s.db.ExecContext(ctx, "DELETE FROM editor_associations WHERE pattern = ?", pattern)
+	return storageError(ctx, err)
 }
 
 func boolInt(value bool) int {

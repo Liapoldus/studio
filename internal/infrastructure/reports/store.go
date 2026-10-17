@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/Liapoldus/studio/internal/domain/interfaces"
 	"github.com/Liapoldus/studio/internal/domain/models"
@@ -124,6 +125,13 @@ func (Store) List(ctx context.Context, root string) ([]models.Report, error) {
 		var report models.Report
 		if unmarshalErr := json.Unmarshal(data, &report); unmarshalErr != nil {
 			return nil, ErrInvalidReport
+		}
+		if report.ImportedAt == "" {
+			info, infoErr := os.Lstat(path)
+			if infoErr != nil || info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
+				return nil, ErrInvalidReport
+			}
+			report.ImportedAt = info.ModTime().UTC().Format(time.RFC3339Nano)
 		}
 		values = append(values, report)
 	}

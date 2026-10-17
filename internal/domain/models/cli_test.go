@@ -50,6 +50,13 @@ func TestCLIRequestAllowsOnlyReviewedStudioCommandShapes(t *testing.T) {
 		{name: "extra apply flag rejected", args: []string{"apply", "--target", "local", "--revision", "abc123"}},
 		{name: "arbitrary target subcommand rejected", args: []string{"target", "remove", "production"}},
 		{name: "empty argument rejected", args: []string{"target", "inspect", ""}},
+		{name: "service status", args: []string{"service", "status", "echo", "--target", "local"}, want: true},
+		{name: "service admin surface from Core", args: []string{"service", "admin-surface", "inspect", "server", "--target", "local"}, want: true},
+		{name: "service admin surface remote target rejected", args: []string{"service", "admin-surface", "inspect", "server", "--target", "production"}},
+		{name: "development apply waits for Core", args: []string{"dev", "apply", "--project", root, "--target", "local", "--confirm", "--wait"}, want: true},
+		{name: "development apply without observation rejected", args: []string{"dev", "apply", "--project", root, "--target", "local", "--confirm"}},
+		{name: "old plugin status rejected", args: []string{"plugin", "status", "echo", "--target", "local"}},
+		{name: "old plugin artifact rejected", args: []string{"plugin", "artifact", "list"}},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

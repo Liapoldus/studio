@@ -4,7 +4,7 @@
 export GOWORK := off
 export GOFLAGS ?= -p=1
 
-GOLANGCI_LINT_VERSION := v2.5.0
+GOLANGCI_LINT_VERSION := v2.14.0
 GOLANGCI_LINT := .tools/golangci-lint-$(GOLANGCI_LINT_VERSION)/golangci-lint
 GO_PACKAGES := . ./internal/...
 
@@ -23,7 +23,7 @@ $(GOLANGCI_LINT):
 lint-go: $(GOLANGCI_LINT)
 	test "$$($(GOLANGCI_LINT) version --short)" = "$(patsubst v%,%,$(GOLANGCI_LINT_VERSION))"
 	"$(GOLANGCI_LINT)" version
-	"$(GOLANGCI_LINT)" config verify --schema tools/lint/schema.json
+	"$(GOLANGCI_LINT)" config verify
 	"$(GOLANGCI_LINT)" run $(GO_PACKAGES)
 	"$(GOLANGCI_LINT)" fmt --diff $(GO_PACKAGES)
 

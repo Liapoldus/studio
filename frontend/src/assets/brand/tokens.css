@@ -1,0 +1,60 @@
+/* Studio UI palette: strict grayscale. The supplied brand mark keeps its own orange. */
+:root {
+  color-scheme: light;
+  --canvas: #f7f7f7;
+  --surface: #ffffff;
+  --surface-2: #f2f2f2;
+  --surface-3: #e8e8e8;
+  --surface-hover: #ededed;
+  --border: #dedede;
+  --border-strong: #a4a4a4;
+  --grid: #d8d8d8;
+  --grid-line: rgb(0 0 0 / 8%);
+  --text: #111111;
+  --text-secondary: #444444;
+  --muted: #737373;
+  --accent: #111111;
+  --accent-soft: #ededed;
+  --success: #222222;
+  --success-surface: #eeeeee;
+  --warning: #555555;
+  --warning-surface: #eeeeee;
+  --danger: #111111;
+  --danger-surface: #e8e8e8;
+  --focus-ring: #111111;
+  --shadow: 0 16px 44px rgb(0 0 0 / 12%);
+  --shadow-soft: 0 6px 20px rgb(0 0 0 / 6%);
+  --radius-sm: 5px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-pill: 999px;
+  --font-sans: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --canvas: #090909;
+  --surface: #141414;
+  --surface-2: #1b1b1b;
+  --surface-3: #292929;
+  --surface-hover: #242424;
+  --border: #303030;
+  --border-strong: #626262;
+  --grid: #343434;
+  --grid-line: rgb(255 255 255 / 8%);
+  --text: #f4f4f4;
+  --text-secondary: #c7c7c7;
+  --muted: #999999;
+  --accent: #f4f4f4;
+  --accent-soft: #292929;
+  --success: #e8e8e8;
+  --success-surface: #292929;
+  --warning: #c8c8c8;
+  --warning-surface: #292929;
+  --danger: #f4f4f4;
+  --danger-surface: #303030;
+  --focus-ring: #f4f4f4;
+  --shadow: 0 16px 44px rgb(0 0 0 / 42%);
+  --shadow-soft: 0 6px 20px rgb(0 0 0 / 24%);
+}

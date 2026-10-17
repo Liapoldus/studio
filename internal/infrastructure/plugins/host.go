@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
+	"mime"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -37,7 +39,7 @@ var _ interfaces.StudioPluginHost = (*Host)(nil)
 type managedProcess struct {
 	cancel context.CancelFunc
 	cmd    *exec.Cmd
-	status models.PluginProcessStatus
+	status models.StudioPluginProcessStatus
 }
 
 type processSupervisor struct {
@@ -57,37 +59,37 @@ func (h *Host) supervisor() *processSupervisor {
 	return h.processState
 }
 
-func (h *Host) Inspect(ctx context.Context, packagePath string) (models.PluginInspection, error) {
+func (h *Host) Inspect(ctx context.Context, packagePath string) (models.StudioPluginInspection, error) {
 	return h.Installer.Inspect(ctx, packagePath)
 }
 
-func (h *Host) Install(ctx context.Context, packagePath string, trust models.TrustDecision) (models.InstalledPlugin, error) {
+func (h *Host) Install(ctx context.Context, packagePath string, trust models.TrustDecision) (models.InstalledStudioPlugin, error) {
 	if h.Store == nil {
-		return models.InstalledPlugin{}, models.ErrInvalidStudioPlugin
+		return models.InstalledStudioPlugin{}, models.ErrInvalidStudioPlugin
 	}
 	installed, err := h.Installer.Install(ctx, packagePath, trust)
 	if err != nil {
-		return models.InstalledPlugin{}, err
+		return models.InstalledStudioPlugin{}, err
 	}
 	if err := h.Store.SaveTrustState(ctx, models.TrustState{Digest: installed.Digest, Approved: trust.Approved, Reason: trust.Reason, GrantedPermissions: trust.GrantedPermissions}); err != nil {
 		discardError(os.RemoveAll(installed.Path))
-		return models.InstalledPlugin{}, err
+		return models.InstalledStudioPlugin{}, err
 	}
-	if err := h.Store.SaveInstalledPlugin(ctx, models.InstalledPluginState{
+	if err := h.Store.SaveInstalledStudioPlugin(ctx, models.InstalledStudioPluginState{
 		ID: installed.Manifest.ID, Version: installed.Manifest.Version, Digest: installed.Digest,
 		Path: installed.Path, Enabled: true, Signed: installed.Manifest.Signature != "",
 	}); err != nil {
 		discardError(os.RemoveAll(installed.Path))
-		return models.InstalledPlugin{}, err
+		return models.InstalledStudioPlugin{}, err
 	}
 	return installed, nil
 }
 
-func (h *Host) List(ctx context.Context) ([]models.InstalledPluginState, error) {
+func (h *Host) List(ctx context.Context) ([]models.InstalledStudioPluginState, error) {
 	if h.Store == nil {
-		return []models.InstalledPluginState{}, nil
+		return []models.InstalledStudioPluginState{}, nil
 	}
-	return h.Store.ListInstalledPlugins(ctx)
+	return h.Store.ListInstalledStudioPlugins(ctx)
 }
 
 func (h *Host) Remove(ctx context.Context, id, version string) error {
@@ -116,24 +118,24 @@ func (h *Host) Remove(ctx context.Context, id, version string) error {
 	if err := rejectPackageSymlinks(filepath.Clean(h.Installer.Directory), filepath.Join(id, version)); err != nil {
 		return err
 	}
-	if err := h.Store.DeleteInstalledPlugin(ctx, id, version); err != nil {
+	if err := h.Store.DeleteInstalledStudioPlugin(ctx, id, version); err != nil {
 		return err
 	}
 	if err := os.RemoveAll(expected); err != nil {
-		return errors.Join(err, h.Store.SaveInstalledPlugin(ctx, state))
+		return errors.Join(err, h.Store.SaveInstalledStudioPlugin(ctx, state))
 	}
 	return nil
 }
 
-func (h *Host) Manifests(ctx context.Context) ([]models.PluginInspection, error) {
+func (h *Host) Manifests(ctx context.Context) ([]models.StudioPluginInspection, error) {
 	if h.Store == nil {
-		return []models.PluginInspection{}, nil
+		return []models.StudioPluginInspection{}, nil
 	}
-	installed, err := h.Store.ListInstalledPlugins(ctx)
+	installed, err := h.Store.ListInstalledStudioPlugins(ctx)
 	if err != nil {
 		return nil, err
 	}
-	result := make([]models.PluginInspection, 0, len(installed))
+	result := make([]models.StudioPluginInspection, 0, len(installed))
 	for _, state := range installed {
 		manifest, manifestErr := h.Installer.verifyInstalled(state.Path)
 		if manifestErr != nil {
@@ -143,7 +145,7 @@ func (h *Host) Manifests(ctx context.Context) ([]models.PluginInspection, error)
 		if trustErr != nil {
 			continue
 		}
-		result = append(result, models.PluginInspection{Manifest: manifest, Digest: state.Digest, GrantedPermissions: trust.GrantedPermissions, Signed: state.Signed})
+		result = append(result, models.StudioPluginInspection{Manifest: manifest, Digest: state.Digest, GrantedPermissions: trust.GrantedPermissions, Signed: state.Signed})
 	}
 	return result, nil
 }
@@ -152,7 +154,7 @@ func (h *Host) Surface(ctx context.Context, id, version, surfaceID string) (stri
 	if h.Store == nil || strings.TrimSpace(id) == "" || strings.TrimSpace(version) == "" || strings.TrimSpace(surfaceID) == "" {
 		return "", models.ErrInvalidStudioPlugin
 	}
-	installed, err := h.Store.ListInstalledPlugins(ctx)
+	installed, err := h.Store.ListInstalledStudioPlugins(ctx)
 	if err != nil {
 		return "", err
 	}
@@ -184,8 +186,8 @@ func (h *Host) Surface(ctx context.Context, id, version, surfaceID string) (stri
 				schema = data
 			}
 			payload, marshalErr := json.Marshal(struct {
-				Surface models.PluginSurface `json:"surface"`
-				Schema  json.RawMessage      `json:"schema"`
+				Surface models.StudioPluginSurface `json:"surface"`
+				Schema  json.RawMessage            `json:"schema"`
 			}{Surface: surface, Schema: schema})
 			if marshalErr != nil {
 				return "", models.ErrInvalidStudioPlugin
@@ -197,12 +199,88 @@ func (h *Host) Surface(ctx context.Context, id, version, surfaceID string) (stri
 	return "", models.ErrInvalidStudioPlugin
 }
 
+// SurfaceAsset returns a bounded file from the directory containing a verified
+// page/panel entry point. It deliberately cannot serve arbitrary package files.
+func (h *Host) SurfaceAsset(ctx context.Context, id, version, surfaceID, assetPath string) ([]byte, string, error) {
+	if h.Store == nil || h.Installer == nil || strings.TrimSpace(id) == "" || strings.TrimSpace(version) == "" || strings.TrimSpace(surfaceID) == "" {
+		return nil, "", models.ErrInvalidStudioPlugin
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, "", err
+	}
+	installed, err := h.Store.ListInstalledStudioPlugins(ctx)
+	if err != nil {
+		return nil, "", err
+	}
+	for _, state := range installed {
+		if state.ID != id || state.Version != version {
+			continue
+		}
+		if !state.Enabled {
+			return nil, "", ErrPluginDisabled
+		}
+		manifest, verifyErr := h.Installer.verifyInstalled(state.Path)
+		if verifyErr != nil {
+			return nil, "", verifyErr
+		}
+		for _, surface := range manifest.Surfaces {
+			if surface.ID != surfaceID || (surface.Kind != "page" && surface.Kind != "panel") || surface.Route == "" {
+				continue
+			}
+			cleanAsset := filepath.ToSlash(assetPath)
+			if strings.ContainsAny(cleanAsset, "\\:\x00") || strings.HasPrefix(cleanAsset, "/") {
+				return nil, "", models.ErrInvalidStudioPlugin
+			}
+			assetParts := strings.Split(cleanAsset, "/")
+			for _, part := range assetParts {
+				if part == "" || part == "." || part == ".." {
+					return nil, "", models.ErrInvalidStudioPlugin
+				}
+			}
+			entryDirectory := filepath.ToSlash(filepath.Dir(filepath.FromSlash(surface.Route)))
+			if entryDirectory == "." {
+				entryDirectory = ""
+			}
+			if entryDirectory != "" && cleanAsset != entryDirectory && !strings.HasPrefix(cleanAsset, entryDirectory+"/") {
+				return nil, "", models.ErrInvalidStudioPlugin
+			}
+			path, pathErr := safeToolExecutable(state.Path, filepath.FromSlash(cleanAsset))
+			if pathErr != nil {
+				return nil, "", pathErr
+			}
+			file, openErr := os.Open(path) //nolint:gosec // path is confined below the verified installed package.
+			if openErr != nil {
+				return nil, "", models.ErrInvalidStudioPlugin
+			}
+			info, statErr := file.Stat()
+			if statErr != nil || !info.Mode().IsRegular() || info.Size() < 0 || info.Size() > maxPluginFileBytes {
+				if closeErr := file.Close(); closeErr != nil {
+					return nil, "", errors.Join(models.ErrInvalidStudioPlugin, closeErr)
+				}
+				return nil, "", models.ErrInvalidStudioPlugin
+			}
+			data, readErr := io.ReadAll(io.LimitReader(file, maxPluginFileBytes+1))
+			closeErr := file.Close()
+			if readErr != nil || closeErr != nil || len(data) > maxPluginFileBytes {
+				return nil, "", models.ErrInvalidStudioPlugin
+			}
+			contentType := mime.TypeByExtension(filepath.Ext(path))
+			if contentType == "" {
+				contentType = "application/octet-stream"
+			}
+			return data, contentType, nil
+		}
+		return nil, "", models.ErrInvalidStudioPlugin
+	}
+	return nil, "", models.ErrInvalidStudioPlugin
+}
+
 func (h *Host) RunTool(ctx context.Context, id, version, toolID, projectRoot string, args []string) (models.ToolExecutionResult, error) {
 	if h.Store == nil || h.Tools == nil || strings.TrimSpace(id) == "" || strings.TrimSpace(version) == "" {
 		return models.ToolExecutionResult{}, models.ErrInvalidStudioPlugin
 	}
-	var installed *models.InstalledPluginState
-	plugins, err := h.Store.ListInstalledPlugins(ctx)
+	var installed *models.InstalledStudioPluginState
+	plugins, err := h.Store.ListInstalledStudioPlugins(ctx)
 	if err != nil {
 		return models.ToolExecutionResult{}, err
 	}
@@ -231,32 +309,32 @@ func (h *Host) RunTool(ctx context.Context, id, version, toolID, projectRoot str
 	})
 }
 
-func (h *Host) StartProcess(ctx context.Context, id, version, projectRoot string) (models.PluginProcessStatus, error) {
+func (h *Host) StartProcess(ctx context.Context, id, version, projectRoot string) (models.StudioPluginProcessStatus, error) {
 	if h.Store == nil || strings.TrimSpace(id) == "" || strings.TrimSpace(version) == "" || !filepath.IsAbs(projectRoot) {
-		return models.PluginProcessStatus{}, models.ErrInvalidStudioPlugin
+		return models.StudioPluginProcessStatus{}, models.ErrInvalidStudioPlugin
 	}
 	state, manifest, err := h.installedManifest(ctx, id, version)
 	if err != nil {
-		return models.PluginProcessStatus{}, err
+		return models.StudioPluginProcessStatus{}, err
 	}
 	if !state.Enabled {
-		return models.PluginProcessStatus{}, ErrPluginDisabled
+		return models.StudioPluginProcessStatus{}, ErrPluginDisabled
 	}
 	if manifest.Process == nil {
-		return models.PluginProcessStatus{}, ErrPluginProcessMissing
+		return models.StudioPluginProcessStatus{}, ErrPluginProcessMissing
 	}
 	if permissionErr := h.requirePermissions(ctx, state, manifest); permissionErr != nil {
-		return models.PluginProcessStatus{}, permissionErr
+		return models.StudioPluginProcessStatus{}, permissionErr
 	}
 	if !platformSupported(manifest.Process.Platforms) {
-		return models.PluginProcessStatus{}, ErrToolPlatform
+		return models.StudioPluginProcessStatus{}, ErrToolPlatform
 	}
 	executable, err := safeToolExecutable(state.Path, manifest.Process.Executable)
 	if err != nil {
-		return models.PluginProcessStatus{}, err
+		return models.StudioPluginProcessStatus{}, err
 	}
 	if info, statErr := os.Stat(projectRoot); statErr != nil || !info.IsDir() {
-		return models.PluginProcessStatus{}, models.ErrInvalidStudioPlugin
+		return models.StudioPluginProcessStatus{}, models.ErrInvalidStudioPlugin
 	}
 	key := processKey(id, version)
 	supervisor := h.supervisor()
@@ -271,7 +349,7 @@ func (h *Host) StartProcess(ctx context.Context, id, version, projectRoot string
 		if manifest.Process.TimeoutMillis > int64((30*time.Minute)/time.Millisecond) {
 			cancel()
 			processSupervisorMu.Unlock()
-			return models.PluginProcessStatus{}, models.ErrInvalidStudioPlugin
+			return models.StudioPluginProcessStatus{}, models.ErrInvalidStudioPlugin
 		}
 		processContext, cancel = context.WithTimeout(ctx, time.Duration(manifest.Process.TimeoutMillis)*time.Millisecond)
 	}
@@ -279,11 +357,11 @@ func (h *Host) StartProcess(ctx context.Context, id, version, projectRoot string
 	if commandErr != nil {
 		cancel()
 		processSupervisorMu.Unlock()
-		return models.PluginProcessStatus{}, commandErr
+		return models.StudioPluginProcessStatus{}, commandErr
 	}
 	command.Dir = filepath.Clean(projectRoot)
 	command.Env = allowlistedEnvironment(manifest.Process.Environment)
-	managed := &managedProcess{cancel: cancel, cmd: command, status: models.PluginProcessStatus{PluginID: id, Version: version, State: "starting", Sandboxed: sandboxed, Warning: warning}}
+	managed := &managedProcess{cancel: cancel, cmd: command, status: models.StudioPluginProcessStatus{StudioPluginID: id, Version: version, State: "starting", Sandboxed: sandboxed, Warning: warning}}
 	supervisor.processes[key] = managed
 	processSupervisorMu.Unlock()
 	if err := command.Start(); err != nil {
@@ -335,21 +413,21 @@ func (h *Host) StopProcess(_ context.Context, id, version string) error {
 	return nil
 }
 
-func (h *Host) ProcessStatus(_ context.Context, id, version string) (models.PluginProcessStatus, error) {
+func (h *Host) ProcessStatus(_ context.Context, id, version string) (models.StudioPluginProcessStatus, error) {
 	supervisor := h.supervisor()
 	processSupervisorMu.Lock()
 	defer processSupervisorMu.Unlock()
 	managed := supervisor.processes[processKey(id, version)]
 	if managed == nil {
-		return models.PluginProcessStatus{}, ErrPluginProcessNotFound
+		return models.StudioPluginProcessStatus{}, ErrPluginProcessNotFound
 	}
 	return managed.status, nil
 }
 
-func (h *Host) installedManifest(ctx context.Context, id, version string) (models.InstalledPluginState, models.StudioPluginManifest, error) {
-	plugins, err := h.Store.ListInstalledPlugins(ctx)
+func (h *Host) installedManifest(ctx context.Context, id, version string) (models.InstalledStudioPluginState, models.StudioPluginManifest, error) {
+	plugins, err := h.Store.ListInstalledStudioPlugins(ctx)
 	if err != nil {
-		return models.InstalledPluginState{}, models.StudioPluginManifest{}, err
+		return models.InstalledStudioPluginState{}, models.StudioPluginManifest{}, err
 	}
 	for _, state := range plugins {
 		if state.ID == id && state.Version == version {
@@ -357,10 +435,10 @@ func (h *Host) installedManifest(ctx context.Context, id, version string) (model
 			return state, manifest, manifestErr
 		}
 	}
-	return models.InstalledPluginState{}, models.StudioPluginManifest{}, models.ErrInvalidStudioPlugin
+	return models.InstalledStudioPluginState{}, models.StudioPluginManifest{}, models.ErrInvalidStudioPlugin
 }
 
-func (h *Host) requirePermissions(ctx context.Context, state models.InstalledPluginState, manifest models.StudioPluginManifest) error {
+func (h *Host) requirePermissions(ctx context.Context, state models.InstalledStudioPluginState, manifest models.StudioPluginManifest) error {
 	trust, err := h.Store.ReadTrustState(ctx, state.Digest)
 	if err != nil {
 		return err

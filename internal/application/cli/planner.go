@@ -2,6 +2,7 @@
 package cli
 
 import (
+	"encoding/hex"
 	"errors"
 	"path/filepath"
 	"strings"
@@ -45,6 +46,26 @@ func Plan(intent models.CLIIntent, projectRoot string) ([]string, error) {
 			return nil, ErrInvalidIntent
 		}
 		args = []string{"core", strings.TrimPrefix(intent.Command, "core."), "--target", target}
+	case "core.settings.inspect":
+		if target != "local" {
+			return nil, ErrInvalidIntent
+		}
+		args = []string{"core", "settings", "inspect", "--target", target}
+	case "core.settings.update":
+		if target != "local" || !validAbsolutePath(intent.RequestFilePath) {
+			return nil, ErrInvalidIntent
+		}
+		args = []string{"core", "settings", "update", "--target", target, "--request-file", filepath.Clean(intent.RequestFilePath), "--confirm"}
+	case "core.binary.inspect":
+		if !validAbsolutePath(intent.BinaryPath) {
+			return nil, ErrInvalidIntent
+		}
+		args = []string{"core", "binary", "inspect", "--path", filepath.Clean(intent.BinaryPath)}
+	case "core.binary.update":
+		if target != "local" || !validAbsolutePath(intent.BinaryPath) || !validSHA256(intent.Digest) {
+			return nil, ErrInvalidIntent
+		}
+		args = []string{"core", "binary", "update", "--target", target, "--path", filepath.Clean(intent.BinaryPath), "--digest", intent.Digest, "--confirm"}
 	case "credential.status":
 		if target != "local" {
 			return nil, ErrInvalidIntent
@@ -60,6 +81,21 @@ func Plan(intent models.CLIIntent, projectRoot string) ([]string, error) {
 			return nil, ErrInvalidIntent
 		}
 		args = []string{"apply", "--project", root, "--revision", "HEAD", "--target", target, "--confirm"}
+	case "dev.plan":
+		if target != "local" {
+			return nil, ErrInvalidIntent
+		}
+		args = []string{"dev", "plan", "--project", root, "--target", target}
+	case "dev.apply":
+		if target != "local" {
+			return nil, ErrInvalidIntent
+		}
+		args = []string{"dev", "apply", "--project", root, "--target", target, "--confirm", "--wait"}
+	case "dev.apply.retryFailed":
+		if target != "local" {
+			return nil, ErrInvalidIntent
+		}
+		args = []string{"dev", "apply", "--project", root, "--target", target, "--confirm", "--wait", "--retry-failed"}
 	case "operation.get", "operation.watch":
 		if target != "local" || strings.TrimSpace(intent.OperationID) == "" || strings.ContainsAny(intent.OperationID, " /\\:@?#\x00\r\n") {
 			return nil, ErrInvalidIntent
@@ -70,34 +106,71 @@ func Plan(intent models.CLIIntent, projectRoot string) ([]string, error) {
 			return nil, ErrInvalidIntent
 		}
 		args = []string{"observe", "traffic", "--project", root, "--target", target}
-	case "plugin.artifact.list":
-		args = []string{"plugin", "artifact", "list"}
-	case "plugin.artifact.inspect":
+	case "service.artifact.list":
+		args = []string{"service", "artifact", "list"}
+	case "service.artifact.inspect":
 		if !validArtifactFields(intent) {
 			return nil, ErrInvalidIntent
 		}
-		args = []string{"plugin", "artifact", "inspect", "--id", intent.ArtifactID, "--version", intent.Version, "--platform", intent.Platform}
-	case "plugin.artifact.register":
+		args = []string{"service", "artifact", "inspect", "--id", intent.ArtifactID, "--version", intent.Version, "--platform", intent.Platform}
+	case "service.artifact.register":
 		if !validArtifactFields(intent) || !validAbsolutePath(intent.BinaryPath) {
 			return nil, ErrInvalidIntent
 		}
-		args = []string{"plugin", "artifact", "register", "--id", intent.ArtifactID, "--version", intent.Version, "--platform", intent.Platform, "--path", filepath.Clean(intent.BinaryPath)}
-	case "plugin.artifact.trust":
+		args = []string{"service", "artifact", "register", "--id", intent.ArtifactID, "--version", intent.Version, "--platform", intent.Platform, "--path", filepath.Clean(intent.BinaryPath)}
+	case "service.artifact.trust":
 		if !validArtifactFields(intent) || strings.TrimSpace(intent.Digest) == "" {
 			return nil, ErrInvalidIntent
 		}
-		args = []string{"plugin", "artifact", "trust", "--id", intent.ArtifactID, "--version", intent.Version, "--platform", intent.Platform, "--digest", intent.Digest}
-	case "plugin.inspect", "plugin.manifest", "plugin.schema", "plugin.status":
-		if target != "local" || !validTarget(intent.ArtifactID) {
+		args = []string{"service", "artifact", "trust", "--id", intent.ArtifactID, "--version", intent.Version, "--platform", intent.Platform, "--digest", intent.Digest}
+	case "service.artifact.remove":
+		if !validArtifactFields(intent) {
 			return nil, ErrInvalidIntent
 		}
-		args = []string{"plugin", strings.TrimPrefix(intent.Command, "plugin."), intent.ArtifactID, "--target", target}
+		args = []string{"service", "artifact", "remove", "--id", intent.ArtifactID, "--version", intent.Version, "--platform", intent.Platform}
+	case "service.inspect", "service.manifest", "service.schema", "service.status":
+		if target != "local" || !validTarget(intent.ServiceID) {
+			return nil, ErrInvalidIntent
+		}
+		args = []string{"service", strings.TrimPrefix(intent.Command, "service."), intent.ServiceID, "--target", target}
+	case "service.admin-surface.inspect":
+		if target != "local" || !validTarget(intent.ServiceID) {
+			return nil, ErrInvalidIntent
+		}
+		args = []string{"service", "admin-surface", "inspect", intent.ServiceID, "--target", target}
+	case "service.resource.list":
+		if target != "local" || !validTarget(intent.ServiceID) || !validTarget(intent.ResourceID) {
+			return nil, ErrInvalidIntent
+		}
+		args = []string{"service", "resource", "list", intent.ServiceID, "--resource", intent.ResourceID, "--target", target}
+	case "service.resource.publish":
+		if target != "local" || !validTarget(intent.ServiceID) || !validTarget(intent.PageID) || !validTarget(intent.ActionID) ||
+			!validRelativeResourcePath(intent.ArtifactPath) || !validRelativeResourcePath(intent.MetadataPath) ||
+			strings.TrimSpace(intent.ContentType) == "" || strings.TrimSpace(intent.IdempotencyKey) == "" ||
+			strings.ContainsAny(intent.ContentType+intent.IfMatch+intent.IdempotencyKey, "\r\n") {
+			return nil, ErrInvalidIntent
+		}
+		args = []string{"service", "resource", "publish", intent.ServiceID,
+			"--project", root, "--page", intent.PageID, "--action", intent.ActionID,
+			"--artifact-file", filepath.ToSlash(filepath.Clean(intent.ArtifactPath)), "--content-type", intent.ContentType,
+			"--metadata-file", filepath.ToSlash(filepath.Clean(intent.MetadataPath))}
+		if intent.IfMatch != "" {
+			args = append(args, "--if-match", intent.IfMatch)
+		}
+		args = append(args, "--idempotency-key", intent.IdempotencyKey, "--target", target)
 	case "runtime.plan", "runtime.start", "runtime.stop", "runtime.restart", "runtime.status", "runtime.logs", "runtime.inspect":
 		if target != "local" {
 			return nil, ErrInvalidIntent
 		}
-		args = []string{"runtime", strings.TrimPrefix(intent.Command, "runtime."), "--project", root, "--revision", "HEAD", "--target", target}
-		if isOneOf(intent.Command, "runtime.restart", "runtime.logs", "runtime.inspect") {
+		// Local Docker runtime is a development workflow and must observe the
+		// Project currently open in Studio, including uncommitted artifact pins.
+		args = []string{"runtime", strings.TrimPrefix(intent.Command, "runtime."), "--project", root, "--revision", "WORKING_TREE", "--target", target}
+		if strings.TrimSpace(intent.ServiceID) != "" {
+			if !isOneOf(intent.Command, "runtime.start", "runtime.stop", "runtime.restart", "runtime.logs", "runtime.inspect") || !validTarget(intent.ServiceID) {
+				return nil, ErrInvalidIntent
+			}
+			args = append(args, "--service", intent.ServiceID)
+		} else if isOneOf(intent.Command, "runtime.logs", "runtime.inspect") {
 			if !validTarget(intent.ServiceID) {
 				return nil, ErrInvalidIntent
 			}
@@ -111,6 +184,18 @@ func Plan(intent models.CLIIntent, projectRoot string) ([]string, error) {
 
 func validTarget(value string) bool {
 	return strings.TrimSpace(value) != "" && !strings.HasPrefix(value, "-") && !strings.ContainsAny(value, " /\\:@?#\x00\r\n")
+}
+
+func validSHA256(value string) bool {
+	if len(value) != len("sha256:")+64 || !strings.HasPrefix(value, "sha256:") {
+		return false
+	}
+	digest := value[len("sha256:"):]
+	if strings.ToLower(digest) != digest {
+		return false
+	}
+	_, err := hex.DecodeString(digest)
+	return err == nil
 }
 
 func isOneOf(value string, values ...string) bool {
@@ -129,6 +214,10 @@ func validRelativeProfile(value string) bool {
 	}
 	clean := filepath.Clean(value)
 	return clean != "." && clean != ".." && !strings.HasPrefix(clean, ".."+string(filepath.Separator))
+}
+
+func validRelativeResourcePath(value string) bool {
+	return validRelativeProfile(value) && !strings.Contains(value, `\`)
 }
 
 func validArtifactFields(intent models.CLIIntent) bool {

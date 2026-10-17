@@ -75,7 +75,7 @@ const generated = `export namespace models {
     conflict: boolean;
     constructor(source: any = {}) {}
   }
-  export class InstalledPluginState {
+  export class InstalledStudioPluginState {
     ID: string;
     Version: string;
     Digest: string;
@@ -84,7 +84,46 @@ const generated = `export namespace models {
     Signed: boolean;
     constructor(source: any = {}) {}
   }
-  export class PluginLink {
+  export class ProductInfo {
+    name: string;
+    description: string;
+    workspaceFeatures: string[];
+    constructor(source: any = {}) {}
+  }
+  export class Project {
+    id: string;
+    name: string;
+    rootPath: string;
+    constructor(source: any = {}) {}
+  }
+  export class ProjectFile {
+    path: string;
+    kind: string;
+    bytes: number;
+    constructor(source: any = {}) {}
+  }
+  export class RuntimeService {
+    id: string;
+    name: string;
+    version: string;
+    manifestVersion: string;
+    servicePath: string;
+    settingsPath: string;
+    settingsSchemaPath: string;
+    linkPaths: string[];
+    problemCount: number;
+    configured: boolean;
+    constructor(source: any = {}) {}
+  }
+  export class RuntimeServiceInput {
+    id: string;
+    name: string;
+    version: string;
+    manifestVersion: string;
+    settingsSchemaPath: string;
+    constructor(source: any = {}) {}
+  }
+  export class ServiceLink {
     responseSchemaPath: string;
     target: string;
     contractVersion: string;
@@ -106,25 +145,12 @@ const generated = `export namespace models {
     valid: boolean;
     constructor(source: any = {}) {}
   }
-  export class RuntimePlugin {
-    id: string;
-    name: string;
-    version: string;
-    manifestVersion: string;
-    servicePath: string;
-    settingsPath: string;
-    settingsSchemaPath: string;
-    linkPaths: string[];
-    problemCount: number;
-    configured: boolean;
+  export class ServiceGraph {
+    services: RuntimeService[];
+    links: ServiceLink[];
     constructor(source: any = {}) {}
   }
-  export class PluginGraph {
-    plugins: RuntimePlugin[];
-    links: PluginLink[];
-    constructor(source: any = {}) {}
-  }
-  export class PluginLinkInput {
+  export class ServiceLinkInput {
     id: string;
     caller: string;
     target: string;
@@ -144,30 +170,12 @@ const generated = `export namespace models {
     redactionPolicy: string;
     constructor(source: any = {}) {}
   }
-  export class ProductInfo {
-    name: string;
-    description: string;
-    workspaceFeatures: string[];
-    constructor(source: any = {}) {}
-  }
-  export class Project {
-    id: string;
-    name: string;
-    rootPath: string;
-    constructor(source: any = {}) {}
-  }
-  export class ProjectFile {
-    path: string;
-    kind: string;
-    bytes: number;
-    constructor(source: any = {}) {}
-  }
-  export class RuntimePluginInput {
-    id: string;
-    name: string;
-    version: string;
-    manifestVersion: string;
-    settingsSchemaPath: string;
+  export class ServiceSettingsSchemaPreview {
+    schemaJson: string;
+    schemaDigest: string;
+    settingsDigest: string;
+    draftDigest: string;
+    valuesCompatible: boolean;
     constructor(source: any = {}) {}
   }
   export class ToolchainStatus {
@@ -198,7 +206,7 @@ const generated = `export namespace models {
   }
   export class Workspace {
     project?: Project;
-    graph: PluginGraph;
+    graph: ServiceGraph;
     files: ProjectFile[];
     git: GitStatus;
     constructor(source: any = {}) {}
@@ -213,12 +221,54 @@ const generated = `export namespace models {
 }`
 
 await test('Wails preparation is idempotent and rejects schema drift', () => {
-  assert.equal(prepareModels(generated), modelModule)
+  assert.throws(() => prepareModels(generated), /Unsupported Wails model schema/u)
   assert.equal(prepareModels(modelModule), modelModule)
   assert.throws(() => prepareModels(generated.replace('name: string;', 'name: number;')))
   assert.throws(() => prepareModels(generated.replace('constructor', 'extra: string;\nconstructor')))
   assert.throws(() => prepareModels(generated.replace('constructor', 'extra: number;\nconstructor')))
   assert.throws(() => prepareModels(`${generated}\nexport class Another {}`))
+})
+
+await test('Wails preparation accepts only the complete current model schema', () => {
+  const current = generated
+    .replace('export namespace models {', `export namespace models {
+  export class ArtifactReference {
+    id: string;
+    version: string;
+    platform: string;
+    digest: string;
+    command?: string;
+    manifest?: string;
+    schema?: string;
+    trusted: boolean;
+    constructor(source: any = {}) {}
+  }`)
+    .replace('  export class RuntimeService {', `  export class ReportSummary {
+    operationId: string;
+    target: string;
+    commitSha: string;
+    generation: string;
+    bundleDigest: string;
+    cliVersion: string;
+    coreApiCompatibility: string;
+    importedAt: string;
+    state: string;
+    replicaCount: number;
+    readyReplicas: number;
+    constructor(source: any = {}) {}
+  }
+  export class ServiceArtifactReference {
+    id: string;
+    version: string;
+    platform: string;
+    digest: string;
+    constructor(source: any = {}) {}
+  }
+  export class RuntimeService {`)
+    .replace('    configured: boolean;\n    constructor(source: any = {}) {}\n  }', '    configured: boolean;\n    artifact?: ServiceArtifactReference;\n    constructor(source: any = {}) {}\n  }')
+  assert.equal(prepareModels(current), modelModule)
+  assert.throws(() => prepareModels(current.replace('importedAt: string;', 'importedAt: number;')))
+  assert.throws(() => prepareModels(current.replace('schema?: string;', 'schema?: number;')))
 })
 
 await test('declaration preparation preserves signatures and is idempotent', () => {

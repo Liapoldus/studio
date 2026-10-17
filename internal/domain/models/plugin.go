@@ -5,9 +5,10 @@ import "errors"
 var (
 	ErrInvalidStudioPlugin        = errors.New("invalid Studio plugin package")
 	ErrPermissionApprovalRequired = errors.New("required Studio plugin permissions were not approved")
+	ErrStudioPluginDigestMismatch = errors.New("studio plugin package changed after inspection")
 )
 
-type PluginSurface struct {
+type StudioPluginSurface struct {
 	ID     string `json:"id"`
 	Kind   string `json:"kind"`
 	Title  string `json:"title"`
@@ -16,54 +17,54 @@ type PluginSurface struct {
 	ToolID string `json:"toolId,omitempty"`
 }
 
-type PluginArtifact struct {
+type StudioPluginArtifact struct {
 	Platform string `json:"platform"`
 	Path     string `json:"path"`
 	Digest   string `json:"digest"`
 }
 
 type CompanionTool struct {
-	Artifacts     []PluginArtifact `json:"artifacts,omitempty"`
-	Permissions   map[string]any   `json:"permissions,omitempty"`
-	Environment   []string         `json:"environment,omitempty"`
-	ID            string           `json:"id"`
-	Version       string           `json:"version"`
-	Executable    string           `json:"executable"`
-	Platforms     []string         `json:"platforms"`
-	TimeoutMillis int64            `json:"timeoutMillis,omitempty"`
+	Artifacts     []StudioPluginArtifact `json:"artifacts,omitempty"`
+	Permissions   map[string]any         `json:"permissions,omitempty"`
+	Environment   []string               `json:"environment,omitempty"`
+	ID            string                 `json:"id"`
+	Version       string                 `json:"version"`
+	Executable    string                 `json:"executable"`
+	Platforms     []string               `json:"platforms"`
+	TimeoutMillis int64                  `json:"timeoutMillis,omitempty"`
 }
 
-type PluginProcess struct {
-	Artifacts     []PluginArtifact `json:"artifacts,omitempty"`
-	Environment   []string         `json:"environment,omitempty"`
-	Executable    string           `json:"executable"`
-	Platforms     []string         `json:"platforms"`
-	TimeoutMillis int64            `json:"timeoutMillis,omitempty"`
+type StudioPluginProcess struct {
+	Artifacts     []StudioPluginArtifact `json:"artifacts,omitempty"`
+	Environment   []string               `json:"environment,omitempty"`
+	Executable    string                 `json:"executable"`
+	Platforms     []string               `json:"platforms"`
+	TimeoutMillis int64                  `json:"timeoutMillis,omitempty"`
 }
 
 type StudioPluginManifest struct {
-	ID          string          `json:"id"`
-	Name        string          `json:"name"`
-	Version     string          `json:"version"`
-	StudioRange string          `json:"studioRange"`
-	Signature   string          `json:"signature,omitempty"`
-	Process     *PluginProcess  `json:"process,omitempty"`
-	Surfaces    []PluginSurface `json:"surfaces"`
-	Tools       []CompanionTool `json:"tools"`
-	Permissions []string        `json:"permissions"`
+	ID          string                `json:"id"`
+	Name        string                `json:"name"`
+	Version     string                `json:"version"`
+	StudioRange string                `json:"studioRange"`
+	Signature   string                `json:"signature,omitempty"`
+	Process     *StudioPluginProcess  `json:"process,omitempty"`
+	Surfaces    []StudioPluginSurface `json:"surfaces"`
+	Tools       []CompanionTool       `json:"tools"`
+	Permissions []string              `json:"permissions"`
 }
 
 //nolint:govet // wire-model field order follows the public JSON contract.
-type PluginProcessStatus struct {
-	PluginID  string `json:"pluginId"`
-	Version   string `json:"version"`
-	State     string `json:"state"`
-	ErrorCode string `json:"errorCode,omitempty"`
-	Sandboxed bool   `json:"sandboxed"`
-	Warning   string `json:"warning,omitempty"`
+type StudioPluginProcessStatus struct {
+	StudioPluginID string `json:"studioPluginId"`
+	Version        string `json:"version"`
+	State          string `json:"state"`
+	ErrorCode      string `json:"errorCode,omitempty"`
+	Sandboxed      bool   `json:"sandboxed"`
+	Warning        string `json:"warning,omitempty"`
 }
 
-type PluginInspection struct {
+type StudioPluginInspection struct {
 	Manifest           StudioPluginManifest `json:"manifest"`
 	Digest             string               `json:"digest"`
 	Files              []string             `json:"files"`
@@ -72,12 +73,13 @@ type PluginInspection struct {
 }
 
 type TrustDecision struct {
+	ExpectedDigest     string
 	Reason             string
 	GrantedPermissions []string
 	Approved           bool
 }
 
-type InstalledPlugin struct {
+type InstalledStudioPlugin struct {
 	Digest   string               `json:"digest"`
 	Path     string               `json:"path"`
 	Manifest StudioPluginManifest `json:"manifest"`

@@ -1,11 +1,11 @@
-import { CancelCLI, ClientPreferences as ReadClientPreferences, CreatePluginLink, CreateProject, CreateRuntimePlugin, DeletePluginLink, DeleteRuntimePlugin, Diagnostics, EditorAssociations as ReadEditorAssociations, ExportTrafficReport, GitAbort, GitApplyStash, GitBranches, GitCheckout, GitCherryPick, GitCommit as RunGitCommit, GitCommitStaged, GitConflict as ReadGitConflict, GitDiff as ReadGitDiff, GitHistory, GitMerge, GitPull, GitPush, GitRebase, GitRemotes, GitResolveConflict, GitStage, GitStash, GitStashes, GitUnstage, InitializeGit, InspectStudioPlugin, InstallStudioPlugin, InstalledStudioPluginManifests, InstalledStudioPlugins, ListProjects, ListRuntimeArtifacts, OpenFileExternally, OpenProject, PrepareRemoteHandoff, ProductInfo, ReadProjectFile, ReadProjectSchema, ReadProjectSettings, ReadRuntimePluginMetadata, ReadStudioPluginSurface, ReadWorkspaceState, RemoveStudioPlugin, RunStudioCommand, RunStudioRuntimeCommand, RunStudioPluginTool, SaveClientLocale, SaveClientPreferences, SaveEditorAssociation, SelectExternalEditor, SelectProjectCreationDirectory, SelectRuntimeArtifactBinary, SelectStudioPluginPackage, SelectTargetProfile, StartStudioPluginProcess, StopStudioPluginProcess, StudioPluginProcessStatus, ToolchainStatus as ReadToolchainStatus, TrafficRecords, TrustRuntimeArtifact, RegisterRuntimeArtifact, Workspace as ReadWorkspace, WriteProjectFile, WriteProjectSettings, WriteWorkspaceState } from '../../wailsjs/go/wails/App'
+import { BindRuntimeServiceArtifact, CancelCLI, ClientPreferences as ReadClientPreferences, ConfigureCLIExecutable, CreateServiceLink, CreateProject, CreateRuntimeService, DeleteServiceLink, DeleteRuntimeService, DeleteServiceSettingsDraft, Diagnostics, EditorAssociations as ReadEditorAssociations, ExportTrafficReport, GitAbort, GitApplyStash, GitBranches, GitCheckout, GitCherryPick, GitCommit as RunGitCommit, GitCommitStaged, GitConflict as ReadGitConflict, GitDiff as ReadGitDiff, GitHistory, GitMerge, GitPull, GitPush, GitRebase, GitRemotes, GitResolveConflict, GitStage, GitStash, GitStashes, GitUnstage, ImportServiceSettingsSchema, PreviewServiceSettingsSchema, RefreshServiceSettingsSchema, InitializeGit, InspectCoreBinary, InspectStudioPlugin, InstallStudioPlugin, InstalledStudioPluginManifests, InstalledStudioPlugins, LatestReportSummary, ListProjects, ListRuntimeArtifacts, OpenFileExternally, OpenProject, PrepareRemoteHandoff, ProductInfo, PublishRuntimeServiceResourceJSON, ReadCoreSettings as ReadCoreSettingsView, ReadProjectSchema, ReadProjectSettings, ReadRuntimeServiceMetadata, ReadRuntimeServiceAdminSurface, ReadRuntimeServiceResource, ReadServiceSettingsDraft, ReadStudioPluginSurface, ReadWorkspaceState, RemoveEditorAssociation, RemoveRuntimeArtifact, RemoveStudioPlugin, RunStudioCommand, RunStudioCommandAndWait, RunStudioRuntimeCommand, RunStudioPluginTool, SaveClientLocale, SaveClientPreferences, SaveEditorAssociation, SaveServiceSettingsDraft, SelectCLIExecutable, SelectExternalEditor, SelectProjectCreationDirectory, SelectProjectDirectory, SelectRuntimeServiceResourceArtifact, ImportRuntimeServiceProjectCertificate, SelectRuntimeArtifactBinary, SelectStudioPluginPackage, SelectTargetProfile, StartStudioPluginProcess, StopStudioPluginProcess, StudioPluginProcessStatus, ToolchainStatus as ReadToolchainStatus, TrafficRecords, TrustRuntimeArtifact, RegisterRuntimeArtifact, UpdateCoreSettings as ApplyCoreSettings, UpdateLocalCoreBinary, UpdateServiceLink, Workspace as ReadWorkspace, WriteProjectSettings, WriteWorkspaceState } from '../../wailsjs/go/wails/App'
 import { EventsOn } from '../../wailsjs/runtime/runtime'
-import { Diagnostic as DiagnosticDataModel, GitBranch, GitCommit, GitConflict, GitDiff, GitRemote, GitStash as GitStashDataModel, InstalledPluginState, ProductInfo as ProductInfoData, Project, TrafficRecordView, Workspace as WorkspaceData, WorkspaceState } from './info'
+import { Diagnostic as DiagnosticDataModel, GitBranch, GitCommit, GitConflict, GitDiff, GitRemote, GitStash as GitStashDataModel, InstalledStudioPluginState, ProductInfo as ProductInfoData, Project, ServiceSettingsSchemaPreview as ServiceSettingsSchemaPreviewData, TrafficRecordView, Workspace as WorkspaceData, WorkspaceState } from './info'
 import { decodeWailsBytes } from './bytes'
-import type { CLIEvent, ClientPreferences, EditorAssociation, Locale, PluginLinkInput, RuntimePluginInput, StudioAPI } from './types'
+import type { CLIEvent, ClientPreferences, EditorAssociation, Locale, PersistedServiceSettingsDraft, ProjectSettingsSnapshot, ServiceLinkInput, RuntimeServiceInput, StudioAPI } from './types'
+import { parseCoreSettingsView } from '../models/coreSettings'
 
-export async function selectProjectDirectory(): Promise<string> {
-  const { SelectProjectDirectory } = await import('../../wailsjs/go/wails/App')
+export function selectProjectDirectory(): Promise<string> {
   return SelectProjectDirectory()
 }
 
@@ -21,6 +21,12 @@ export function createWailsStudioAPI(): StudioAPI {
     toolchainStatus() {
       return ReadToolchainStatus()
     },
+    selectCLIExecutable() {
+      return SelectCLIExecutable()
+    },
+    configureCLIExecutable(path) {
+      return ConfigureCLIExecutable(path)
+    },
     async clientPreferences() {
       return JSON.parse(await ReadClientPreferences()) as ClientPreferences
     },
@@ -32,6 +38,9 @@ export function createWailsStudioAPI(): StudioAPI {
     },
     async listProjects() {
       return (await ListProjects()).map((project) => new Project(project))
+    },
+    selectProjectCreationDirectory() {
+      return SelectProjectCreationDirectory()
     },
     async openProject(root) {
       return new WorkspaceData(await OpenProject(root))
@@ -60,39 +69,61 @@ export function createWailsStudioAPI(): StudioAPI {
     saveEditorAssociation(pattern, application) {
       return SaveEditorAssociation(pattern, application)
     },
-    async readProjectFile(path) {
-      return decodeWailsBytes(await ReadProjectFile(path))
+    removeEditorAssociation(pattern) {
+      return RemoveEditorAssociation(pattern)
     },
-    writeProjectFile(path, content) {
-      return WriteProjectFile(path, Array.from(content))
+    async readProjectSettings(projectID, serviceID) {
+      return parseSettingsSnapshot(await ReadProjectSettings(projectID, serviceID))
     },
-    async readProjectSchema(schemaPath) {
-      return decodeWailsBytes(await ReadProjectSchema(schemaPath))
+    writeProjectSettings(projectID, serviceID, expectedDigest, patch) {
+      return WriteProjectSettings(projectID, serviceID, expectedDigest, Array.from(patch))
     },
-    async readProjectSettings(settingsPath, schemaPath) {
-      return decodeWailsBytes(await ReadProjectSettings(settingsPath, schemaPath))
+    async readServiceSettingsDraft(projectID, serviceID) {
+      const encoded = await ReadServiceSettingsDraft(projectID, serviceID)
+      return encoded ? parsePersistedSettingsDraft(encoded) : null
     },
-    writeProjectSettings(settingsPath, schemaPath, patch) {
-      return WriteProjectSettings(settingsPath, schemaPath, Array.from(patch))
+    saveServiceSettingsDraft(projectID, serviceID, baseDigest, patchJson) {
+      return SaveServiceSettingsDraft(projectID, serviceID, baseDigest, patchJson)
+    },
+    deleteServiceSettingsDraft(projectID, serviceID) {
+      return DeleteServiceSettingsDraft(projectID, serviceID)
+    },
+    async readProjectSchema(projectID, serviceID) {
+      return decodeWailsBytes(await ReadProjectSchema(projectID, serviceID))
+    },
+    async importServiceSettingsSchema(projectID, serviceID) {
+      return new WorkspaceData(await ImportServiceSettingsSchema(projectID, serviceID))
+    },
+    async previewServiceSettingsSchema(projectID, serviceID, patchJSON) {
+      return new ServiceSettingsSchemaPreviewData(await PreviewServiceSettingsSchema(projectID, serviceID, patchJSON))
+    },
+    async refreshServiceSettingsSchema(projectID, serviceID, preview, patchJSON) {
+      return new WorkspaceData(await RefreshServiceSettingsSchema(projectID, serviceID, preview.schemaDigest, preview.settingsDigest, preview.draftDigest, patchJSON))
     },
     runStudioCommand(command, target, operationID, profilePath) {
       return RunStudioCommand(command, target ?? '', operationID ?? '', profilePath ?? '')
+    },
+    runStudioCommandAndWait(command, target, operationID, profilePath) {
+      return RunStudioCommandAndWait(command, target ?? '', operationID ?? '', profilePath ?? '')
     },
     runStudioRuntimeCommand(command, serviceID) { return RunStudioRuntimeCommand(command, serviceID) },
     initializeGit() {
       return InitializeGit().then((value) => new WorkspaceData(value))
     },
-    createRuntimePlugin(input: RuntimePluginInput) {
-      return CreateRuntimePlugin(input).then((value) => new WorkspaceData(value))
+    createRuntimeService(input: RuntimeServiceInput) {
+      return CreateRuntimeService(input).then((value) => new WorkspaceData(value))
     },
-    deleteRuntimePlugin(id, confirmed) {
-      return DeleteRuntimePlugin(id, confirmed).then((value) => new WorkspaceData(value))
+    deleteRuntimeService(id, confirmed) {
+      return DeleteRuntimeService(id, confirmed).then((value) => new WorkspaceData(value))
     },
-    createPluginLink(input: PluginLinkInput) {
-      return CreatePluginLink(input).then((value) => new WorkspaceData(value))
+    createServiceLink(input: ServiceLinkInput) {
+      return CreateServiceLink(input).then((value) => new WorkspaceData(value))
     },
-    deletePluginLink(caller, id, confirmed) {
-      return DeletePluginLink(caller, id, confirmed).then((value) => new WorkspaceData(value))
+    updateServiceLink(input: ServiceLinkInput) {
+      return UpdateServiceLink(input).then((value) => new WorkspaceData(value))
+    },
+    deleteServiceLink(caller, id, confirmed) {
+      return DeleteServiceLink(caller, id, confirmed).then((value) => new WorkspaceData(value))
     },
     selectTargetProfile() {
       return SelectTargetProfile()
@@ -109,8 +140,29 @@ export function createWailsStudioAPI(): StudioAPI {
     async trustRuntimeArtifact(id, version, platform, digest) {
       return (await TrustRuntimeArtifact(id, version, platform, digest))
     },
-    readRuntimePluginMetadata(pluginID, view) {
-      return ReadRuntimePluginMetadata(pluginID, view)
+    removeRuntimeArtifact(id, version, platform, digest, confirmed) {
+      return RemoveRuntimeArtifact(id, version, platform, digest, confirmed)
+    },
+    async bindRuntimeServiceArtifact(projectID, serviceID, version, platform) {
+      return new WorkspaceData(await BindRuntimeServiceArtifact(projectID, serviceID, version, platform))
+    },
+    readRuntimeServiceMetadata(projectID, serviceID, view) {
+      return ReadRuntimeServiceMetadata(projectID, serviceID, view)
+    },
+    readRuntimeServiceAdminSurface(projectID, serviceID) {
+      return ReadRuntimeServiceAdminSurface(projectID, serviceID)
+    },
+    selectRuntimeServiceResourceArtifact(projectID, serviceID) {
+      return SelectRuntimeServiceResourceArtifact(projectID, serviceID)
+    },
+    importRuntimeServiceProjectCertificate(projectID, serviceID, resourceID) {
+      return ImportRuntimeServiceProjectCertificate(projectID, serviceID, resourceID)
+    },
+    publishRuntimeServiceResourceJSON(projectID, serviceID, pageID, actionID, artifactPath, contentType, metadataJSON, ifMatch) {
+      return PublishRuntimeServiceResourceJSON(projectID, serviceID, pageID, actionID, artifactPath, contentType, metadataJSON, ifMatch)
+    },
+    readRuntimeServiceResource(projectID, serviceID, resourceID) {
+      return ReadRuntimeServiceResource(projectID, serviceID, resourceID)
     },
     prepareRemoteHandoff(target) {
       return PrepareRemoteHandoff(target)
@@ -124,6 +176,10 @@ export function createWailsStudioAPI(): StudioAPI {
     async trafficRecords() {
       return (await TrafficRecords()).map((record) => new TrafficRecordView(record))
     },
+    async latestReportSummary() {
+      const summary = await LatestReportSummary()
+      return summary.state ? summary : null
+    },
     exportTrafficReport() {
       return ExportTrafficReport()
     },
@@ -133,35 +189,35 @@ export function createWailsStudioAPI(): StudioAPI {
     inspectStudioPlugin(packagePath) {
       return InspectStudioPlugin(packagePath)
     },
-    installStudioPlugin(packagePath, approved, reason, grantedPermissions) {
-      return InstallStudioPlugin(packagePath, approved, reason, grantedPermissions)
+    installStudioPlugin(packagePath, expectedDigest, approved, reason, grantedPermissions) {
+      return InstallStudioPlugin(packagePath, expectedDigest, approved, reason, grantedPermissions)
     },
-    removeStudioPlugin(pluginId, version) {
-      return RemoveStudioPlugin(pluginId, version)
+    removeStudioPlugin(studioPluginId, version) {
+      return RemoveStudioPlugin(studioPluginId, version)
     },
     async diagnostics() {
       return (await Diagnostics()).map((diagnostic) => new DiagnosticDataModel(diagnostic))
     },
     async installedStudioPlugins() {
-      return (await InstalledStudioPlugins()).map((plugin) => new InstalledPluginState(plugin))
+      return (await InstalledStudioPlugins()).map((plugin) => new InstalledStudioPluginState(plugin))
     },
     installedStudioPluginManifests() {
       return InstalledStudioPluginManifests()
     },
-    readStudioPluginSurface(pluginId, version, surfaceId) {
-      return ReadStudioPluginSurface(pluginId, version, surfaceId)
+    readStudioPluginSurface(studioPluginId, version, surfaceId) {
+      return ReadStudioPluginSurface(studioPluginId, version, surfaceId)
     },
-    runStudioPluginTool(pluginId, version, toolId, args) {
-      return RunStudioPluginTool(pluginId, version, toolId, args)
+    runStudioPluginTool(studioPluginId, version, toolId, args) {
+      return RunStudioPluginTool(studioPluginId, version, toolId, args)
     },
-    startStudioPluginProcess(pluginId, version) {
-      return StartStudioPluginProcess(pluginId, version)
+    startStudioPluginProcess(studioPluginId, version) {
+      return StartStudioPluginProcess(studioPluginId, version)
     },
-    stopStudioPluginProcess(pluginId, version) {
-      return StopStudioPluginProcess(pluginId, version)
+    stopStudioPluginProcess(studioPluginId, version) {
+      return StopStudioPluginProcess(studioPluginId, version)
     },
-    studioPluginProcessStatus(pluginId, version) {
-      return StudioPluginProcessStatus(pluginId, version)
+    studioPluginProcessStatus(studioPluginId, version) {
+      return StudioPluginProcessStatus(studioPluginId, version)
     },
     async gitDiff(path) {
       return new GitDiff(await ReadGitDiff(path))
@@ -224,7 +280,31 @@ export function createWailsStudioAPI(): StudioAPI {
       return GitAbort(operation, confirmed)
     },
     selectRuntimeArtifactBinary() { return SelectRuntimeArtifactBinary() },
+    inspectCoreBinary(binaryPath) { return InspectCoreBinary(binaryPath) },
+    updateLocalCoreBinary(binaryPath, digest, confirmed) { return UpdateLocalCoreBinary(binaryPath, digest, confirmed) },
+    async readCoreSettings() { return parseCoreSettingsView(await ReadCoreSettingsView()) },
+    async updateCoreSettings(expectedRevision, maxBodyBytes, headerTimeout, requestTimeout) {
+      return parseCoreSettingsView(await ApplyCoreSettings(expectedRevision, maxBodyBytes, headerTimeout, requestTimeout))
+    },
   }
+}
+
+function parseSettingsSnapshot(encoded: string): ProjectSettingsSnapshot {
+  const value: unknown = JSON.parse(encoded)
+  if (typeof value !== 'object' || value === null || !('valuesJson' in value) || typeof value.valuesJson !== 'string' ||
+    !('digest' in value) || typeof value.digest !== 'string') throw new Error('Invalid project settings snapshot')
+  return { valuesJson: value.valuesJson, digest: value.digest }
+}
+
+function parsePersistedSettingsDraft(encoded: string): PersistedServiceSettingsDraft {
+  const value: unknown = JSON.parse(encoded)
+  if (typeof value !== 'object' || value === null ||
+    !('serviceId' in value) || typeof value.serviceId !== 'string' ||
+    !('settingsPath' in value) || typeof value.settingsPath !== 'string' ||
+    !('schemaPath' in value) || typeof value.schemaPath !== 'string' ||
+    !('baseDigest' in value) || typeof value.baseDigest !== 'string' ||
+    !('patchJson' in value) || typeof value.patchJson !== 'string') throw new Error('Invalid persisted settings draft')
+  return { serviceId: value.serviceId, settingsPath: value.settingsPath, schemaPath: value.schemaPath, baseDigest: value.baseDigest, patchJson: value.patchJson }
 }
 
 function isCLIEvent(value: unknown): value is CLIEvent {

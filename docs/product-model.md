@@ -4,12 +4,12 @@
 
 Studio находится между IDE и configuration workbench:
 
-- как Android Studio — имеет project, manifest, file tree и редакторы;
-- как Unity — показывает объектную сцену runtime plugins и inspector выбранного объекта;
-- как Figma — использует canvas-first рабочее пространство и dockable panels.
+- как Android Studio — имеет project, manifest, file tree (открытие файлов в внешнем редакторе);
+- как Unity — показывает объектную сцену runtime services и inspector выбранного объекта;
+- как Figma — использует canvas-first tabbed workspace.
 
 Core не рисуется отдельным узлом. Studio не является control-plane client и не
-подключается к Core. Canvas показывает runtime plugin instances из project
+подключается к Core. Canvas показывает runtime service instances из project
 source и links между ними, а результат deploy приходит только через CLI report.
 
 ## 2. Термины
@@ -20,22 +20,23 @@ source и links между ними, а результат deploy приходи
 configuration в SQLite, публикует immutable generations и наблюдает replicas,
 leases, readiness и rollout. Core доступен CLI, но не Studio.
 
-### Runtime plugin declaration
+### Runtime service declaration
 
-Проектная декларация runtime plugin, который будет собран CLI в bundle для
-Core. В Studio она представлена canvas node, строкой в дереве services и
-правым schema-driven inspector. Runtime observations отображаются только из
-импортированного CLI/CI report.
+Проектная декларация runtime service с reference на уже собранный внешний
+binary artifact. Studio и CLI не компилируют service; CLI проверяет и подготавливает
+зарегистрированный бинарник для локального runtime. В Studio декларация
+представлена canvas node и правым schema-driven inspector. Runtime observations
+отображаются только из Core-backed CLI response или импортированного CLI/CI report.
 
-Runtime plugin не загружает в Studio исполняемый код и не добавляет произвольную
-страницу, HTML, CSS или JavaScript. Product-specific fields приходят через
-plugin-owned declarative settings schema.
+Runtime service не загружает в Studio исполняемый код. Product-specific fields
+приходят через service-owned declarative settings schema.
 
 ### Studio plugin
 
 Расширение самой Studio. Оно отделено от Core services и может объявлять
-commands, workbench pages, dockable panels, file editors, companion console tools
-и capability access. Companion tool устанавливается и запускается через Studio
+commands, workbench pages/panels, file associations, companion console tools
+и capability access. UI pages/panels открываются как workspace tabs без
+docking. Companion tool устанавливается и запускается через Studio
 Tool Registry, но остаётся локальным developer tool, а не Core service.
 
 ### Project
@@ -55,10 +56,10 @@ working tree не может быть передан в `apply`.
 flowchart TD
     S["Studio"] --> P["Active project"]
     S --> C["Active branch / commit"]
-    S --> O["Selected plugin or link"]
+    S --> O["Selected service or link"]
     S --> T["Workbench tabs and panels"]
-    O --> N["Runtime plugin instance"]
-    O --> L["Versioned plugin-to-plugin contract"]
+    O --> N["Runtime service instance"]
+    O --> L["Versioned service-to-service contract"]
     T --> SP["Studio plugin page"]
     T --> DP["Studio plugin panel"]
 ```
@@ -102,7 +103,7 @@ Studio должна визуально различать эти состоян�
 | Core desired configuration | Core SQLite + CLI | Показывает provenance из CLI report |
 | Replica/lease observations | Core/SDK + CLI report | Импортирует и фильтрует report |
 | Project files | Project workspace | Индексирует, валидирует, редактирует через подходящий surface |
-| Runtime plugin settings schema | Runtime plugin contract | Строит inspector |
+| Runtime service settings schema | Runtime service contract | Строит inspector |
 | Studio plugin extension manifest | Studio plugin ecosystem | Регистрирует commands/pages/panels/editors/tools |
 | Companion console tool | Studio plugin publisher | Устанавливает проверенный executable через Tool Registry |
 | Local Studio plugin package | Plugin publisher + local user trust | Проверяет digest/manifest и управляет lifecycle |
@@ -110,9 +111,9 @@ Studio должна визуально различать эти состоян�
 ## 7. Что не входит в базовую Studio
 
 - Core API adapter и process supervisor для Core services;
-- Docker/Swarm/Kubernetes control;
+- прямой Docker Engine API и управление удалёнными Swarm/Kubernetes-кластерами
+  (локальная Docker-отладка запускается typed-командами CLI);
 - Core credentials в frontend;
 - product-specific routing editor общего назначения;
 - автоматический replay неизвестной операции;
-- raw JSON как основной операторский workflow;
-- произвольные plugin pages/HTML внутри Core inspector.
+- raw JSON как основной операторский workflow; UI-поверхности Studio-плагинов загружаются только через sandboxed iframe-вкладки.

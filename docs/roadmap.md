@@ -17,9 +17,11 @@ workspace, typed Wails boundary и тестируемый контракт. От
 
 ### Этап 1. Desktop shell и design system
 
-- Wails-only desktop bootstrap для macOS, Windows и Linux;
-- Home, Settings и Project shell;
+- Wails-only desktop bootstrap для macOS, Windows и Linux (Frameless, macOS native traffic lights, Win/Linux свои 3 кнопки слева; TopBar всегда смонтирован);
+- Home — стартовый экран без проекта; Settings — глобальная страница установки/версий Studio-плагинов и сервисных бинарников, Docker Engine, Editor/Appearance/Language/Toolchain & CLI/Local Core; Project shell;
 - собственные tokens, light-first/dark themes и headless primitives;
+- tabbed workspace: вкладки закрываемые, drag-reorder, персист `workspace/v5` в `.studio/workspace.json`, без pin; отдельного File Manager и Core-backed runtime экрана нет; Canvas подключает сервис из установленного локального каталога;
+- верхний Run/Restart управляет всеми сервисами проекта через CLI; Debug собирает inspect и логи по сервисам;
 - command palette, keyboard/focus/accessibility и reduced motion;
 - loading, empty, error и degraded states.
 
@@ -30,14 +32,14 @@ workspace, typed Wails boundary и тестируемый контракт. От
 - безопасное чтение/запись project-owned files;
 - native Git status, diff, history, branches, commit, push/pull;
 - conflict state и `.studio` layout/workspace persistence;
-- external editor associations без встроенного IDE.
+- external editor associations (OS default + глобальный редактор + per-mask) без встроенного IDE (CodeMirror удалён).
 
 ### Этап 3. Canvas и configuration workspace
 
-- runtime plugin graph: только plugin instances и plugin-to-plugin links;
+- runtime service graph: только service instances и service-to-service links;
 - layout, selection, focus и validation badges;
-- schema-driven settings forms для `settings.json`;
-- полный link contract editor для `links/*.json`;
+- schema-driven settings forms для `settings.json` (JSON Schema draft 2020-12, redacted);
+- полный link contract editor для `links/*.json` (редактирование через `UpdateServiceLink`);
 - compatibility, diagnostics и generated safe references;
 - Core не показывается отдельным canvas node.
 
@@ -53,7 +55,7 @@ workspace, typed Wails boundary и тестируемый контракт. От
 
 - local `.studio-plugin` file import и manifest validation;
 - explicit trust dialog, version/signature/digest metadata и rollback;
-- declarative pages, panels, inspectors, forms и commands;
+- declarative pages, panels, inspectors, forms и commands; UI-поверхности — sandboxed iframe-вкладки (`sandbox="allow-scripts"` only, без same-origin/bindings/FS/Node, postMessage bridge, CSP frame-src, path-confined ассеты через Wails AssetServer; декларация UI-surface — external `wool`, interim `StudioPluginSurface.Route`);
 - out-of-process companion tools с Tool Registry policy;
 - permission grants, cancellation, limits, crash/timeout isolation.
 
@@ -80,8 +82,8 @@ workspace, typed Wails boundary и тестируемый контракт. От
 - Studio запускается только как desktop application и открывает Project offline;
 - canonical CLI Project редактируется без второго project format;
 - branch, exact revision и dirty state видны явно;
-- canvas показывает только runtime plugins и связи между ними;
-- plugin settings и полный link contract редактируются schema-driven;
+- canvas показывает только runtime services и связи между ними;
+- service settings и полный link contract редактируются schema-driven;
 - traffic view строится только из CLI/Core report и показывает redacted payloads;
 - внешний системный IDE открывает выбранный файл;
 - local Core workflow выполняется через `liapoldus` child process;
@@ -97,7 +99,7 @@ workspace, typed Wails boundary и тестируемый контракт. От
 
 1. Project format принадлежит CLI; Studio лишь читает и редактирует его source.
 2. `.studio/` — локальное состояние Studio, не часть bundle и не secret store.
-3. Canvas показывает plugins и links; Core не является отдельным узлом.
+3. Canvas показывает Services и links; Core не является отдельным узлом.
 4. Link editor работает с полным versioned contract, а не с декоративным edge.
 5. Local debugging разрешён через CLI; прямой Core API adapter запрещён.
 6. Remote deployment остаётся CLI/CI responsibility.

@@ -3,31 +3,33 @@
 ## 1. Shell
 
 Config workspace — основной canvas-first экран Studio. Он показывает runtime
-plugins и связи между ними, а не live-подключение к Core.
+services и связи между ними, а не live-подключение к Core.
+
+Config workspace — это вкладка `Canvas` внутри tabbed shell (см.
+[UI system](ui-system)), а не отдельный экран.
 
 ```mermaid
 flowchart LR
-    A["Activity bar"] --> B["Project / services navigator"]
-    B --> C["Central plugin canvas"]
-    C --> D["Selected plugin or link"]
-    D --> E["Right inspector"]
-    C --> F["Bottom operations panel"]
-    G["Top bar: project + branch + revision"] --> C
-    H["Workbench tabs"] --> C
+    A["Top bar: project + branch + revision + Run / Restart / Debug"] --> B["Left rail openers"]
+    B --> C["TabStrip: Canvas / Git / Reports / …"]
+    C --> D["Central service canvas (active tab)"]
+    D --> E["Selected service or link"]
+    E --> F["Right schema-driven inspector"]
+    C --> G["Problems / Output / Reports tabs"]
 ```
 
 Зоны:
 
-- activity bar — переключение разделов;
-- top bar — project, branch, commit/revision, validation summary, deploy report;
-- navigator — files и runtime plugins;
-- canvas — plugin nodes и links;
+- top bar — project, branch, commit/revision и Run/Restart/Debug для всех сервисов проекта;
+- left rail — Canvas, Git, Reports, Plugins, Problems, Output; ПКМ даёт действие добавления плагина;
+- Settings — локальный каталог версий Studio-плагинов и сервисных бинарников, Docker Engine и Core;
+- отдельного File Manager и Core-backed runtime страницы нет;
+- TabStrip — активная вкладка canvas и остальные workbench-вкладки;
+- canvas — service nodes и links;
 - inspector — выбранный node/link;
-- bottom panel — operations, problems, events;
-- workbench tabs — Config workspace и Studio plugin pages.
+- `problems`, `output`, `reports` — обычные вкладки; нижнего dock нет.
 
-По умолчанию виден canvas. Navigator и bottom panel скрываемы. Inspector
-открывается при выборе объекта.
+По умолчанию активна вкладка Canvas. Inspector открывается при выборе объекта.
 
 ## 2. Страницы
 
@@ -41,12 +43,12 @@ flowchart LR
 
 ### Config workspace
 
-Показывает canvas runtime plugin instances, plugin-to-plugin links и
+Показывает canvas runtime service instances, service-to-service links и
 schema-driven inspector.
 
 ### Services
 
-Показывает inventory runtime plugins в таблице с фильтрами и переходом в canvas.
+Показывает inventory runtime services в таблице с фильтрами и переходом в canvas.
 
 ### Deploy reports
 
@@ -60,29 +62,38 @@ installed tools, updates из нового local package и rollback.
 
 ### Settings
 
-Показывает project preferences, layout и plugin permissions. Параметры Core и
-доступ к runtime изменяются через standalone CLI, а не через Studio.
+Глобальная полноэкранная страница Studio (не вкладка): Editor / Appearance /
+Language / Toolchain & CLI / Local Core. Project preferences и layout задаются
+schema-driven полями Inspector, Studio plugin permissions — через trust dialog.
+Core endpoint, credentials и transport остаются CLI-owned. Для смены локального
+Core binary Studio даёт typed flow: native file picker → CLI ELF/digest inspect →
+explicit exact-digest confirmation → единая typed CLI операция `core binary update`.
+CLI запускает кандидат и фиксирует target registry только после readiness; при
+ошибке старый binary остаётся выбранным, хотя Core может быть остановлен.
+Renderer не получает доступ к target registry или секретам. Core DB, credentials,
+certificates и service containers не заменяются. SQLite migrations автоматически
+не откатываются.
 
 ## 3. Canvas
 
 На canvas отображаются только:
 
-- runtime plugin instances из Project;
-- полные versioned plugin-to-plugin link contracts;
+- runtime service instances из Project;
+- полные versioned service-to-service link contracts;
 - schema/validation badges;
 - last known deploy report indicators;
 - project binding markers;
 - selection и focus.
 
-Сам Core, Core database, live replicas, credentials и plugin internals на canvas
+Сам Core, Core database, live replicas, credentials и service internals на canvas
 не рисуются.
 
-### Runtime plugin node
+### Runtime service node
 
 Минимум:
 
 - display name;
-- stable plugin/service id;
+- stable service id;
 - type/manifest version;
 - local validation state;
 - last known deploy state;
@@ -94,8 +105,9 @@ settings section inspector.
 
 ### Link
 
-Link создаётся drag-жестом между двумя runtime plugin nodes. Inspector редактирует
-полный versioned contract и показывает:
+Link создаётся drag-жестом между двумя runtime service nodes. Inspector
+редактирует полный versioned contract (не только читает его) через typed
+`UpdateServiceLink` и показывает:
 
 - caller;
 - target;
@@ -107,8 +119,9 @@ Link создаётся drag-жестом между двумя runtime plugin n
 - validation state;
 - generic contract/transport metadata, если оно доступно Core.
 
-Product-specific UI не встраивается в общий renderer: plugin-owned schemas
-рендерятся generic host-controlled controls.
+Product-specific UI не встраивается в общий renderer: service-owned schemas
+рендерятся generic host-controlled controls. Raw secrets в link contract не
+редактируются — только `secret-ref`.
 
 ### Layout
 
@@ -116,44 +129,60 @@ Product-specific UI не встраивается в общий renderer: plugin
 configuration. Доступны move, multi-select, zoom/pan, fit to content, focus from
 tree/search и reset local layout.
 
-## 4. Runtime plugin inspector
+## 4. Runtime service inspector
 
-Секции inspector:
+Inspector — schema-driven property editor с collapsible-секциями:
 
-1. identity — name, id, plugin и manifest version;
-2. settings — schema-generated fields;
-3. source binding — project file/module references;
-4. last deploy — commit, bundle digest, report state;
-5. links — входящие и исходящие связи;
-6. context — безопасные timestamps и actor metadata.
+1. **Identity / Info** — read-only: id, name, service и manifest version,
+   source;
+2. **Settings** — schema-generated fields из Project JSON Schema
+   (`readProjectSchema`, draft 2020-12); до использования live UI hints Studio
+   последовательно читает manifest и schema через typed CLI → Core и сравнивает
+   schema структурно. При drift редактирование и Core apply блокируются, draft
+   сохраняется; offline draft можно записать только в Project и явно
+   перепроверить позже;
+3. **Link contract** — полное редактирование link-полей (см. §5);
+4. **Source binding** — project file/module references;
+5. **Last deploy** — commit, bundle digest, report state (redacted);
+6. **Context** — project, Git revision/branch и безопасные actor/timestamps;
+7. **Actions** — Run / Restart / Logs / Inspect (typed CLI intents, ephemeral
+   status; при недоступности CLI/Core — `unknown`).
 
-Поддерживаемые UX-типы полей: string, number, boolean, select, multiselect,
-duration, size, code/reference, file, directory, array/object и secret
-reference без возврата secret value.
+Поддерживаемые UX-типы полей: `string`, `number`, `boolean`, `select`,
+`multiselect`, `duration`, `size`, `file`, `dir`, `array`, `object` и
+`secret-ref`. Секреты отдаются только redacted; raw secret values не ходят во
+frontend.
 
-Неизвестный тип поля делает surface недоступным с diagnostic, а не превращается
-в произвольный HTML control. Перед записью host повторно проверяет
+Неизвестный тип поля помечает секцию `unavailable` (fail-closed), а не
+превращается в произвольный HTML control. Перед записью host повторно проверяет
 тип/required/enum/bounds/pattern constraints и вложенные значения; renderer не
 является security boundary сам по себе.
 
 ## 5. Link inspector
 
-Показывает generic данные:
+Link contract редактируется полностью, а не только отображается:
 
 - caller и target;
 - link id;
 - contract/schema version;
 - eligibility and validation;
 - contract compatibility;
-- methods, request/response schemas, transport/profile, security, limits;
+- methods и disabledMethods;
+- request/response schemas и schema paths;
+- transport/profile, securityProfile и limits;
+- timeout/retry policy;
 - redaction policy;
 - last deploy report.
 
-Общий inspector не знает product-specific методы и payloads.
+Запись проходит только через typed `UpdateServiceLink` в
+`internal/domain/interfaces/project.go` (`GraphRepository`), реализацию с
+валидацией и atomic write в `internal/infrastructure/project/mutations.go` и
+binding в `internal/presentation/wails/app.go`. Общий inspector не знает
+product-specific методы и payloads.
 
-## 6. Runtime plugins workspace
+## 6. Runtime services workspace
 
-Таблица runtime plugins должна показывать:
+Таблица runtime services должна показывать:
 
 - service id/name;
 - manifest/schema version;

@@ -35,4 +35,7 @@ func TestStoreRedactsBeforePersistence(t *testing.T) {
 	if err != nil || len(values) != 1 {
 		t.Fatalf("reports=%+v err=%v", values, err)
 	}
+	if values[0].ImportedAt == "" {
+		t.Fatal("legacy report did not receive a filesystem-backed import time")
+	}
 }

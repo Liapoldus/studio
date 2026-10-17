@@ -12,10 +12,10 @@
 | Canonical Project | project files остаются CLI-owned | project/source tests; no second project format |
 | Git workspace | status, diff, history, remotes, checkout, path-level stage/unstage, staged-only commit, pull/push, confirmed merge/rebase/cherry-pick, conflict abort/state, bounded base/ours/theirs inspection, ours/theirs staging and stash recovery | native Git integration tests |
 | Schema editing | redacted read, safe patch, type/required/enum/bounds/pattern validation, composition, indexed versioned `$id` references and advanced object/array/numeric constraints | settings tests; Wails UI build |
-| Runtime graph | plugin instances и versioned links без Core node | project graph tests; canvas build |
+| Runtime graph | service instances и versioned links без Core node | project graph tests; canvas build |
 | CLI/Core | typed JSONL, cancellation, local Core commands, report-based traffic observation, report import, remote handoff | Studio CLI runner tests plus standalone CLI command/event tests; report tests |
 | Traffic | report-only redacted projection, filters, timeline/table, safe export | report/redaction tests |
-| Studio plugins | explicit trust, permissions, digest, Ed25519 verification, declarative surfaces, tool/process supervision, rollback | installer/host/tool/sandbox tests |
+| Studio plugins | explicit trust, permissions, digest, Ed25519 verification, declarative surfaces, sandboxed iframe UI-surface (strict sandbox, postMessage bridge, path-confined assets), tool/process supervision, rollback | installer/host/tool/sandbox tests plus iframe sandbox/bridge/asset-boundary tests |
 | Persistence | SQLite migrations, global metadata, project-local `.studio` state | migration and permission tests |
 | Recovery | redacted diagnostics survive restart and appear in Problems | diagnostic store tests |
 | Toolchain status | Home shows local CLI availability/version without Core access | ToolchainProbe tests; Wails/frontend build |
@@ -41,6 +41,13 @@ Production promotion additionally requires all of the following:
    `.exe` passes `signtool verify /pa`;
    checksums опубликованы вместе с `studio-build-provenance/v1` manifest,
    содержащим source revision и digest каждого packaged file.
+
+Отдельно: sandboxed iframe UI-surfaces (`sandbox="allow-scripts"` без
+`allow-same-origin`/popups/forms, postMessage-only bridge, path-confined assets,
+strict CSP `frame-src`) — это browser-level граница, обязательная для всех
+установленных Studio-плагинов и не отключаемая через release ENV (в отличие от
+process sandbox из п. 3–5). UI-surface разрешён для любого установленного
+плагина, поэтому sandbox нельзя ослабить ради PASS.
 
 Если хотя бы один пункт отсутствует, artifact является QA/unsigned artifact и
 не считается production release. Studio может оставаться usable в local mode,

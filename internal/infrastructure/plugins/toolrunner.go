@@ -104,13 +104,13 @@ func (runner ToolRunner) Run(ctx context.Context, request models.ToolExecutionRe
 
 func runnerCommand(ctx context.Context, runner ToolRunner, executable string, arguments []string, policy SandboxPolicy) (*exec.Cmd, bool, string, error) {
 	if runner.Mode == "" || runner.Mode == SandboxDisabled {
-		return exec.CommandContext(ctx, executable, arguments...), false, "", nil
+		return pluginToolCommand(ctx, executable, arguments), false, "", nil
 	}
 	if runner.Sandbox == nil {
 		if runner.Mode == SandboxRequired {
 			return nil, false, "sandbox.unavailable", ErrSandboxUnavailable
 		}
-		return exec.CommandContext(ctx, executable, arguments...), false, "sandbox.unavailable", nil
+		return pluginToolCommand(ctx, executable, arguments), false, "sandbox.unavailable", nil
 	}
 	command, err := runner.Sandbox.Command(ctx, executable, arguments, policy)
 	if err == nil {
@@ -119,7 +119,11 @@ func runnerCommand(ctx context.Context, runner ToolRunner, executable string, ar
 	if runner.Mode == SandboxRequired {
 		return nil, false, "sandbox.unavailable", err
 	}
-	return exec.CommandContext(ctx, executable, arguments...), false, "sandbox.unavailable", nil
+	return pluginToolCommand(ctx, executable, arguments), false, "sandbox.unavailable", nil
+}
+
+func pluginToolCommand(ctx context.Context, executable string, arguments []string) *exec.Cmd {
+	return exec.CommandContext(ctx, executable, arguments...) //nolint:gosec // executable is confined to the verified package; arguments remain structured and shell-free.
 }
 
 func sandboxPolicy(projectRoot, packageRoot string, permissions []string, toolPermissions map[string]any) SandboxPolicy {

@@ -6,8 +6,14 @@ import (
 	"github.com/Liapoldus/studio/internal/domain/models"
 )
 
-// ToolchainProbe reads only the local CLI executable metadata. It never opens
-// a Core connection and never returns process environment or credentials.
+// ToolchainProbe verifies the local CLI through a fixed, read-only typed command.
+// It never opens a Core connection or returns process environment or credentials.
 type ToolchainProbe interface {
 	Status(context.Context) models.ToolchainStatus
+}
+
+// CLIExecutableInspector validates an explicitly selected local CLI without
+// exposing its output or environment to the renderer.
+type CLIExecutableInspector interface {
+	Inspect(context.Context, string) (models.ToolchainStatus, error)
 }

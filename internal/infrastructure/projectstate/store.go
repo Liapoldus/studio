@@ -2,9 +2,12 @@
 package projectstate
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -79,6 +82,29 @@ func (Store) Save(ctx context.Context, root string, value models.WorkspaceState)
 	} else if fileStatErr != nil && !errors.Is(fileStatErr, os.ErrNotExist) {
 		return fileStatErr
 	}
+	if fileStatErr == nil {
+		previous, readErr := os.ReadFile(path) //nolint:gosec // validated project-local state path.
+		if readErr != nil {
+			return readErr
+		}
+		var preserved map[string]json.RawMessage
+		if parseErr := json.Unmarshal(previous, &preserved); parseErr != nil || preserved == nil {
+			return ErrInvalidState
+		}
+		preserved["layout"], preserved["tabs"], preserved["filters"] = layout, tabs, filters
+		data, err = json.Marshal(preserved)
+		if err != nil {
+			return ErrInvalidState
+		}
+		if !bytes.Equal(previous, data) {
+			// Preserve exact bytes, including unknown fields, before any migration
+			// or normal UI update. Recovery is a copy of this file to workspace.json.
+			backup := filepath.Join(directory, fmt.Sprintf("workspace-recovery-%x.json", sha256.Sum256(previous)))
+			if preserveErr := preserve(backup, previous); preserveErr != nil {
+				return preserveErr
+			}
+		}
+	}
 	temporary, err := os.CreateTemp(directory, ".workspace-*")
 	if err != nil {
 		return err
@@ -101,6 +127,23 @@ func (Store) Save(ctx context.Context, root string, value models.WorkspaceState)
 		return err
 	}
 	return os.Rename(temporaryPath, path)
+}
+
+func preserve(path string, data []byte) error {
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600) //nolint:gosec // content-addressed project-local recovery path.
+	if errors.Is(err, os.ErrExist) {
+		existing, readErr := os.ReadFile(path) //nolint:gosec // same constrained recovery path.
+		if readErr != nil || !bytes.Equal(existing, data) {
+			return ErrInvalidState
+		}
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	_, writeErr := file.Write(data)
+	syncErr := file.Sync()
+	return errors.Join(writeErr, syncErr, file.Close())
 }
 
 func discardError(err error) { _ = err }

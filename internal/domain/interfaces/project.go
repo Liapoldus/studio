@@ -48,15 +48,19 @@ type GitRepository interface {
 // GraphRepository mutates only canonical runtime service/link files. Layout is
 // deliberately kept in ProjectStateStore and never enters this boundary.
 type GraphRepository interface {
-	CreateRuntimePlugin(context.Context, string, models.RuntimePluginInput) error
-	DeleteRuntimePlugin(context.Context, string, string, bool) error
-	CreatePluginLink(context.Context, string, models.PluginLinkInput) error
-	DeletePluginLink(context.Context, string, string, string, bool) error
+	CreateRuntimeService(context.Context, string, models.RuntimeServiceInput) error
+	SetRuntimeServiceArtifact(context.Context, string, string, models.ServiceArtifactInput) error
+	DeleteRuntimeService(context.Context, string, string, bool) error
+	CreateServiceLink(context.Context, string, models.ServiceLinkInput) error
+	UpdateServiceLink(context.Context, string, string, string, models.ServiceLinkInput) error
+	DeleteServiceLink(context.Context, string, string, string, bool) error
 }
 
 type FileSystem interface {
 	ReadFile(context.Context, string, string) ([]byte, error)
 	WriteFile(context.Context, string, string, []byte) error
+	WriteFileIfDigest(context.Context, string, string, string, []byte) (bool, error)
+	CreateFile(context.Context, string, string, []byte) error
 }
 
 // SettingsStore exposes schema-aware project settings without returning
@@ -64,8 +68,13 @@ type FileSystem interface {
 // redacted fields remain owned by the CLI or external editor.
 type SettingsStore interface {
 	ReadSchema(context.Context, string, string) ([]byte, error)
+	ValidateSchemaDocument(context.Context, string, string, []byte) error
+	RedactSchemaDocument(context.Context, string, string, []byte) ([]byte, error)
+	ValidateValuesAgainstSchemaDocument(context.Context, string, string, string, []byte, []byte) (bool, error)
 	Read(context.Context, string, string, string) ([]byte, error)
-	Update(context.Context, string, string, string, []byte) error
+	Snapshot(context.Context, string, string, string) (models.ProjectSettingsSnapshot, error)
+	ValidatePatch(context.Context, string, string, string, []byte) error
+	UpdateIfDigest(context.Context, string, string, string, string, []byte) error
 }
 
 type ExternalEditorLauncher interface {

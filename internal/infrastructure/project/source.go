@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -17,6 +18,7 @@ import (
 var ErrProjectManifest = errors.New("project.yaml is required")
 var ErrProjectDirectoryExists = errors.New("project directory already exists")
 var ErrInvalidProjectIdentity = errors.New("project id and name contain unsupported characters")
+var ErrLegacyRuntimeProject = errors.New("legacy project path plugins/ is unsupported; migrate the project to services before opening it in Studio")
 
 type Source struct {
 	Git interfaces.GitRepository
@@ -29,6 +31,9 @@ func (s Source) Open(ctx context.Context, root string) (models.Workspace, error)
 	root = filepath.Clean(strings.TrimSpace(root))
 	if !filepath.IsAbs(root) || strings.ContainsRune(root, '\x00') {
 		return models.Workspace{}, models.ErrInvalidProject
+	}
+	if err := rejectLegacyRuntimeRoot(root); err != nil {
+		return models.Workspace{}, err
 	}
 	manifestData, err := fs.ReadFile(os.DirFS(root), "project.yaml")
 	if err != nil {
@@ -55,7 +60,7 @@ func (s Source) Open(ctx context.Context, root string) (models.Workspace, error)
 	if err != nil {
 		return models.Workspace{}, err
 	}
-	pluginGraph, err := graph(root)
+	serviceGraph, err := graph(root)
 	if err != nil {
 		return models.Workspace{}, err
 	}
@@ -72,8 +77,22 @@ func (s Source) Open(ctx context.Context, root string) (models.Workspace, error)
 		Project: &value,
 		Files:   files,
 		Git:     git,
-		Graph:   pluginGraph,
+		Graph:   serviceGraph,
 	}, nil
+}
+
+func rejectLegacyRuntimeRoot(root string) error {
+	if _, err := os.Lstat(filepath.Join(root, "plugins")); err == nil {
+		return ErrLegacyRuntimeProject
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	return nil
+}
+
+func legacyRuntimePath(value string) bool {
+	normalized := path.Clean(strings.ReplaceAll(strings.TrimSpace(value), "\\", "/"))
+	return normalized == "plugins" || strings.HasPrefix(normalized, "plugins/")
 }
 
 func (s Source) Create(ctx context.Context, root, id, name string) (models.Workspace, error) {
@@ -119,7 +138,7 @@ func (s Source) Create(ctx context.Context, root, id, name string) (models.Works
 	manifest := "id: " + strconv.Quote(strings.TrimSpace(id)) + "\n" +
 		"name: " + strconv.Quote(strings.TrimSpace(name)) + "\n" +
 		"version: 1\n"
-	file, err := os.OpenFile(filepath.Join(root, "project.yaml"), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600) //nolint:gosec // root is validated and selected by the user.
+	file, err := os.OpenFile(filepath.Join(root, "project.yaml"), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
 	if err != nil {
 		return models.Workspace{}, err
 	}
@@ -188,6 +207,12 @@ func tree(ctx context.Context, root string) ([]models.ProjectFile, error) {
 			if entry.IsDir() {
 				return filepath.SkipDir
 			}
+			return nil
+		}
+		// Project-relative resource catalogs must never expose links whose
+		// resolved content may live outside the project. WalkDir does not follow
+		// directory symlinks, but still reports symlink entries as files.
+		if entry.Type()&os.ModeSymlink != 0 {
 			return nil
 		}
 		if entry.IsDir() {

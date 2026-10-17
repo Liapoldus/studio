@@ -34,7 +34,7 @@ func TestHostRejectsTamperedInstalledArtifact(t *testing.T) {
 		}
 	}()
 	host := NewHost(store, ToolRunner{}, Installer{Directory: filepath.Join(t.TempDir(), "plugins")})
-	installed, err := host.Install(context.Background(), packagePath, models.TrustDecision{Approved: true, GrantedPermissions: nil})
+	installed, err := host.Install(context.Background(), packagePath, approvedPackageTrust(t, host, packagePath, nil))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -62,7 +62,9 @@ func TestHostPersistsTrustAndRunsInstalledTool(t *testing.T) {
 		}
 	}()
 	host := NewHost(store, ToolRunner{}, Installer{Directory: filepath.Join(t.TempDir(), "plugins")})
-	installed, err := host.Install(context.Background(), packagePath, models.TrustDecision{Approved: true, Reason: "test approval"})
+	decision := approvedPackageTrust(t, host, packagePath, nil)
+	decision.Reason = "test approval"
+	installed, err := host.Install(context.Background(), packagePath, decision)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -83,6 +85,67 @@ func TestHostPersistsTrustAndRunsInstalledTool(t *testing.T) {
 	}
 }
 
+func TestHostDoesNotPersistTrustWhenReviewedPackageWasReplaced(t *testing.T) {
+	packagePath := writePackage(t, map[string]string{"manifest.json": `{"id":"runtime.bound","name":"Bound","version":"1.0.0"}`})
+	replacement := writePackage(t, map[string]string{"manifest.json": `{"id":"runtime.bound","name":"Bound","version":"1.0.0","permissions":["project.read"]}`})
+	store, err := sqlite.Open(filepath.Join(t.TempDir(), "client.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if closeErr := store.Close(); closeErr != nil {
+			t.Error(closeErr)
+		}
+	}()
+	host := NewHost(store, ToolRunner{}, Installer{Directory: filepath.Join(t.TempDir(), "plugins")})
+	trust := approvedPackageTrust(t, host, packagePath, nil)
+	if _, installErr := host.Install(context.Background(), replacement, trust); !errors.Is(installErr, models.ErrStudioPluginDigestMismatch) {
+		t.Fatalf("replacement package was installed after review: %v", installErr)
+	}
+	installed, err := host.List(context.Background())
+	if err != nil || len(installed) != 0 {
+		t.Fatalf("mismatched package created installed/trust state: %+v %v", installed, err)
+	}
+}
+
+func TestHostServesOnlyAssetsInsideDeclaredUISurface(t *testing.T) {
+	//nolint:gosec // fake marker exercises that undeclared package metadata is unreachable.
+	packagePath := writePackage(t, map[string]string{
+		"manifest.json":   `{"id":"runtime.ui","name":"Runtime UI","version":"1.0.0","surfaces":[{"id":"console","kind":"page","title":"Console","route":"ui/index.html"}]}`,
+		"ui/index.html":   "<!doctype html><script src=\"./app.js\"></script>",
+		"ui/app.js":       "parent.postMessage({type:'studio.surface.ready'}, '*')",
+		"manifest.secret": "must not be reachable",
+	})
+	store, err := sqlite.Open(filepath.Join(t.TempDir(), "client.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if closeErr := store.Close(); closeErr != nil {
+			t.Error(closeErr)
+		}
+	}()
+	host := NewHost(store, ToolRunner{}, Installer{Directory: filepath.Join(t.TempDir(), "plugins")})
+	trust := approvedPackageTrust(t, host, packagePath, nil)
+	trust.Reason = "test approval"
+	installed, err := host.Install(context.Background(), packagePath, trust)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, contentType, err := host.SurfaceAsset(context.Background(), installed.Manifest.ID, installed.Manifest.Version, "console", "ui/index.html")
+	if err != nil || string(data) != "<!doctype html><script src=\"./app.js\"></script>" || !strings.HasPrefix(contentType, "text/html") {
+		t.Fatalf("expected declared HTML entry, got %q %q: %v", data, contentType, err)
+	}
+	if _, _, err := host.SurfaceAsset(context.Background(), installed.Manifest.ID, installed.Manifest.Version, "console", "ui/app.js"); err != nil {
+		t.Fatalf("expected surface-relative JS asset: %v", err)
+	}
+	for _, invalid := range []string{"../manifest.secret", "manifest.secret", "ui/../manifest.secret", `ui\\app.js`, "/ui/index.html"} {
+		if _, _, err := host.SurfaceAsset(context.Background(), installed.Manifest.ID, installed.Manifest.Version, "console", invalid); err == nil {
+			t.Errorf("served asset outside the UI surface for path %q", invalid)
+		}
+	}
+}
+
 func TestHostSupervisesDeclaredProcessFailure(t *testing.T) {
 	packagePath := writePackage(t, map[string]string{
 		"manifest.json": `{"id":"runtime.process","name":"Runtime Process","version":"1.0.0","process":{"executable":"bin/backend","platforms":["*"]}}`,
@@ -98,7 +161,9 @@ func TestHostSupervisesDeclaredProcessFailure(t *testing.T) {
 		}
 	}()
 	host := NewHost(store, ToolRunner{}, Installer{Directory: filepath.Join(t.TempDir(), "plugins")})
-	installed, err := host.Install(context.Background(), packagePath, models.TrustDecision{Approved: true, Reason: "test approval"})
+	trust := approvedPackageTrust(t, host, packagePath, nil)
+	trust.Reason = "test approval"
+	installed, err := host.Install(context.Background(), packagePath, trust)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -141,11 +206,15 @@ func TestHostRemovesOnlyRequestedVersionForRollback(t *testing.T) {
 		}
 	}()
 	host := NewHost(store, ToolRunner{}, Installer{Directory: filepath.Join(t.TempDir(), "plugins")})
-	first, err := host.Install(context.Background(), packageV1, models.TrustDecision{Approved: true, Reason: "test approval"})
+	firstTrust := approvedPackageTrust(t, host, packageV1, nil)
+	firstTrust.Reason = "test approval"
+	first, err := host.Install(context.Background(), packageV1, firstTrust)
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := host.Install(context.Background(), packageV2, models.TrustDecision{Approved: true, Reason: "test approval"})
+	secondTrust := approvedPackageTrust(t, host, packageV2, nil)
+	secondTrust.Reason = "test approval"
+	second, err := host.Install(context.Background(), packageV2, secondTrust)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -61,7 +61,7 @@ func (Store) List(ctx context.Context, root string) ([]models.Diagnostic, error)
 		return nil, ErrInvalidDiagnostic
 	}
 	path := filepath.Join(filepath.Clean(root), ".studio", "diagnostics.jsonl")
-	file, err := os.Open(path) //nolint:gosec // project root is validated and diagnostics are project-local.
+	file, err := os.Open(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return []models.Diagnostic{}, nil
 	}

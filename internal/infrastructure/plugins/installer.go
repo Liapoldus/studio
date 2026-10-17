@@ -34,9 +34,10 @@ var (
 )
 
 const (
-	maxPluginEntries    = 4096
-	maxPluginFileBytes  = 64 * 1024 * 1024
-	maxPluginTotalBytes = 256 * 1024 * 1024
+	maxPluginEntries      = 4096
+	maxPluginFileBytes    = 64 * 1024 * 1024
+	maxPluginTotalBytes   = 256 * 1024 * 1024
+	maxPluginArchiveBytes = maxPluginTotalBytes + 16*1024*1024
 )
 
 //nolint:govet // the public installer keeps a readable path, trust roots and policy flag together.
@@ -46,34 +47,46 @@ type Installer struct {
 	RequireSignatures bool
 }
 
-var _ interfaces.PluginPackageInstaller = Installer{}
+var _ interfaces.StudioPluginPackageInstaller = Installer{}
 
-func (i Installer) Inspect(ctx context.Context, packagePath string) (models.PluginInspection, error) {
+func (i Installer) Inspect(ctx context.Context, packagePath string) (models.StudioPluginInspection, error) {
+	snapshot, cleanup, err := snapshotPackage(packagePath)
+	if err != nil {
+		return models.StudioPluginInspection{}, err
+	}
+	defer cleanup()
+	return i.inspectSnapshot(ctx, snapshot)
+}
+
+func (i Installer) inspectSnapshot(ctx context.Context, packagePath string) (models.StudioPluginInspection, error) {
+	if err := ctx.Err(); err != nil {
+		return models.StudioPluginInspection{}, err
+	}
 	archive, err := zip.OpenReader(packagePath)
 	if err != nil {
-		return models.PluginInspection{}, models.ErrInvalidStudioPlugin
+		return models.StudioPluginInspection{}, models.ErrInvalidStudioPlugin
 	}
 	defer func() {
 		discardError(archive.Close())
 	}()
 	digest, err := fileDigest(packagePath)
 	if err != nil {
-		return models.PluginInspection{}, err
+		return models.StudioPluginInspection{}, err
 	}
 	manifest, files, err := readManifest(archive.File)
 	if err != nil {
-		return models.PluginInspection{}, err
+		return models.StudioPluginInspection{}, err
 	}
 	if err := validateManifest(manifest, files, i.RequireSignatures); err != nil {
-		return models.PluginInspection{}, err
+		return models.StudioPluginInspection{}, err
 	}
 	if err := verifyArtifactDigests(archive.File, manifest); err != nil {
-		return models.PluginInspection{}, err
+		return models.StudioPluginInspection{}, err
 	}
 	if err := i.verifyManifestSignature(manifest); err != nil {
-		return models.PluginInspection{}, err
+		return models.StudioPluginInspection{}, err
 	}
-	return models.PluginInspection{Manifest: manifest, Digest: digest, Signed: strings.TrimSpace(manifest.Signature) != "", Files: files}, nil
+	return models.StudioPluginInspection{Manifest: manifest, Digest: digest, Signed: strings.TrimSpace(manifest.Signature) != "", Files: files}, nil
 }
 
 // verifyInstalled re-validates the activated directory before it is exposed
@@ -125,7 +138,7 @@ func (i Installer) verifyInstalled(root string) (models.StudioPluginManifest, er
 	if err != nil {
 		return models.StudioPluginManifest{}, models.ErrInvalidStudioPlugin
 	}
-	manifestData, err := os.ReadFile(filepath.Join(root, "manifest.json")) //nolint:gosec // root is a verified Studio-managed directory.
+	manifestData, err := os.ReadFile(filepath.Join(root, "manifest.json"))
 	if err != nil || len(manifestData) > 2*1024*1024 {
 		return models.StudioPluginManifest{}, models.ErrInvalidStudioPlugin
 	}
@@ -211,64 +224,75 @@ func ParseTrustRoots(value string) (map[string]ed25519.PublicKey, error) {
 	return keys, nil
 }
 
-func (i Installer) Install(ctx context.Context, packagePath string, trust models.TrustDecision) (models.InstalledPlugin, error) {
+func (i Installer) Install(ctx context.Context, packagePath string, trust models.TrustDecision) (models.InstalledStudioPlugin, error) {
 	if !trust.Approved {
-		return models.InstalledPlugin{}, ErrTrustRequired
+		return models.InstalledStudioPlugin{}, ErrTrustRequired
 	}
-	inspection, err := i.Inspect(ctx, packagePath)
+	if !validPackageDigest(trust.ExpectedDigest) {
+		return models.InstalledStudioPlugin{}, models.ErrStudioPluginDigestMismatch
+	}
+	snapshot, cleanupSnapshot, err := snapshotPackage(packagePath)
 	if err != nil {
-		return models.InstalledPlugin{}, err
+		return models.InstalledStudioPlugin{}, err
+	}
+	defer cleanupSnapshot()
+	inspection, err := i.inspectSnapshot(ctx, snapshot)
+	if err != nil {
+		return models.InstalledStudioPlugin{}, err
+	}
+	if inspection.Digest != trust.ExpectedDigest {
+		return models.InstalledStudioPlugin{}, models.ErrStudioPluginDigestMismatch
 	}
 	if contextErr := ctx.Err(); contextErr != nil {
-		return models.InstalledPlugin{}, contextErr
+		return models.InstalledStudioPlugin{}, contextErr
 	}
 	if !permissionsApproved(inspection.Manifest.Permissions, trust.GrantedPermissions) {
-		return models.InstalledPlugin{}, models.ErrPermissionApprovalRequired
+		return models.InstalledStudioPlugin{}, models.ErrPermissionApprovalRequired
 	}
 	if !filepath.IsAbs(i.Directory) || strings.ContainsRune(i.Directory, '\x00') {
-		return models.InstalledPlugin{}, models.ErrInvalidStudioPlugin
+		return models.InstalledStudioPlugin{}, models.ErrInvalidStudioPlugin
 	}
 	base := filepath.Join(filepath.Clean(i.Directory), inspection.Manifest.ID, inspection.Manifest.Version)
 	if mkdirErr := os.MkdirAll(filepath.Dir(base), 0700); mkdirErr != nil {
-		return models.InstalledPlugin{}, mkdirErr
+		return models.InstalledStudioPlugin{}, mkdirErr
 	}
 	if info, statErr := os.Stat(base); statErr == nil && info.IsDir() {
-		return models.InstalledPlugin{}, ErrPluginAlreadyInstalled
+		return models.InstalledStudioPlugin{}, ErrPluginAlreadyInstalled
 	}
 	temporary, err := os.MkdirTemp(filepath.Dir(base), ".install-*")
 	if err != nil {
-		return models.InstalledPlugin{}, err
+		return models.InstalledStudioPlugin{}, err
 	}
 	defer func() {
 		discardError(os.RemoveAll(temporary))
 	}()
-	archive, err := zip.OpenReader(packagePath)
+	archive, err := zip.OpenReader(snapshot)
 	if err != nil {
-		return models.InstalledPlugin{}, models.ErrInvalidStudioPlugin
+		return models.InstalledStudioPlugin{}, models.ErrInvalidStudioPlugin
 	}
 	defer func() {
 		discardError(archive.Close())
 	}()
 	for _, entry := range archive.File {
 		if contextErr := ctx.Err(); contextErr != nil {
-			return models.InstalledPlugin{}, contextErr
+			return models.InstalledStudioPlugin{}, contextErr
 		}
 		destination, err := safeArchivePath(temporary, entry.Name)
 		if err != nil {
-			return models.InstalledPlugin{}, err
+			return models.InstalledStudioPlugin{}, err
 		}
 		if entry.FileInfo().IsDir() {
 			if mkdirErr := os.MkdirAll(destination, 0700); mkdirErr != nil {
-				return models.InstalledPlugin{}, mkdirErr
+				return models.InstalledStudioPlugin{}, mkdirErr
 			}
 			continue
 		}
 		if mkdirErr := os.MkdirAll(filepath.Dir(destination), 0700); mkdirErr != nil {
-			return models.InstalledPlugin{}, mkdirErr
+			return models.InstalledStudioPlugin{}, mkdirErr
 		}
 		reader, err := entry.Open()
 		if err != nil {
-			return models.InstalledPlugin{}, err
+			return models.InstalledStudioPlugin{}, err
 		}
 		// The destination is inside a fresh temp directory and the archive entry
 		// has passed safeArchivePath; executable tools need owner-only execute bits.
@@ -289,13 +313,51 @@ func (i Installer) Install(ctx context.Context, packagePath string, trust models
 			}
 		}
 		if createErr != nil {
-			return models.InstalledPlugin{}, createErr
+			return models.InstalledStudioPlugin{}, createErr
 		}
 	}
 	if err := os.Rename(temporary, base); err != nil {
-		return models.InstalledPlugin{}, fmt.Errorf("activate Studio plugin: %w", err)
+		return models.InstalledStudioPlugin{}, fmt.Errorf("activate Studio plugin: %w", err)
 	}
-	return models.InstalledPlugin{Manifest: inspection.Manifest, Digest: inspection.Digest, Path: base}, nil
+	return models.InstalledStudioPlugin{Manifest: inspection.Manifest, Digest: inspection.Digest, Path: base}, nil
+}
+
+func snapshotPackage(packagePath string) (string, func(), error) {
+	source, err := os.Open(packagePath) //nolint:gosec // native file-picker selection; only a bounded private package snapshot is processed.
+	if err != nil {
+		return "", func() {}, models.ErrInvalidStudioPlugin
+	}
+	defer func() { discardError(source.Close()) }()
+	info, err := source.Stat()
+	if err != nil || !info.Mode().IsRegular() || info.Size() < 0 || info.Size() > maxPluginArchiveBytes {
+		return "", func() {}, models.ErrInvalidStudioPlugin
+	}
+	directory, err := os.MkdirTemp("", "liapoldus-studio-plugin-review-")
+	if err != nil {
+		return "", func() {}, err
+	}
+	cleanup := func() { discardError(os.RemoveAll(directory)) }
+	snapshot := filepath.Join(directory, "review.studio-plugin")
+	target, err := os.OpenFile(snapshot, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600) //nolint:gosec // private temporary directory and fixed child name
+	if err != nil {
+		cleanup()
+		return "", func() {}, models.ErrInvalidStudioPlugin
+	}
+	written, copyErr := io.Copy(target, io.LimitReader(source, maxPluginArchiveBytes+1))
+	closeErr := target.Close()
+	if copyErr != nil || closeErr != nil || written != info.Size() || written > maxPluginArchiveBytes {
+		cleanup()
+		return "", func() {}, models.ErrInvalidStudioPlugin
+	}
+	return snapshot, cleanup, nil
+}
+
+func validPackageDigest(value string) bool {
+	if len(value) != len("sha256:")+sha256.Size*2 || !strings.HasPrefix(value, "sha256:") {
+		return false
+	}
+	_, err := hex.DecodeString(strings.TrimPrefix(value, "sha256:"))
+	return err == nil
 }
 
 func fileDigest(path string) (string, error) {
@@ -419,6 +481,18 @@ func validateManifest(manifest models.StudioPluginManifest, files []string, requ
 		if strings.TrimSpace(surface.ID) == "" || !map[string]bool{"page": true, "panel": true, "inspector": true, "form": true, "command": true}[surface.Kind] {
 			return models.ErrInvalidStudioPlugin
 		}
+		if surface.Route != "" {
+			if surface.Kind != "page" && surface.Kind != "panel" {
+				return models.ErrInvalidStudioPlugin
+			}
+			route := filepath.ToSlash(surface.Route)
+			if filepath.Ext(route) != ".html" && filepath.Ext(route) != ".htm" {
+				return models.ErrInvalidStudioPlugin
+			}
+			if _, err := safeArchivePath("/validated", route); err != nil || !fileSet[route] {
+				return models.ErrInvalidStudioPlugin
+			}
+		}
 		if surface.Kind == "command" && strings.TrimSpace(surface.ToolID) == "" {
 			return models.ErrInvalidStudioPlugin
 		}
@@ -434,7 +508,7 @@ func validateManifest(manifest models.StudioPluginManifest, files []string, requ
 	return nil
 }
 
-func hasPlatformArtifact(executable string, platforms []string, artifacts []models.PluginArtifact) bool {
+func hasPlatformArtifact(executable string, platforms []string, artifacts []models.StudioPluginArtifact) bool {
 	if !platformSupported(platforms) {
 		return true
 	}
@@ -450,7 +524,7 @@ func hasPlatformArtifact(executable string, platforms []string, artifacts []mode
 	return false
 }
 
-func validateArtifacts(artifacts []models.PluginArtifact, fileSet map[string]bool) error {
+func validateArtifacts(artifacts []models.StudioPluginArtifact, fileSet map[string]bool) error {
 	for _, artifact := range artifacts {
 		if strings.TrimSpace(artifact.Platform) == "" || !platformDescriptorValid([]string{artifact.Platform}) || strings.TrimSpace(artifact.Digest) == "" {
 			return models.ErrInvalidStudioPlugin
@@ -479,7 +553,7 @@ func verifyArtifactDigests(entries []*zip.File, manifest models.StudioPluginMani
 	for _, entry := range entries {
 		byPath[filepath.ToSlash(entry.Name)] = entry
 	}
-	artifacts := make([]models.PluginArtifact, 0)
+	artifacts := make([]models.StudioPluginArtifact, 0)
 	for _, tool := range manifest.Tools {
 		artifacts = append(artifacts, tool.Artifacts...)
 	}
@@ -573,7 +647,7 @@ func safeArchivePath(root, name string) (string, error) {
 }
 
 func verifyInstalledArtifactDigests(root string, manifest models.StudioPluginManifest) error {
-	artifacts := make([]models.PluginArtifact, 0)
+	artifacts := make([]models.StudioPluginArtifact, 0)
 	for _, tool := range manifest.Tools {
 		artifacts = append(artifacts, tool.Artifacts...)
 	}

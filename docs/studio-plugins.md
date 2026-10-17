@@ -1,5 +1,36 @@
 # Studio plugins и marketplace
 
+## Размещение исходников в Liapoldus workspace
+
+Активные исходники расширений Studio находятся в корневом каталоге `plugins/`.
+Server editor принадлежит `plugins/studio-server/` и собирается в отдельный
+`.studio-plugin`. Runtime Server и его product contracts принадлежат
+`services/server/`; не помещать туда UI расширения и не перемещать туда
+исполняемый StudioPlugin. Замороженные runtime-service snapshots
+`services/captcha/` и `services/identity/` не переименовываются и не изменяются
+этой работой.
+
+Пакет `plugins/studio-server/` не является самостоятельным источником
+конфигурационной схемы. Он потребляет Server-owned schema/UI metadata через
+версионированный host API Studio. Текущий `studio-service-editor/v1` bridge
+предоставляет redacted settings read, безопасный Core-backed
+`service.configuration-ui.read` и `service.peer.catalog.read`, разрешённые
+resource catalogs, safe shared draft и Project save через host; это не
+применяет конфигурацию к Core. Peer catalog возвращает только bounded Project
+service IDs/names/versions либо capability IDs/versions из manifest, полученного
+Studio → typed CLI → Core. Endpoints, raw manifests и credentials в iframe не
+передаются. Manifest/UI descriptor проходит только Studio → typed CLI → Core;
+iframe не получает CLI, Core или Service SDK client.
+Прямой доступ к Wails, Core Management API и Service SDK REST запрещён. Полный
+bridge security corpus и UI acceptance пока не пройдены. См. [целевой план
+конфигуратора](./plan#7-studio-plugin-sdk--server-extension).
+
+Server StudioPlugin использует live `service-configuration-ui/v1` descriptor:
+показывает локализованные группы/описания и соблюдает SDK-порядок controls в
+listener settings и специализированном endpoint/request editor. Descriptor
+только дополняет Server-owned JSON Schema и не становится локальной копией
+контракта; неизвестные или недоступные metadata не ослабляют schema validation.
+
 ## 1. Две разные модели
 
 | | Core services | Studio plugins |
@@ -7,7 +38,7 @@
 | Назначение | Runtime/control-plane services | Расширения Studio |
 | Представление | Canvas node + inspector | Commands, pages, panels |
 | Lifecycle | Core наблюдает и применяет settings | Local package import/start/update |
-| Settings UI | Schema-driven inspector | Собственные declarative surfaces |
+| Settings UI | Schema-driven inspector | Declarative surfaces + sandboxed iframe UI-surface |
 | Process control | Не управляется Studio | Отдельный plugin lifecycle |
 | Локальные инструменты | Не являются частью Core service | Companion console tools, принадлежащие plugin |
 | Ошибка | Degraded service/replica | Plugin unavailable/disconnected |
@@ -25,6 +56,7 @@ Studio plugin должен объявлять:
 - pages;
 - panels;
 - file types/editors;
+- UI-surfaces (declarative и sandboxed iframe);
 - companion console tools;
 - capability requirements;
 - permissions explanation;
@@ -33,6 +65,13 @@ Studio plugin должен объявлять:
 Точный wire schema должен быть утверждён отдельным владельцем. В Studio этот
 manifest используется для безопасной регистрации extension points.
 
+> Граница: декларативные UI-surfaces принадлежат StudioPlugin, а их manifest,
+> sandbox и typed host bridge — контракту Studio Plugin SDK, который владеет
+> репозиторий `studio/`. Service SDK и Wool не участвуют в загрузке или
+> выполнении расширений редактора. В текущей реализации route хранится в
+> `StudioPluginSurface.Route` (`internal/domain/models/plugin.go`); versioned
+> bridge и правила совместимости описаны в этой документации и `AGENTS.md`.
+
 ## 3. Extension host
 
 ```mermaid
@@ -40,7 +79,7 @@ flowchart LR
     M["Plugin manifest"] --> V["Validate version and capabilities"]
     V --> C["Register commands"]
     V --> P["Register workbench pages"]
-    V --> D["Register dockable panels"]
+    V --> D["Register panels as workspace tabs"]
     V --> F["Register file editors"]
     V --> T["Register companion tools"]
     C --> H["Studio host"]
@@ -50,13 +89,65 @@ flowchart LR
     T --> H
 ```
 
-Studio рендерит объявленные surfaces собственными компонентами. Произвольный
-HTML/CSS/remote JavaScript не должен автоматически попадать в Core inspector.
-В desktop host установленный surface schema читается только через
-`ReadStudioPluginSurface`: путь проверяется относительно package root,
-symlink запрещены, содержимое должно быть valid JSON. Renderer получает
-`surface + schema` и строит host-controlled preview из generic controls;
-plugin HTML/JS в основной renderer не загружается.
+Studio рендерит объявленные declarative surfaces собственными компонентами.
+Произвольный HTML/CSS/remote JavaScript не должен автоматически попадать в Core
+inspector. В desktop host установленный surface schema читается только через
+`ReadStudioPluginSurface`: путь проверяется относительно package root, symlink
+запрещены, содержимое должно быть valid JSON. Renderer получает
+`surface + schema` и строит host-controlled preview из generic controls; plugin
+HTML/JS в основной renderer не загружается.
+
+### Declarative surfaces
+
+Declarative surface (`kind: "command"` и schema-bound preview) остаётся
+host-controlled: Studio строит UI из generic controls по JSON Schema. Здесь
+plugin HTML/JS не исполняется.
+
+### UI-surface (sandboxed iframe)
+
+UI-surface — вторая форма surface, при которой plugin поставляет HTML/JS/CSS и
+Studio исполняет его в изолированном `<iframe sandbox="allow-scripts">`. Это
+разрешено для UI **любого установленного Studio-плагина** (не только
+подписанного) и запускается кнопкой в левом rail. Контракт границы:
+
+- только `<iframe sandbox="allow-scripts">`; `allow-same-origin`,
+  `allow-popups`, forms и любые дополнительные sandbox-токены не добавляются;
+- без `allow-same-origin` frame получает opaque origin: нет доступа к DOM host,
+  cookies, storage, same-origin ресурсам Studio;
+- нет доступа к Wails bindings, файловой системе и Node;
+- обмен host↔frame — только через `postMessage` bridge; raw credentials и
+  secrets по bridge не ходят;
+- `MessageEvent.origin` определяется отправителем: сообщения plugin iframe →
+  host приходят с opaque origin `null`, а host → plugin — с origin окна Studio.
+  Host проверяет `event.source === iframe.contentWindow` и `origin === "null"`;
+  plugin проверяет `event.source === parent`, закрепляет origin после строгого
+  versioned handshake и проверяет его для последующих ответов. Нельзя
+  симметрично требовать `origin === "null"` с обеих сторон;
+- для Server editor разрешены только typed intents `context.get`,
+  `service.settings.read`, `service.configuration-ui.read`,
+  `service.peer.catalog.read`, `service.resource.list`,
+  `service.admin-surface.read`, `service.resource.artifact.select`,
+  `service.resource.publish`, `service.resource.operation.watch`,
+  `service.settings.patch` и `service.settings.save`; settings read/write,
+  SDK UI metadata, peer catalog, resource catalog и Admin Surface требуют
+  declared + granted permissions. Admin Surface приходит из Core через typed
+  `liapoldus service admin-surface inspect`; StudioPlugin не получает SDK URL,
+  endpoint или credentials. Artifact publication требует отдельного
+  `service.resources.publish`: native host выбирает только Project-файл,
+  повторно валидирует live action descriptor и требует системное подтверждение.
+  `service.resource.operation.watch` использует то же permission и доступен
+  только для operation ID, созданного этим host для выбранных Project/service;
+  состояние и безопасный failure code читаются через typed CLI → Core. Одно
+  permission не наследует другое;
+- host применяет строгий CSP `frame-src`, разрешающий только ассеты плагина;
+- ассеты плагина отдаются Wails `AssetServer` по path-confined маршруту из
+  installed package root (новое поведение: HTML/JS никогда ранее не отдавались
+  через Go-host); symlink и выход за пределы package root запрещены;
+- runtime (Core) plugin executables по-прежнему не загружаются, trust/digest/
+  atomic activation и permissions/grants сохраняются.
+
+UI-surface — единственная поверхность, где исполняется plugin HTML/JS; поэтому
+sandbox обязателен всегда и не конфигурируется в более слабую сторону.
 
 ## 4. Companion console tools
 
@@ -191,12 +282,23 @@ plugin state и не завершает основной workspace. Renderer bou
 diagnostics, а успешный restart сбрасывает это состояние. Executable, platform
 list и environment names проверяются до install.
 
-Если manifest объявляет `permissions`, trust dialog требует отдельного checkbox
-grant для каждой capability. Granted permissions сохраняются в SQLite вместе с
-package digest; отсутствие хотя бы одной capability блокирует установку, а
-последующая попытка запуска tool или backend process повторно проверяет grants.
-Дополнительные permissions, которых нет в manifest, отклоняются. Trust approval
-не превращается в blanket-доступ для следующей версии package.
+Если manifest объявляет `permissions`, UI требует явного общего подтверждения
+trust и полного набора объявленных permissions: частичный grant не поддержан.
+Granted permissions сохраняются в SQLite вместе с package digest; отсутствие
+хотя бы одной capability блокирует установку, а последующая попытка запуска
+tool или backend process повторно проверяет grants. Дополнительные permissions,
+которых нет в manifest, отклоняются. Trust approval не превращается в
+blanket-доступ для следующей версии package.
+
+Перед установкой UI показывает безопасную сводку manifest, совместимость,
+наличие signature metadata, digest, requested permissions, UI surfaces и tool
+IDs. Полный package path, список архивных файлов и signature value в renderer не
+передаются. Пользователь вводит причину trust; backend связывает подтверждение
+с digest из preview, копирует выбранный архив в ограниченный приватный snapshot,
+повторно валидирует snapshot и устанавливает только при совпадении SHA-256.
+Mismatch не создаёт ни установленный каталог, ни trust decision. Удаление из
+списка требует ввести точный plugin ID; вкладки удаляемой версии закрываются
+после успешного удаления.
 
 Повторный импорт той же `id@version` отклоняется без перезаписи активного
 package. Новая version устанавливается в отдельный immutable directory; если
@@ -241,6 +343,7 @@ project lock и окончательная schema manifest будут отдел
 - read project service settings schemas;
 - open CLI deploy handoff or report import surface;
 - register commands/pages/panels;
+- render a sandboxed iframe UI-surface;
 - install and invoke declared companion tools.
 
 Capability видна до установки и до первого использования. Raw Core token,
@@ -282,6 +385,12 @@ Remote marketplace registry не входит в первую production scope. 
 с локальным `.studio-plugin` через file picker; Installed page показывает
 пакеты, которые уже проверены и установлены на этой машине.
 
+Текущий экран управления в Studio реализует локальный import/inspect/trust,
+список установленных версий, открытие объявленных UI surfaces и подтверждаемое
+удаление. Publisher/release channel, changelog, update discovery и отображение
+подробного runtime state остаются будущими функциями; наличие таких полей в
+product model не означает, что соответствующий UI уже есть.
+
 ### Import package
 
 Перед install показываются:
@@ -291,6 +400,7 @@ Remote marketplace registry не входит в первую production scope. 
 - диапазон Studio;
 - заявленные capabilities;
 - requested permissions;
+- declared UI-surfaces и их тип (declarative / sandboxed iframe);
 - companion tools, platforms и requested tool permissions;
 - changelog/release metadata;
 - explicit trust decision и install action.
@@ -318,6 +428,8 @@ Remote marketplace registry не входит в первую production scope. 
 - schema-driven project inspector остаётся доступен;
 - operations продолжают отображаться;
 - недоступность companion tool ограничивает только связанные actions и editors;
+- при сбое iframe UI-surface вкладка переходит в unavailable; host не рендерит
+  содержимое плагина напрямую и не даёт ему privileged channel;
 - показывается plugin-specific diagnostic.
 
 ## 9. Logic Modules

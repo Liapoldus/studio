@@ -1,0 +1,9 @@
+{
+  "name": "@liapoldus/design-system",
+  "version": "1.0.0",
+  "license": "MIT",
+  "source": "https://github.com/Liapoldus/design-system",
+  "sourceCommit": "ab617e051ff909f710877cce8293804e66f91f33",
+  "distribution": "brand-mark-only",
+  "contentSha256": "52ca0465200fcb6052c4bdfba16cfcb496ddf1a35e5e87345ae270748b77ef27"
+}

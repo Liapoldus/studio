@@ -11,13 +11,47 @@ export interface ToolchainStatus {
   errorCode: string
 }
 
+export interface CoreBinaryInspection {
+  digest: string
+  platform: string
+  sizeBytes: number
+}
+
+export interface CoreSettingsView {
+  schemaVersion: 'core-settings-view/v1'
+  target: 'local'
+  desiredRevision: number
+  effectiveRevision: number
+  pending: boolean
+  restartRequired: boolean
+  settings: {
+    management: {
+      listen: string
+      maxBodyBytes: number
+      headerTimeout: string
+      requestTimeout: string
+    }
+  }
+}
+
+export interface ServiceSettingsSchemaPreview {
+  schemaJson: string
+  schemaDigest: string
+  settingsDigest: string
+  draftDigest: string
+  valuesCompatible: boolean
+}
+
 export interface StudioAPI {
   productInfo(): Promise<ProductInfo>
   toolchainStatus(): Promise<ToolchainStatus>
+  selectCLIExecutable(): Promise<string>
+  configureCLIExecutable(path: string): Promise<ToolchainStatus>
   clientPreferences(): Promise<ClientPreferences>
   saveClientPreferences(theme: ThemePreference): Promise<void>
   saveClientLocale(locale: Locale): Promise<void>
   listProjects(): Promise<Project[]>
+  selectProjectCreationDirectory(): Promise<string>
   openProject(root: string): Promise<Workspace>
   createProject(root: string, id: string, name: string): Promise<Workspace>
   workspace(): Promise<Workspace>
@@ -27,40 +61,55 @@ export interface StudioAPI {
   editorAssociations(): Promise<EditorAssociation[]>
   selectExternalEditor(): Promise<string>
   saveEditorAssociation(pattern: string, application: string): Promise<void>
-  readProjectFile(path: string): Promise<Uint8Array>
-  writeProjectFile(path: string, content: Uint8Array): Promise<void>
-  readProjectSchema(schemaPath: string): Promise<Uint8Array>
-  readProjectSettings(settingsPath: string, schemaPath: string): Promise<Uint8Array>
-  writeProjectSettings(settingsPath: string, schemaPath: string, patch: Uint8Array): Promise<void>
+  removeEditorAssociation(pattern: string): Promise<void>
+  readProjectSchema(projectId: string, serviceId: string): Promise<Uint8Array>
+  importServiceSettingsSchema(projectId: string, serviceId: string): Promise<Workspace>
+  previewServiceSettingsSchema(projectId: string, serviceId: string, patchJson: string): Promise<ServiceSettingsSchemaPreview>
+  refreshServiceSettingsSchema(projectId: string, serviceId: string, preview: ServiceSettingsSchemaPreview, patchJson: string): Promise<Workspace>
+  readProjectSettings(projectId: string, serviceId: string): Promise<ProjectSettingsSnapshot>
+  writeProjectSettings(projectId: string, serviceId: string, expectedDigest: string, patch: Uint8Array): Promise<void>
+  readServiceSettingsDraft(projectId: string, serviceId: string): Promise<PersistedServiceSettingsDraft | null>
+  saveServiceSettingsDraft(projectId: string, serviceId: string, baseDigest: string, patchJson: string): Promise<void>
+  deleteServiceSettingsDraft(projectId: string, serviceId: string): Promise<void>
   runStudioCommand(command: string, target?: string, operationID?: string, profilePath?: string): Promise<void>
+  runStudioCommandAndWait(command: string, target?: string, operationID?: string, profilePath?: string): Promise<void>
   runStudioRuntimeCommand(command: string, serviceID: string): Promise<void>
   initializeGit(): Promise<Workspace>
-  createRuntimePlugin(input: RuntimePluginInput): Promise<Workspace>
-  deleteRuntimePlugin(id: string, confirmed: boolean): Promise<Workspace>
-  createPluginLink(input: PluginLinkInput): Promise<Workspace>
-  deletePluginLink(caller: string, id: string, confirmed: boolean): Promise<Workspace>
+  createRuntimeService(input: RuntimeServiceInput): Promise<Workspace>
+  deleteRuntimeService(id: string, confirmed: boolean): Promise<Workspace>
+  createServiceLink(input: ServiceLinkInput): Promise<Workspace>
+  updateServiceLink(input: ServiceLinkInput): Promise<Workspace>
+  deleteServiceLink(caller: string, id: string, confirmed: boolean): Promise<Workspace>
   selectTargetProfile(): Promise<string>
   cancelCLI(): Promise<void>
   listRuntimeArtifacts(): Promise<ArtifactReference[]>
   registerRuntimeArtifact(id: string, version: string, platform: string, binaryPath: string): Promise<ArtifactReference>
   trustRuntimeArtifact(id: string, version: string, platform: string, digest: string): Promise<ArtifactReference>
-  readRuntimePluginMetadata(pluginID: string, view: 'manifest' | 'schema' | 'status'): Promise<string>
+  removeRuntimeArtifact(id: string, version: string, platform: string, digest: string, confirmed: boolean): Promise<void>
+  bindRuntimeServiceArtifact(projectId: string, serviceId: string, version: string, platform: string): Promise<Workspace>
+  readRuntimeServiceMetadata(projectId: string, serviceID: string, view: 'manifest' | 'schema' | 'status'): Promise<string>
+  readRuntimeServiceAdminSurface?(projectId: string, serviceID: string): Promise<string>
+  selectRuntimeServiceResourceArtifact?(projectId: string, serviceID: string): Promise<string>
+  importRuntimeServiceProjectCertificate?(projectId: string, serviceID: string, resourceID: string): Promise<string>
+  publishRuntimeServiceResourceJSON?(projectId: string, serviceID: string, pageID: string, actionID: string, artifactPath: string, contentType: string, metadataJSON: string, ifMatch: string): Promise<string>
+  readRuntimeServiceResource?(projectId: string, serviceID: string, resourceID: string): Promise<string>
   prepareRemoteHandoff(target: string): Promise<string>
   onCLIEvent(callback: (event: CLIEvent) => void): () => void
   trafficRecords(): Promise<TrafficRecordView[]>
+  latestReportSummary(): Promise<ReportSummary | null>
   exportTrafficReport(): Promise<string>
   selectStudioPluginPackage(): Promise<string>
   inspectStudioPlugin(packagePath: string): Promise<string>
-  installStudioPlugin(packagePath: string, approved: boolean, reason: string, grantedPermissions: string[]): Promise<string>
-  removeStudioPlugin(pluginId: string, version: string): Promise<void>
+  installStudioPlugin(packagePath: string, expectedDigest: string, approved: boolean, reason: string, grantedPermissions: string[]): Promise<string>
+  removeStudioPlugin(studioPluginId: string, version: string): Promise<void>
   diagnostics(): Promise<Diagnostic[]>
-  installedStudioPlugins(): Promise<InstalledPluginState[]>
+  installedStudioPlugins(): Promise<InstalledStudioPluginState[]>
   installedStudioPluginManifests(): Promise<string>
-  readStudioPluginSurface(pluginId: string, version: string, surfaceId: string): Promise<string>
-  runStudioPluginTool(pluginId: string, version: string, toolId: string, args: string[]): Promise<string>
-  startStudioPluginProcess(pluginId: string, version: string): Promise<string>
-  stopStudioPluginProcess(pluginId: string, version: string): Promise<void>
-  studioPluginProcessStatus(pluginId: string, version: string): Promise<string>
+  readStudioPluginSurface(studioPluginId: string, version: string, surfaceId: string): Promise<string>
+  runStudioPluginTool(studioPluginId: string, version: string, toolId: string, args: string[]): Promise<string>
+  startStudioPluginProcess(studioPluginId: string, version: string): Promise<string>
+  stopStudioPluginProcess(studioPluginId: string, version: string): Promise<void>
+  studioPluginProcessStatus(studioPluginId: string, version: string): Promise<string>
   gitDiff(path: string): Promise<GitDiff>
   gitConflict(path: string): Promise<GitConflict>
   gitResolveConflict(path: string, side: 'ours' | 'theirs', confirmed: boolean): Promise<void>
@@ -82,6 +131,23 @@ export interface StudioAPI {
   gitCherryPick(commit: string, confirmed: boolean): Promise<void>
   gitAbort(operation: string, confirmed: boolean): Promise<void>
   selectRuntimeArtifactBinary(): Promise<string>
+  inspectCoreBinary(binaryPath: string): Promise<string>
+  updateLocalCoreBinary(binaryPath: string, digest: string, confirmed: boolean): Promise<string>
+  readCoreSettings(): Promise<CoreSettingsView>
+  updateCoreSettings(expectedRevision: number, maxBodyBytes: number, headerTimeout: string, requestTimeout: string): Promise<CoreSettingsView>
+}
+
+export interface ProjectSettingsSnapshot {
+  valuesJson: string
+  digest: string
+}
+
+export interface PersistedServiceSettingsDraft {
+  serviceId: string
+  settingsPath: string
+  schemaPath: string
+  baseDigest: string
+  patchJson: string
 }
 
 export interface ArtifactReference {
@@ -95,7 +161,22 @@ export interface ArtifactReference {
   schema?: string
 }
 
-export type RuntimePluginReadiness = 'ready' | 'not-ready' | 'unknown'
+export type RuntimeServiceReadiness = 'ready' | 'degraded' | 'not-ready' | 'unknown'
+export type RuntimeConfigurationState = 'unconfigured' | 'unobserved' | 'pending' | 'acknowledged' | 'stale' | 'failed' | 'unreachable'
+
+export interface RuntimeReplicaStatus {
+  replicaId: string
+  artifactVersion: string
+  artifactDigest: string
+  ready: boolean
+  generation: string
+  pendingGeneration: string
+  schemaVersion: string
+  desiredGeneration: number | null
+  appliedGeneration: number | null
+  configurationState: RuntimeConfigurationState
+  lastFailureCode: string
+}
 
 export type ThemePreference = 'system' | 'light' | 'dark'
 export type Locale = 'ru' | 'en'
@@ -150,7 +231,21 @@ export interface TrafficRecordView {
   responseSize: number
 }
 
-export interface InstalledPluginState {
+export interface ReportSummary {
+  operationId: string
+  target: string
+  commitSha: string
+  generation: string
+  bundleDigest: string
+  cliVersion: string
+  coreApiCompatibility: string
+  importedAt: string
+  replicaCount: number
+  readyReplicas: number
+  state: string
+}
+
+export interface InstalledStudioPluginState {
   id: string
   version: string
   digest: string
@@ -240,7 +335,7 @@ export interface Workspace {
   project: Project | null
   files: ProjectFile[]
   git: GitStatus
-  graph: PluginGraph
+  graph: ServiceGraph
 }
 
 export interface WorkspaceState {
@@ -250,7 +345,7 @@ export interface WorkspaceState {
   filtersJson: string
 }
 
-export interface RuntimePluginInput {
+export interface RuntimeServiceInput {
   id: string
   name: string
   version: string
@@ -258,7 +353,7 @@ export interface RuntimePluginInput {
   settingsSchemaPath: string
 }
 
-export interface PluginLinkInput {
+export interface ServiceLinkInput {
   id: string
   caller: string
   target: string
@@ -278,7 +373,7 @@ export interface PluginLinkInput {
   redactionPolicy: string
 }
 
-export interface RuntimePlugin {
+export interface RuntimeService {
   id: string
   name: string
   version: string
@@ -289,9 +384,17 @@ export interface RuntimePlugin {
   configured: boolean
   problemCount: number
   linkPaths: string[]
+  artifact?: ServiceArtifactReference
 }
 
-export interface PluginLink {
+export interface ServiceArtifactReference {
+  id: string
+  version: string
+  platform: string
+  digest: string
+}
+
+export interface ServiceLink {
   id: string
   caller: string
   target: string
@@ -313,7 +416,7 @@ export interface PluginLink {
   redactionPolicy: string
 }
 
-export interface PluginGraph {
-  plugins: RuntimePlugin[]
-  links: PluginLink[]
+export interface ServiceGraph {
+  services: RuntimeService[]
+  links: ServiceLink[]
 }

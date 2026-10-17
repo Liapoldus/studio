@@ -28,12 +28,19 @@ type Repository struct{}
 
 var _ interfaces.GitRepository = Repository{}
 
+// gitCommand invokes the fixed Git executable with an argument vector; no
+// command is interpreted by a shell. Callers validate project roots, paths,
+// operation names, and confirmations before constructing arguments.
+func gitCommand(ctx context.Context, arguments ...string) *exec.Cmd {
+	return exec.CommandContext(ctx, "git", arguments...) //nolint:gosec // fixed native executable; values are separate validated argv entries.
+}
+
 func (Repository) Init(ctx context.Context, root string) error {
 	root, err := validateRoot(root)
 	if err != nil {
 		return models.ErrInvalidProject
 	}
-	command := exec.CommandContext(ctx, "git", "-C", root, "init")
+	command := gitCommand(ctx, "-C", root, "init")
 	if output, commandErr := command.CombinedOutput(); commandErr != nil {
 		if ctx.Err() != nil {
 			return ctx.Err()
@@ -48,7 +55,7 @@ func (Repository) Status(ctx context.Context, root string) (models.GitStatus, er
 	if err != nil {
 		return models.GitStatus{}, models.ErrInvalidProject
 	}
-	command := exec.CommandContext(ctx, "git", "-C", root, "status", "--porcelain=v1", "--branch")
+	command := gitCommand(ctx, "-C", root, "status", "--porcelain=v1", "--branch")
 	output, err := command.Output()
 	if err != nil {
 		if ctx.Err() != nil {
@@ -58,7 +65,7 @@ func (Repository) Status(ctx context.Context, root string) (models.GitStatus, er
 	}
 	status := parseStatus(string(output))
 	status.Available = true
-	revision, revisionErr := exec.CommandContext(ctx, "git", "-C", root, "rev-parse", "--short", "HEAD").Output()
+	revision, revisionErr := gitCommand(ctx, "-C", root, "rev-parse", "--short", "HEAD").Output()
 	if revisionErr == nil {
 		status.Revision = strings.TrimSpace(string(revision))
 	}
@@ -79,7 +86,7 @@ func (Repository) Diff(ctx context.Context, root, path string) (models.GitDiff, 
 	if path != "" {
 		args = append(args, filepath.ToSlash(filepath.Clean(path)))
 	}
-	command := exec.CommandContext(ctx, "git", args...) //nolint:gosec // native Git arguments are constructed from validated project paths.
+	command := gitCommand(ctx, args...)
 	stdout, err := command.StdoutPipe()
 	if err != nil {
 		return models.GitDiff{}, err
@@ -167,11 +174,11 @@ func (Repository) ResolveConflict(ctx context.Context, root, path, side string, 
 	if !conflicted {
 		return ErrInvalidGitRequest
 	}
-	checkout := exec.CommandContext(ctx, "git", "-C", root, "checkout", "--"+side, "--", filepath.ToSlash(filepath.Clean(path))) //nolint:gosec // side and path are validated above.
+	checkout := gitCommand(ctx, "-C", root, "checkout", "--"+side, "--", filepath.ToSlash(filepath.Clean(path)))
 	if output, commandErr := checkout.CombinedOutput(); commandErr != nil {
 		return commandError(ctx, output, commandErr)
 	}
-	add := exec.CommandContext(ctx, "git", "-C", root, "add", "--", filepath.ToSlash(filepath.Clean(path))) //nolint:gosec // path is validated above.
+	add := gitCommand(ctx, "-C", root, "add", "--", filepath.ToSlash(filepath.Clean(path)))
 	if output, commandErr := add.CombinedOutput(); commandErr != nil {
 		return commandError(ctx, output, commandErr)
 	}
@@ -213,7 +220,7 @@ func runPathMutation(ctx context.Context, root, operation string, paths []string
 		args = append(args, "--")
 	}
 	args = append(args, normalizedGitPaths(paths)...)
-	if output, commandErr := exec.CommandContext(ctx, "git", args...).CombinedOutput(); commandErr != nil { //nolint:gosec // operation and validated project paths are fixed.
+	if output, commandErr := gitCommand(ctx, args...).CombinedOutput(); commandErr != nil {
 		return commandError(ctx, output, commandErr)
 	}
 	return nil
@@ -244,10 +251,10 @@ func (Repository) CommitStaged(ctx context.Context, root, message string, confir
 	if !staged {
 		return "", ErrInvalidGitRequest
 	}
-	if output, commandErr := exec.CommandContext(ctx, "git", "-C", root, "commit", "-m", message).CombinedOutput(); commandErr != nil {
+	if output, commandErr := gitCommand(ctx, "-C", root, "commit", "-m", message).CombinedOutput(); commandErr != nil {
 		return "", commandError(ctx, output, commandErr)
 	}
-	revision, err := exec.CommandContext(ctx, "git", "-C", root, "rev-parse", "--short", "HEAD").Output()
+	revision, err := gitCommand(ctx, "-C", root, "rev-parse", "--short", "HEAD").Output()
 	if err != nil {
 		return "", ErrUnavailable
 	}
@@ -263,7 +270,7 @@ func (Repository) Stashes(ctx context.Context, root string, limit int) ([]models
 		return nil, ErrInvalidGitRequest
 	}
 	format := "%gd%x00%aI%x00%gs"
-	output, err := exec.CommandContext(ctx, "git", "-C", root, "stash", "list", "-n", strconv.Itoa(limit), "--format="+format).Output() //nolint:gosec // limit is bounded before becoming an argument.
+	output, err := gitCommand(ctx, "-C", root, "stash", "list", "-n", strconv.Itoa(limit), "--format="+format).Output()
 	if err != nil {
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
@@ -304,7 +311,7 @@ func (Repository) Stash(ctx context.Context, root, message string, includeUntrac
 	if includeUntracked {
 		args = append(args, "--include-untracked")
 	}
-	if output, commandErr := exec.CommandContext(ctx, "git", args...).CombinedOutput(); commandErr != nil { //nolint:gosec // message is validated and passed as one argument.
+	if output, commandErr := gitCommand(ctx, args...).CombinedOutput(); commandErr != nil {
 		return "", commandError(ctx, output, commandErr)
 	}
 	stashes, err := (Repository{}).Stashes(ctx, root, 1)
@@ -330,11 +337,11 @@ func (Repository) ApplyStash(ctx context.Context, root string, index int, drop, 
 		return ErrConfirmation
 	}
 	ref := stashRef(index)
-	if output, commandErr := exec.CommandContext(ctx, "git", "-C", root, "stash", "apply", "--index", ref).CombinedOutput(); commandErr != nil { //nolint:gosec // index is range-validated.
+	if output, commandErr := gitCommand(ctx, "-C", root, "stash", "apply", "--index", ref).CombinedOutput(); commandErr != nil {
 		return commandError(ctx, output, commandErr)
 	}
 	if drop {
-		if output, commandErr := exec.CommandContext(ctx, "git", "-C", root, "stash", "drop", ref).CombinedOutput(); commandErr != nil { //nolint:gosec // index is range-validated.
+		if output, commandErr := gitCommand(ctx, "-C", root, "stash", "drop", ref).CombinedOutput(); commandErr != nil {
 			return commandError(ctx, output, commandErr)
 		}
 	}
@@ -356,7 +363,7 @@ func stashRef(index int) string {
 const maxConflictBlobBytes = 1 << 20
 
 func readConflictSide(ctx context.Context, root, path string, stage int) (models.GitConflictSide, error) {
-	command := exec.CommandContext(ctx, "git", "-C", root, "show", fmt.Sprintf(":%d:%s", stage, filepath.ToSlash(filepath.Clean(path)))) //nolint:gosec // stage is internal and path is validated by the caller.
+	command := gitCommand(ctx, "-C", root, "show", fmt.Sprintf(":%d:%s", stage, filepath.ToSlash(filepath.Clean(path))))
 	stdout, err := command.StdoutPipe()
 	if err != nil {
 		return models.GitConflictSide{}, err
@@ -398,7 +405,7 @@ func (Repository) Branches(ctx context.Context, root string) ([]models.GitBranch
 	if err != nil {
 		return nil, err
 	}
-	output, err := exec.CommandContext(ctx, "git", "-C", root, "for-each-ref", "--format=%(refname:short)\t%(upstream:short)\t%(HEAD)", "refs/heads").Output()
+	output, err := gitCommand(ctx, "-C", root, "for-each-ref", "--format=%(refname:short)\t%(upstream:short)\t%(HEAD)", "refs/heads").Output()
 	if err != nil {
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
@@ -428,7 +435,7 @@ func (Repository) History(ctx context.Context, root string, limit int) ([]models
 		return nil, ErrInvalidGitRequest
 	}
 	format := "%H%x09%h%x09%an%x09%aI%x09%s"
-	output, err := exec.CommandContext(ctx, "git", "-C", root, "log", "--no-decorate", "--date=iso-strict", "-n", strconv.Itoa(limit), "--pretty=format:"+format, "--").Output() //nolint:gosec // limit is bounded above and below before it becomes an argument.
+	output, err := gitCommand(ctx, "-C", root, "log", "--no-decorate", "--date=iso-strict", "-n", strconv.Itoa(limit), "--pretty=format:"+format, "--").Output()
 	if err != nil {
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
@@ -454,7 +461,7 @@ func (Repository) Remotes(ctx context.Context, root string) ([]models.GitRemote,
 	if err != nil {
 		return nil, err
 	}
-	output, err := exec.CommandContext(ctx, "git", "-C", root, "remote", "-v").Output()
+	output, err := gitCommand(ctx, "-C", root, "remote", "-v").Output()
 	if err != nil {
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
@@ -504,7 +511,7 @@ func (Repository) Checkout(ctx context.Context, root, branch string, confirm boo
 	if status.Dirty || status.Conflict {
 		return ErrConfirmation
 	}
-	if output, err := exec.CommandContext(ctx, "git", "-C", root, "switch", "--", branch).CombinedOutput(); err != nil {
+	if output, err := gitCommand(ctx, "-C", root, "switch", "--", branch).CombinedOutput(); err != nil {
 		return commandError(ctx, output, err)
 	}
 	return nil
@@ -525,15 +532,15 @@ func (Repository) Commit(ctx context.Context, root, message string, paths []stri
 	}
 	addArgs := []string{"-C", root, "add", "--"}
 	addArgs = append(addArgs, normalizedGitPaths(paths)...)
-	if output, addErr := exec.CommandContext(ctx, "git", addArgs...).CombinedOutput(); addErr != nil { //nolint:gosec // native Git arguments are validated path scopes.
+	if output, addErr := gitCommand(ctx, addArgs...).CombinedOutput(); addErr != nil {
 		return "", commandError(ctx, output, addErr)
 	}
 	commitArgs := []string{"-C", root, "commit", "-m", message, "--"}
 	commitArgs = append(commitArgs, normalizedGitPaths(paths)...)
-	if output, commitErr := exec.CommandContext(ctx, "git", commitArgs...).CombinedOutput(); commitErr != nil { //nolint:gosec // native Git arguments are validated path scopes.
+	if output, commitErr := gitCommand(ctx, commitArgs...).CombinedOutput(); commitErr != nil {
 		return "", commandError(ctx, output, commitErr)
 	}
-	revision, err := exec.CommandContext(ctx, "git", "-C", root, "rev-parse", "--short", "HEAD").Output()
+	revision, err := gitCommand(ctx, "-C", root, "rev-parse", "--short", "HEAD").Output()
 	if err != nil {
 		return "", ErrUnavailable
 	}
@@ -575,7 +582,7 @@ func (Repository) Abort(ctx context.Context, root, operation string, confirm boo
 	if !status.Conflict {
 		return ErrInvalidGitRequest
 	}
-	command := exec.CommandContext(ctx, "git", "-C", root, operation, "--abort")
+	command := gitCommand(ctx, "-C", root, operation, "--abort")
 	if output, commandErr := command.CombinedOutput(); commandErr != nil {
 		return commandError(ctx, output, commandErr)
 	}
@@ -602,7 +609,7 @@ func runLocalHistoryOperation(ctx context.Context, root, operation, target strin
 		args = append(args, "--no-edit")
 	}
 	args = append(args, "--", target)
-	command := exec.CommandContext(ctx, "git", args...) //nolint:gosec // operation and target are validated before becoming arguments.
+	command := gitCommand(ctx, args...)
 	if output, commandErr := command.CombinedOutput(); commandErr != nil {
 		return commandError(ctx, output, commandErr)
 	}
@@ -621,7 +628,7 @@ func runRemote(ctx context.Context, root, operation, remote, branch string, conf
 	if !confirm || !validGitToken(remote) || !validGitToken(branch) {
 		return ErrConfirmation
 	}
-	if output, err := exec.CommandContext(ctx, "git", "-C", root, operation, remote, branch).CombinedOutput(); err != nil {
+	if output, err := gitCommand(ctx, "-C", root, operation, remote, branch).CombinedOutput(); err != nil {
 		return commandError(ctx, output, err)
 	}
 	return nil
