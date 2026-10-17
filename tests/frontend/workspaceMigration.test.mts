@@ -25,10 +25,8 @@ await test('project-local migration previews, checks revision and recovers exact
     const migrated: unknown = JSON.parse(await readFile(path, 'utf8'))
     const expected = JSON.parse(original.toString('utf8')) as { tabs: { schemaVersion: string; activeTabId: string; tabs: Record<string, unknown>[] } }
     expected.tabs.schemaVersion = 'workspace/v5'
-    expected.tabs.activeTabId = 'studio-plugins'
-    expected.tabs.tabs = expected.tabs.tabs.map((tab) => tab.id === 'plugins' && tab.kind === 'plugins'
-      ? { ...tab, id: 'studio-plugins', kind: 'studio-plugins' }
-      : tab)
+    expected.tabs.activeTabId = 'canvas'
+    expected.tabs.tabs = expected.tabs.tabs.filter((tab) => tab.id !== 'plugins' && tab.kind !== 'plugins' && tab.kind !== 'studio-plugins')
     expected.tabs.tabs.push({ id: 'canvas', kind: 'canvas', title: 'Canvas' })
     assert.deepEqual(migrated, expected)
     await migrateWorkspace({ projectRoot: root, mode: 'recover', expectedDigest: next.digest, recoveryDigest: preview.digest })
@@ -50,5 +48,25 @@ await test('migration refuses symlinked state and unsupported versions without m
     await writeFile(join(root, '.studio', 'workspace.json'), original)
     await assert.rejects(migrateWorkspace({ projectRoot: root }), /Unsupported workspace/u)
     assert.equal(await readFile(join(root, '.studio', 'workspace.json'), 'utf8'), original)
+  } finally { await rm(root, { recursive: true, force: true }) }
+})
+
+await test('workspace v5 removes the obsolete Studio Plugins tab and preserves clean state bytes', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'studio-workspace-plugins-'))
+  try {
+    await mkdir(join(root, '.studio'))
+    const path = join(root, '.studio', 'workspace.json')
+    const original = Buffer.from('{"tabs":{"schemaVersion":"workspace/v5","tabs":[{"id":"studio-plugins","kind":"studio-plugins","title":"Plugins"}],"activeTabId":"studio-plugins","layout":{}}}\n')
+    await writeFile(path, original)
+    const preview = await migrateWorkspace({ projectRoot: root })
+    assert.equal(preview.changed, true)
+    await migrateWorkspace({ projectRoot: root, mode: 'apply', expectedDigest: preview.digest })
+    const migrated = JSON.parse(await readFile(path, 'utf8')) as { tabs: { tabs: Array<{ id: string; kind: string }>; activeTabId: string } }
+    assert.deepEqual(migrated.tabs.tabs, [{ id: 'canvas', kind: 'canvas', title: 'Canvas' }])
+    assert.equal(migrated.tabs.activeTabId, 'canvas')
+    const clean = await readFile(path)
+    const second = await migrateWorkspace({ projectRoot: root })
+    assert.equal(second.changed, false)
+    assert.deepEqual(await readFile(path), clean)
   } finally { await rm(root, { recursive: true, force: true }) }
 })

@@ -6,6 +6,8 @@ import { groupStudioPluginVersions } from '../models/studioPluginPackage'
 import type { Copy } from '../models/copy'
 import type { StudioPluginSurface } from '../stores/studio'
 import type { ServiceEditorButtonCandidate } from '../models/serviceEditorButtons'
+import { assignSingleServiceEditorPages } from '../models/serviceEditorButtons'
+import { latestStudioPluginSurfaces } from '../models/studioPluginPackage'
 import { useStudioStore } from '../stores/studio'
 
 type Props = {
@@ -33,9 +35,16 @@ export function StudioPluginsView({ controller, t, surfaces, onOpen }: Props) {
 
   async function refreshInstalled() {
     try {
-      setInstalled(await controller.installedStudioPluginPackages())
-      setButtonCandidates(await controller.serviceEditorButtonCandidates())
-      setEditorBindings(await controller.studioPluginEditorBindings())
+      const [packages, candidates, bindings] = await Promise.all([
+        controller.installedStudioPluginPackages(),
+        controller.serviceEditorButtonCandidates(),
+        controller.studioPluginEditorBindings(),
+      ])
+      const nextBindings = assignSingleServiceEditorPages(candidates, bindings, latestStudioPluginSurfaces(surfaces))
+      setInstalled(packages)
+      setButtonCandidates(candidates)
+      setEditorBindings(nextBindings)
+      if (nextBindings.length !== bindings.length) await controller.saveStudioPluginEditorBindings(nextBindings)
       setError('')
     } catch (failure: unknown) {
       setError(messageOf(failure))
@@ -52,7 +61,7 @@ export function StudioPluginsView({ controller, t, surfaces, onOpen }: Props) {
     finally { setBusy(false) }
   }
 
-  useEffect(() => { void refreshInstalled() }, [controller])
+  useEffect(() => { void refreshInstalled() }, [controller, surfaces])
   useEffect(() => {
     const openInstaller = () => { void choosePackage() }
     window.addEventListener('studio:add-plugin', openInstaller)

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { parseServiceEditorButtons, resolveServiceEditorButtons, serviceInspectorHiddenSettingsPaths } from '../../frontend/src/models/serviceEditorButtons.ts'
+import { assignSingleServiceEditorPages, parseServiceEditorButtons, resolveServiceEditorButtons, serviceInspectorHiddenSettingsPaths, serviceInspectorPathIsHidden } from '../../frontend/src/models/serviceEditorButtons.ts'
 
 const manifest = JSON.stringify({
   id: 'server',
@@ -35,7 +35,22 @@ await test('shows a button only for its installed service-context surface', () =
   assert.deepEqual(resolveServiceEditorButtons(buttons, bindings, []), [])
 })
 
+await test('auto-assigns the only plugin with one service page and preserves existing choices', () => {
+  const buttons = [{ id: 'server.endpoints' }]
+  const onlyPage = [{ studioPluginId: 'liapoldus.server-editor', id: 'server-editor', context: 'service' as const }]
+  assert.deepEqual(assignSingleServiceEditorPages(buttons, [], onlyPage), [{ buttonId: 'server.endpoints', pluginId: 'liapoldus.server-editor', surfaceId: 'server-editor' }])
+  assert.deepEqual(assignSingleServiceEditorPages(buttons, [{ buttonId: 'server.endpoints', pluginId: 'custom.editor', surfaceId: 'custom-page' }], onlyPage), [{ buttonId: 'server.endpoints', pluginId: 'custom.editor', surfaceId: 'custom-page' }])
+  assert.deepEqual(assignSingleServiceEditorPages(buttons, [], [...onlyPage, { studioPluginId: 'liapoldus.server-editor', id: 'other-page', context: 'service' as const }]), [])
+  assert.deepEqual(assignSingleServiceEditorPages(buttons, [], [...onlyPage, { studioPluginId: 'other.editor', id: 'other-page', context: 'service' as const }]), [])
+  assert.deepEqual(assignSingleServiceEditorPages(buttons, [], [{ studioPluginId: 'workspace.editor', id: 'workspace', context: 'workspace' as const }]), [])
+})
+
 await test('keeps Server endpoint settings inside the Server editor surface', () => {
-  assert.deepEqual(serviceInspectorHiddenSettingsPaths('server'), ['/config/routes'])
+  assert.deepEqual(serviceInspectorHiddenSettingsPaths('server'), ['/config/routes', '/config/listeners'])
   assert.deepEqual(serviceInspectorHiddenSettingsPaths('echo'), [])
+  assert.equal(serviceInspectorPathIsHidden('server', ['config', 'routes']), true)
+  assert.equal(serviceInspectorPathIsHidden('server', ['config', 'routes', '0', 'path']), true)
+  assert.equal(serviceInspectorPathIsHidden('server', ['config', 'listeners', '0', 'address']), true)
+  assert.equal(serviceInspectorPathIsHidden('server', ['config', 'timeouts', 'read']), false)
+  assert.equal(serviceInspectorPathIsHidden('echo', ['config', 'routes', '0', 'path']), false)
 })

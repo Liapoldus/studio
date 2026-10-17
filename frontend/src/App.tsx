@@ -7,11 +7,9 @@ import { WindowMinimise, WindowToggleMaximise, Quit } from '../wailsjs/runtime/r
 import { createStudioController } from './controllers/studioController'
 import { text, type Copy } from './models/copy'
 import type { TabKind } from './models/studio'
-import { projectPluginVersionsFromState } from './models/studio'
 import { useStudioStore, type StudioPluginSurface } from './stores/studio'
-import { ActivityBar, ArtifactsView, CommandPalette, CreateProjectDialog, GitSidebar, GraphView, HomeView, Inspector, OutputView, ServiceDialog, StudioPluginSurfaceFrame, StudioPluginsSidebar, ProblemsView, ReportsView, SettingsView } from './views/StudioViews'
+import { ActivityBar, ArtifactsView, CommandPalette, CreateProjectDialog, GitSidebar, GraphView, HomeView, Inspector, OutputView, ServiceDialog, StudioPluginSurfaceFrame, ProblemsView, ReportsView, SettingsView } from './views/StudioViews'
 import { StudioPluginsView } from './views/StudioPluginsView'
-import { ProjectPluginsView } from './views/ProjectPluginsView'
 import { BrandMark } from './ui/BrandMark'
 import { Boxes, Bug, ChevronDown, Command, GitBranch, Minus, MonitorDown, Play, RotateCw, Settings, Terminal, X } from 'lucide-react'
 
@@ -52,7 +50,6 @@ export default function App({ api }: Props) {
   const tabs = useStudioStore((state) => state.tabs)
   const activeTabId = useStudioStore((state) => state.activeTabId)
   const studioPluginSurfaces = useStudioStore((state) => state.studioPluginSurfaces)
-  const projectPluginVersions = useStudioStore((state) => state.projectPluginVersions)
   const selected = useStudioStore((state) => state.selected)
   const error = useStudioStore((state) => state.error)
   const commandOpen = useStudioStore((state) => state.commandOpen)
@@ -74,7 +71,6 @@ export default function App({ api }: Props) {
   const closeTab = useStudioStore((state) => state.closeTab)
   const reorderTabs = useStudioStore((state) => state.reorderTabs)
   const setActiveTab = useStudioStore((state) => state.setActiveTab)
-  const setProjectPluginVersions = useStudioStore((state) => state.setProjectPluginVersions)
   const openStudioPluginSurface = useStudioStore((state) => state.openStudioPluginSurface)
   const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? null
   const t = text[locale]
@@ -94,15 +90,6 @@ export default function App({ api }: Props) {
   useEffect(() => { if (activeTab?.kind === 'reports') void controller.loadTraffic() }, [activeTab?.kind, controller])
   useEffect(() => { if (stateHydrated) void controller.persistWorkspace() }, [activeTabId, controller, layout, stateHydrated, tabs])
   useEffect(() => { void controller.loadStudioPluginSurfaces() }, [controller])
-  useEffect(() => {
-    let active = true
-    setProjectPluginVersions({})
-    if (workspace?.project) void controller.api.readWorkspaceState().then((state) => {
-      const pins = projectPluginVersionsFromState(state)
-      if (active) setProjectPluginVersions(pins)
-    }).catch(() => { if (active) setProjectPluginVersions({}) })
-    return () => { active = false }
-  }, [controller, setProjectPluginVersions, workspace?.project?.id])
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
       const state = useStudioStore.getState()
@@ -129,7 +116,7 @@ export default function App({ api }: Props) {
     useStudioStore.getState().navigate(kind)
   }
   function openPluginSurface(surface: StudioPluginSurface) {
-    if (surface.context !== 'workspace' || projectPluginVersions[surface.studioPluginId] !== surface.version) return
+    if (surface.context !== 'workspace') return
     openStudioPluginSurface(surface, { projectId: workspace?.project?.id })
   }
   function dismissError() { setError(null) }
@@ -151,13 +138,10 @@ export default function App({ api }: Props) {
 
   if (!initialized) return <div className="loading-screen"><BrandMark /><span>{t.loading}</span></div>
   const hasProject = Boolean(workspace?.project)
-  const projectSurfaces = studioPluginSurfaces.filter((surface) => projectPluginVersions[surface.studioPluginId] === surface.version)
   const showWorkspace = hasProject && view === 'workspace'
   const sidebar = showWorkspace && workspace && activeTab?.kind === 'git'
-      ? <aside className="context-sidebar"><GitSidebar workspace={workspace} t={t} controller={controller} /></aside>
-      : showWorkspace && workspace && activeTab?.kind === 'studio-plugins'
-        ? <StudioPluginsSidebar workspace={workspace} t={t} surfaces={projectSurfaces} onOpen={openPluginSurface} />
-        : null
+    ? <aside className="context-sidebar"><GitSidebar workspace={workspace} t={t} controller={controller} /></aside>
+    : null
 
   let content = null
   if (showWorkspace && workspace && activeTab) {
@@ -165,13 +149,10 @@ export default function App({ api }: Props) {
       case 'canvas': content = <GraphView controller={controller} workspace={workspace} t={t} />; break
       case 'git': content = <GitWorkspaceHint t={t} />; break
       case 'reports': content = <ReportsView controller={controller} t={t} />; break
-      case 'studio-plugins': content = <ProjectPluginsView controller={controller} locale={locale} />; break
       case 'problems': content = <ProblemsView diagnostics={diagnostics} t={t} />; break
       case 'output': content = <OutputView cliEvents={cliEvents} runtimeOutput={runtimeOutput} streamState={cliStreamState} controller={controller} t={t} />; break
       case 'studio-plugin': {
-        const surface = activeTab.studioPluginId && projectPluginVersions[activeTab.studioPluginId] === activeTab.studioPluginVersion
-          ? studioPluginSurfaces.find((item) => item.studioPluginId === activeTab.studioPluginId && item.version === activeTab.studioPluginVersion && item.id === activeTab.surfaceId)
-          : undefined
+        const surface = studioPluginSurfaces.find((item) => item.studioPluginId === activeTab.studioPluginId && item.version === activeTab.studioPluginVersion && item.id === activeTab.surfaceId)
         const selectedService = activeTab.projectId === workspace.project?.id && activeTab.serviceId
           ? workspace.graph.services.find((service) => service.id === activeTab.serviceId)
           : undefined
@@ -221,10 +202,10 @@ export default function App({ api }: Props) {
     </div>}
 
     {showWorkspace && <div className="shell-body">
-      <ActivityBar activeId={activeTab?.id ?? null} t={t} onNavigate={openTab} surfaces={projectSurfaces} onOpenSurface={openPluginSurface} />
+      <ActivityBar activeId={activeTab?.id ?? null} t={t} onNavigate={openTab} surfaces={studioPluginSurfaces} onOpenSurface={openPluginSurface} />
       {sidebar}
       <main className="workbench">{content ?? <div className="workspace-empty"><span>{locale === 'ru' ? 'Выберите раздел в боковой панели' : 'Open a workspace from the activity bar'}</span></div>}</main>
-      {workspace && (activeTab?.kind === 'canvas' || activeTab?.kind === 'studio-plugins' || activeTab?.kind === 'studio-plugin') && <InspectorErrorBoundary key={`${activeTab.kind}:${selected?.kind ?? ''}:${selected?.id ?? ''}`} onRetry={() => { void controller.refreshGraph() }}><Inspector controller={controller} workspace={workspace} selected={activeTab.kind === 'canvas' || activeTab.kind === 'studio-plugins' ? selected : null} output={runtimeOutput} /></InspectorErrorBoundary>}
+      {workspace && (activeTab?.kind === 'canvas' || activeTab?.kind === 'studio-plugin') && <InspectorErrorBoundary key={`${activeTab.kind}:${selected?.kind ?? ''}:${selected?.id ?? ''}`} onRetry={() => { void controller.refreshGraph() }}><Inspector controller={controller} workspace={workspace} selected={activeTab.kind === 'canvas' ? selected : null} output={runtimeOutput} /></InspectorErrorBoundary>}
     </div>}
 
     {view === 'settings' && <main className="global-page"><SettingsView controller={controller} locale={locale} theme={theme} toolchain={toolchain} t={t} pluginManager={<StudioPluginsView controller={controller} surfaces={studioPluginSurfaces} onOpen={openPluginSurface} t={t} />} artifactsManager={<ArtifactsView controller={controller} t={t} />} /></main>}

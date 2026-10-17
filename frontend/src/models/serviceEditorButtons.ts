@@ -32,9 +32,31 @@ export function resolveServiceEditorButtons<T extends ServiceEditorSurface>(butt
   })
 }
 
+/** Assigns a button only when it is currently unassigned and its plugin has one eligible service page. */
+export function assignSingleServiceEditorPages(buttons: readonly Pick<ServiceEditorButton, 'id'>[], bindings: readonly ServiceEditorBinding[], surfaces: readonly ServiceEditorSurface[]): ServiceEditorBinding[] {
+  const next = [...bindings]
+  for (const button of buttons) {
+    if (next.some((binding) => binding.buttonId === button.id)) continue
+    const candidates = surfaces.filter((surface) => surface.context === 'service')
+    const plugins = [...new Set(candidates.map((surface) => surface.studioPluginId))]
+    const matches = plugins.flatMap((pluginId) => {
+      const pages = candidates.filter((surface) => surface.studioPluginId === pluginId)
+      return pages.length === 1 ? [{ pluginId, surface: pages[0] }] : []
+    })
+    if (matches.length !== 1) continue
+    const [match] = matches
+    next.push({ buttonId: button.id, pluginId: match.pluginId, surfaceId: match.surface.id })
+  }
+  return next
+}
+
 /** Server endpoint settings belong to its service editor surface, not the generic Inspector form. */
 export function serviceInspectorHiddenSettingsPaths(serviceID: string): string[] {
-  return serviceID === 'server' ? ['/config/routes'] : []
+  return serviceID === 'server' ? ['/config/routes', '/config/listeners'] : []
+}
+
+export function serviceInspectorPathIsHidden(serviceID: string, segments: readonly string[]): boolean {
+  return serviceID === 'server' && segments.length >= 2 && segments[0] === 'config' && (segments[1] === 'routes' || segments[1] === 'listeners')
 }
 
 function localized(value: unknown): { ru: string; en: string } | null {

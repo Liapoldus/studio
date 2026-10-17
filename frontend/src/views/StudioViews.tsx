@@ -13,19 +13,18 @@ import { configurationDraftKey, isSensitiveConfigurationFieldName, mergeConfigur
 import { configurationSchemaArrayItem, configurationSchemaCanCreateProtectedArrayItem, configurationSchemaProtected, configurationSchemaRenderable, configurationSchemaVariants, configurationVariantValue, createConfigurationSchemaValue, effectiveConfigurationSchema, selectedConfigurationVariant } from '../models/configurationSchema'
 import { configurationArrayOperationRequest, createConfigurationArrayItem, duplicateConfigurationArrayItem, moveConfigurationArrayItem, removeConfigurationArrayItem, reorderConfigurationArrayItem } from '../models/configurationArray'
 import { configurationMapOperationRequest, configurationMapOperations, isConfigurationMapOperationRequest, removeConfigurationMapKey, safeConfigurationMapKey } from '../models/configurationMap'
-import { groupStudioPluginVersions, type StudioPluginPackageInfo } from '../models/studioPluginPackage'
 import { configurationSchemaDifferencePaths, configurationUIFieldKey, matchServiceConfigurationUIField, projectCertificateCanImport, projectResourceCanOpen, schemaAtPointer, supportsServiceResourceCatalog, type ServiceConfigurationResource, type ServiceConfigurationUI, type ServiceConfigurationUIField } from '../models/serviceConfigurationUI'
-import { messageOf, operationReplicaOutcomes, projectPluginVersionsFromState, summarizeCLIEvent, workspaceStateWithProjectPluginVersions, type CLIStreamState, type Locale, type TabKind, type WorkspaceTab } from '../models/studio'
+import { messageOf, operationReplicaOutcomes, summarizeCLIEvent, type CLIStreamState, type Locale, type TabKind, type WorkspaceTab } from '../models/studio'
 import { useStudioStore } from '../stores/studio'
 import type { StudioPluginSurface } from '../stores/studio'
 import { createStudioBridgeSessionID, isStudioPluginSurfaceReadyMessage, parseStudioPluginBridgeRequest, studioPluginBridgeFailureCode, studioPluginPermissionGranted, studioPluginSurfaceAssetURL, studioServiceEditorBridgeVersion, withPeerCatalogDeadline } from '../models/pluginSurface'
 import { latestStudioPluginSurfaces } from '../models/studioPluginPackage'
-import { resolveServiceEditorButtons, serviceInspectorHiddenSettingsPaths } from '../models/serviceEditorButtons'
+import { resolveServiceEditorButtons, serviceInspectorHiddenSettingsPaths, serviceInspectorPathIsHidden } from '../models/serviceEditorButtons'
 import { groupRuntimeArtifacts, runtimeReplicasForService, runtimeServiceActionConfirmationText } from '../models/runtime'
 import { BrandMark } from '../ui/BrandMark'
 
 export function ActivityBar({ activeId, t, onNavigate, surfaces, onOpenSurface }: { activeId: string | null; t: Copy; onNavigate: (item: TabKind) => void; surfaces: StudioPluginSurface[]; onOpenSurface: (surface: StudioPluginSurface) => void }) {
-  const entries: Array<[TabKind, typeof Boxes, string]> = [['canvas', Boxes, t.graph], ['git', GitCompareArrows, t.git], ['reports', Activity, t.reports], ['studio-plugins', Puzzle, t.studioPlugins], ['problems', CircleAlert, t.problems], ['output', Terminal, 'Output']]
+  const entries: Array<[TabKind, typeof Boxes, string]> = [['canvas', Boxes, t.graph], ['git', GitCompareArrows, t.git], ['reports', Activity, t.reports], ['problems', CircleAlert, t.problems], ['output', Terminal, 'Output']]
   const currentSurfaces = latestStudioPluginSurfaces(surfaces.filter((surface) => surface.context === 'workspace'))
   return <nav className="activity-bar" aria-label={t.home}>{entries.map(([id, Icon, label]) => <button type="button" key={id} className={`activity-button ${activeId === id ? 'active' : ''}`} title={label} aria-label={label} aria-current={activeId === id ? 'page' : undefined} onClick={() => { onNavigate(id); }}><Icon size={18} /></button>)}{currentSurfaces.length > 0 && <span className="activity-divider" />}{currentSurfaces.map((surface) => { const id = `studio-plugin:${surface.studioPluginId}:${surface.version}:${surface.id}`; return <button type="button" key={id} className={`activity-button ${activeId === id ? 'active' : ''}`} title={`${surface.studioPluginId} · ${surface.title}`} aria-label={`${surface.studioPluginId} · ${surface.title}`} aria-current={activeId === id ? 'page' : undefined} onClick={() => { onOpenSurface(surface); }}><Puzzle size={16} /></button> })}</nav>
 }
@@ -70,43 +69,6 @@ export function HomeView({ controller, locale, theme, projects, toolchain, error
         </section>
       </div>
     </div>
-  )
-}
-
-export function StudioPluginsSidebar({ workspace, t, surfaces, onOpen }: { workspace: Workspace; t: Copy; surfaces: StudioPluginSurface[]; onOpen: (surface: StudioPluginSurface) => void }) {
-  const setServiceOpen = useStudioStore((state) => state.setServiceOpen)
-  const setSelected = useStudioStore((state) => state.setSelected)
-  const navigate = useStudioStore((state) => state.navigate)
-  const setView = useStudioStore((state) => state.setView)
-  const [pluginMenu, setPluginMenu] = useState(false)
-  const currentSurfaces = latestStudioPluginSurfaces(surfaces.filter((surface) => surface.context === 'workspace'))
-
-  return (
-    <aside className="context-sidebar" onContextMenu={(event) => { event.preventDefault(); setPluginMenu(true) }}>
-      {pluginMenu && <div className="sidebar-context-menu" role="menu"><button type="button" role="menuitem" onClick={() => { setPluginMenu(false); setView('settings'); window.setTimeout(() => window.dispatchEvent(new Event('studio:add-plugin')), 100) }}><Plus size={14} />{localeLabel(t, 'Добавить плагин', 'Add plugin')}</button><button type="button" role="menuitem" onClick={() => { setPluginMenu(false) }}>{localeLabel(t, 'Отмена', 'Cancel')}</button></div>}
-      <div className="sidebar-heading"><span>{t.studioPlugins}</span></div>
-      <div className="sidebar-heading sub">{t.studioExtensions}</div>
-      <div className="sidebar-list">
-        {currentSurfaces.map((surface) => (
-          <button className="list-row" key={`${surface.studioPluginId}:${surface.version}:${surface.id}`} onClick={() => { onOpen(surface) }}>
-            <Puzzle size={14} /><span>{surface.title}</span><small>{surface.studioPluginId}</small>
-          </button>
-        ))}
-      </div>
-      <div className="sidebar-heading sub">
-        <span>{t.projectServices}</span>
-        <button type="button" className="icon-button small" title={t.newService} aria-label={t.newService} onClick={() => { setServiceOpen(true) }}>
-          <Plus size={15} />
-        </button>
-      </div>
-      <div className="sidebar-list">
-        {workspace.graph.services.map((service) => (
-          <button className="list-row" key={service.id} onClick={() => { setSelected({ kind: 'service', id: service.id }); navigate('canvas') }}>
-            <Boxes size={14} /><span>{service.name}</span><small>{service.version}</small>
-          </button>
-        ))}
-      </div>
-    </aside>
   )
 }
 
@@ -225,21 +187,23 @@ export function Inspector({ controller, workspace, selected, output }: { control
   const target = useStudioStore((state) => state.target)
   const [pendingServiceAction, setPendingServiceAction] = useState<'stop' | 'restart' | null>(null)
   const [editorButtons, setEditorButtons] = useState<Array<{ id: string; key: string; label: { ru: string; en: string }; description: { ru: string; en: string } }>>([])
+  const [editorButtonsStatus, setEditorButtonsStatus] = useState<'loading' | 'ready' | 'unavailable'>('loading')
   const pluginSurfaces = useStudioStore((state) => state.studioPluginSurfaces)
   useEffect(() => {
     let active = true
-    if (!service || !workspace.project?.id) { setEditorButtons([]); return () => { active = false } }
-    void controller.readServiceEditorButtons(workspace.project.id, service.id).then((buttons) => { if (active) setEditorButtons(buttons) }).catch(() => { if (active) setEditorButtons([]) })
+    if (!service || !workspace.project?.id) { setEditorButtons([]); setEditorButtonsStatus('unavailable'); return () => { active = false } }
+    setEditorButtons([])
+    setEditorButtonsStatus('loading')
+    void controller.readServiceEditorButtons(workspace.project.id, service.id).then((buttons) => { if (active) { setEditorButtons(buttons); setEditorButtonsStatus('ready') } }).catch(() => { if (active) { setEditorButtons([]); setEditorButtonsStatus('unavailable') } })
     return () => { active = false }
   }, [controller, service?.id, workspace.project?.id])
-  if (selected?.kind === 'plugin') return <ProjectPluginInspector controller={controller} projectID={workspace.project?.id ?? ''} pluginID={selected.id} surfaces={pluginSurfaces} locale={locale} />
   if (!service && !link) return <aside className="inspector"><div className="inspector-empty"><CircleDot size={18} /><span>{locale === 'ru' ? 'Выберите узел или связь' : 'Select a node or link'}</span></div></aside>
   return <><aside className="inspector"><div className="inspector-panel">
     <div className="inspector-heading"><span>{service ? (locale === 'ru' ? 'Свойства сервиса' : 'Service properties') : (locale === 'ru' ? 'Контракт связи' : 'Link contract')}</span><button className="icon-button small" title={locale === 'ru' ? 'Удалить' : 'Delete'} onClick={() => { if (service) void controller.deleteNodes([service.id]); if (link) void controller.deleteEdges([link.id]) }}><Trash2 size={15} /></button></div>
     {service && <>
       <InspectorSection title={locale === 'ru' ? 'Идентификация' : 'Identity'}><h2>{service.name}</h2><code>{service.id}</code><InspectorField label="Version" value={service.version} /><InspectorField label="Manifest" value={service.manifestVersion} /><InspectorField label="Readiness" value={readiness} /></InspectorSection>
       <InspectorSection title={locale === 'ru' ? 'Настройки' : 'Settings'}><ServiceSettingsInspector controller={controller} service={service} locale={locale} /></InspectorSection>
-      {editorButtons.length > 0 && <ServiceEditorButtons controller={controller} service={service} projectID={workspace.project?.id ?? ''} locale={locale} buttons={editorButtons} surfaces={pluginSurfaces} />}
+      {(editorButtons.length > 0 || service.id === 'server') && <ServiceEditorButtons controller={controller} service={service} projectID={workspace.project?.id ?? ''} locale={locale} buttons={editorButtons} status={editorButtonsStatus} surfaces={pluginSurfaces} />}
       <InspectorSection title={locale === 'ru' ? 'Применение конфигурации' : 'Configuration rollout'}>
         {replicas.length === 0 ? <span className="muted">{locale === 'ru' ? 'Статус реплик недоступен.' : 'Replica status is unavailable.'}</span> : replicas.map((replica) => <div className="inspector-field" key={replica.replicaId}>
           <span>{replica.replicaId} · {configurationStateLabel(replica.configurationState, locale)}</span>
@@ -255,59 +219,27 @@ export function Inspector({ controller, workspace, selected, output }: { control
   </div></aside>{service && pendingServiceAction && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setPendingServiceAction(null) }}><section className="dialog" role="alertdialog" aria-modal="true" aria-labelledby="service-runtime-action-heading" aria-describedby="service-runtime-action-description"><div className="dialog-heading"><div><span className="eyebrow">{locale === 'ru' ? `Локальный target · ${target}` : `Local target · ${target}`}</span><h2 id="service-runtime-action-heading">{locale === 'ru' ? `${pendingServiceAction === 'stop' ? 'Остановить' : 'Перезапустить'} ${service.name}?` : `${pendingServiceAction === 'stop' ? 'Stop' : 'Restart'} ${service.name}?`}</h2></div><button type="button" className="icon-button" aria-label={locale === 'ru' ? 'Отмена' : 'Cancel'} onClick={() => { setPendingServiceAction(null) }}><X size={16} /></button></div><p id="service-runtime-action-description" className="dialog-hint">{runtimeServiceActionConfirmationText(pendingServiceAction, service.id, service.name, target, locale)}</p><div className="dialog-actions"><button type="button" className="secondary-button" autoFocus onClick={() => { setPendingServiceAction(null) }}>{locale === 'ru' ? 'Отмена' : 'Cancel'}</button><button type="button" className="primary-button" onClick={() => { const action = pendingServiceAction; setPendingServiceAction(null); void controller.runtimeCommand(action === 'stop' ? 'runtime.stop' : 'runtime.restart', service.id) }}>{locale === 'ru' ? `${pendingServiceAction === 'stop' ? 'Остановить' : 'Перезапустить'} ${service.id}` : `${pendingServiceAction === 'stop' ? 'Stop' : 'Restart'} ${service.id}`}</button></div></section></div>}</>
 }
 
-function ProjectPluginInspector({ controller, projectID, pluginID, surfaces, locale }: { controller: StudioController; projectID: string; pluginID: string; surfaces: import('../stores/studio').StudioPluginSurface[]; locale: Locale }) {
-  const [packages, setPackages] = useState<StudioPluginPackageInfo[]>([])
-  const [pins, setPins] = useState<Record<string, string>>({})
-  const [error, setError] = useState('')
-  const setProjectPluginVersions = useStudioStore((state) => state.setProjectPluginVersions)
-  const ru = locale === 'ru'
-  useEffect(() => {
-    let current = true
-    void Promise.all([controller.installedStudioPluginPackages(), controller.api.readWorkspaceState()]).then(([installed, state]) => {
-      const saved = projectPluginVersionsFromState(state)
-      if (current) { setPackages(installed); setPins(saved); setProjectPluginVersions(saved); setError('') }
-    }).catch((reason: unknown) => { if (current) setError(reason instanceof Error ? reason.message : String(reason)) })
-    return () => { current = false }
-  }, [controller, projectID])
-  const group = groupStudioPluginVersions(packages).find((entry) => entry.id === pluginID)
-  const versions = group ? [group.current, ...group.previous] : []
-  const activeVersion = pins[pluginID] ?? ''
-  const activePackage = versions.find((item) => item.version === activeVersion)
-  const pluginSurfaces = surfaces.filter((item) => item.studioPluginId === pluginID && item.version === activeVersion && item.context === 'workspace' && item.route)
-  const hasServiceEditor = activePackage?.surfaces.some((item) => item.context === 'service' && item.route) ?? false
-  async function save(version: string) {
-    try {
-      const state = await controller.api.readWorkspaceState()
-      let next = { ...pins }
-      if (version) next[pluginID] = version
-      else next = Object.fromEntries(Object.entries(next).filter(([id]) => id !== pluginID))
-      await controller.api.writeWorkspaceState(workspaceStateWithProjectPluginVersions({ ...state, projectId: projectID }, next))
-      setPins(next)
-      setProjectPluginVersions(next)
-      setError('')
-    } catch (reason: unknown) { setError(reason instanceof Error ? reason.message : String(reason)) }
-  }
-  return <aside className="inspector"><div className="inspector-panel">
-    <div className="inspector-heading"><span>{ru ? 'Плагин проекта' : 'Project plugin'}</span><Puzzle size={15} /></div>
-    {!group ? <p className="inline-error">{ru ? 'Плагин больше не установлен. Управление пакетами находится в общих настройках.' : 'This plugin is no longer installed. Manage packages in global Settings.'}</p> : <>
-      <InspectorSection title={ru ? 'Использование в проекте' : 'Project usage'}><h2>{group.name}</h2><code>{pluginID}</code><label className="plugin-reason">{ru ? 'Установленная версия' : 'Installed version'}<select aria-label={ru ? 'Версия плагина проекта' : 'Project plugin version'} value={activeVersion} onChange={(event) => { void save(event.target.value) }}><option value="">{ru ? 'Не подключён' : 'Not connected'}</option>{versions.map((item) => <option key={item.version} value={item.version}>{item.version}</option>)}</select></label>{activePackage && <><InspectorField label={ru ? 'SHA-256' : 'SHA-256'} value={activePackage.digest} /><InspectorField label={ru ? 'Поверхности' : 'Surfaces'} value={String(activePackage.surfaces.length)} /></>}</InspectorSection>
-      {activePackage && <InspectorSection title={ru ? 'Настройка плагина' : 'Plugin configuration'}>{pluginSurfaces.length === 0 && !hasServiceEditor ? <p className="muted">{ru ? 'У выбранной версии нет доступных редакторов.' : 'This version has no available editors.'}</p> : <>{pluginSurfaces.length > 0 && <div className="inspector-actions">{pluginSurfaces.map((surface) => <button type="button" className="secondary-button compact" key={surface.id} onClick={() => { useStudioStore.getState().openStudioPluginSurface(surface, { projectId: projectID }) }}>{ru ? `Настроить · ${surface.title}` : `Configure · ${surface.title}`}</button>)}</div>}{hasServiceEditor && <p className="muted">{ru ? 'Редактор сервиса открывается кнопкой, объявленной самим сервисом, в его Inspector на канвасе.' : 'Open this service editor from the button declared by the service in its Canvas Inspector.'}</p>}</>}</InspectorSection>}
-    </>}
-    {error && <p className="inline-error" role="alert">{error}</p>}
-  </div></aside>
-}
-
-function ServiceEditorButtons({ controller, service, projectID, locale, buttons, surfaces }: { controller: StudioController; service: RuntimeService; projectID: string; locale: Locale; buttons: Array<{ id: string; key: string; label: { ru: string; en: string }; description: { ru: string; en: string } }>; surfaces: StudioPluginSurface[] }) {
+function ServiceEditorButtons({ controller, service, projectID, locale, buttons, status, surfaces }: { controller: StudioController; service: RuntimeService; projectID: string; locale: Locale; buttons: Array<{ id: string; key: string; label: { ru: string; en: string }; description: { ru: string; en: string } }>; status: 'loading' | 'ready' | 'unavailable'; surfaces: StudioPluginSurface[] }) {
   const [bindings, setBindings] = useState<Array<{ buttonId: string; pluginId: string; surfaceId: string }>>([])
-  const projectPluginVersions = useStudioStore((state) => state.projectPluginVersions)
   useEffect(() => {
     let active = true
     void controller.studioPluginEditorBindings().then((items) => { if (active) setBindings(items) }).catch(() => { if (active) setBindings([]) })
     return () => { active = false }
   }, [controller, projectID])
-  const selectedVersionSurfaces = surfaces.filter((surface) => projectPluginVersions[surface.studioPluginId] === surface.version)
-  const entries = resolveServiceEditorButtons(buttons, bindings, selectedVersionSurfaces)
-  if (entries.length === 0) return <InspectorSection title={locale === 'ru' ? 'Редактор сервиса' : 'Service editor'}><p className="muted">{locale === 'ru' ? 'Подключите плагин к проекту, выберите установленную версию справа и назначьте редактору кнопку сервиса в общих настройках.' : 'Connect a plugin to the Project, choose an installed version in the Inspector, and assign the service button to an editor in global Settings.'}</p></InspectorSection>
+  const activeSurfaces = latestStudioPluginSurfaces(surfaces)
+  const entries = resolveServiceEditorButtons(buttons, bindings, activeSurfaces)
+  if (entries.length === 0) {
+    const message = status === 'loading'
+      ? (locale === 'ru' ? 'Читаем live manifest сервиса через CLI → Core…' : 'Reading the service live manifest through CLI → Core…')
+      : status === 'unavailable'
+        ? (locale === 'ru' ? 'Не удалось прочитать live manifest сервиса. Проверьте доступность CLI/Core и повторно откройте Inspector.' : 'Could not read the service live manifest. Check CLI/Core availability and reopen the Inspector.')
+        : buttons.length > 0
+          ? (locale === 'ru' ? 'Кнопка сервиса объявлена, но не назначена доступному установленному плагину. Откройте общие настройки → Плагины Studio и назначьте кнопку странице плагина.' : 'The service button is declared but is not assigned to an available installed plugin. Open global Settings → Studio Plugins and assign it to a plugin page.')
+          : service.id === 'server'
+            ? (locale === 'ru' ? `Server ${service.version} не объявляет кнопку редактора. Контракт кнопки добавлен в Server 1.1.7; обновите сервис, затем назначьте кнопку установленному Server Editor в общих настройках.` : `Server ${service.version} does not declare an editor button. The button contract was added in Server 1.1.7; update the service, then assign the button to the installed Server Editor in global Settings.`)
+            : (locale === 'ru' ? `Сервис ${service.id} версии ${service.version} не объявил кнопку редактора в live manifest. Добавьте контракт service-editor-buttons/v1 и назначьте кнопку установленному плагину в общих настройках.` : `Service ${service.id} ${service.version} does not declare an editor button in its live manifest. Add the service-editor-buttons/v1 contract and assign the button to an installed plugin in global Settings.`)
+    return <InspectorSection title={locale === 'ru' ? 'Редактор сервиса' : 'Service editor'}><p className="muted" role="status">{message}</p></InspectorSection>
+  }
   return <InspectorSection title={locale === 'ru' ? 'Редакторы сервиса' : 'Service editors'}><div className="inspector-actions">{entries.map(({ button, surface }) => <button type="button" className="secondary-button compact" key={button.id} title={button.description[locale]} onClick={() => { useStudioStore.getState().openStudioPluginSurface(surface, { projectId: projectID, serviceId: service.id }) }}>{button.label[locale]}</button>)}</div></InspectorSection>
 }
 
@@ -439,7 +371,7 @@ function ServiceSettingsInspector({ controller, service, locale }: { controller:
   for (const group of uiGroups) for (const field of group.fields) fieldHints.set(field.path, field)
   const explicitGroups = uiGroups.map((group) => ({
     ...group,
-    fields: group.fields.filter((field) => !field.segments.includes('*') && field.segments.length > 0)
+    fields: group.fields.filter((field) => !field.segments.includes('*') && field.segments.length > 0 && !serviceInspectorPathIsHidden(service.id, field.segments))
       .map((field) => ({ field, schema: schemaAtPointer(schema, field.segments) }))
       .filter((entry): entry is { field: ServiceConfigurationUIField; schema: JsonObject } => Boolean(entry.schema && schemaControl(entry.schema) !== 'object' && !sensitiveSchema(entry.schema, entry.field.segments.at(-1)) && configurationSchemaRenderable(schema, entry.schema, configurationValueAtPath(values, entry.field.segments)))),
   })).filter((group) => group.fields.length > 0)
@@ -526,7 +458,7 @@ function SchemaProperties({ rootSchema, objectSchema, properties, values, path, 
     const fieldPath = [...path, name]
     const hintPath = [...configurationUIPath, name]
     const fieldKey = configurationUIFieldKey(fieldPath)
-    if (excludedPaths.has(fieldKey)) return null
+    if (isExcludedInspectorPath(fieldKey, excludedPaths)) return null
     const hint = matchServiceConfigurationUIField(configurationUI, hintPath) ?? fieldHints.get(fieldKey)
     const title = hint ? (locale === 'ru' ? hint.label.ru : hint.label.en) : typeof schema.title === 'string' ? schema.title : name
     const description = hint?.help ? (locale === 'ru' ? hint.help.ru : hint.help.en) : typeof schema.description === 'string' ? schema.description : ''
@@ -830,12 +762,17 @@ function sensitiveSchema(schema: JsonObject, propertyName?: string): boolean {
 function hasVisibleSchemaFields(properties: JsonObject, parentPath: string[], excluded: ReadonlySet<string>): boolean {
   return Object.entries(properties).some(([name, rawSchema]) => {
     const path = [...parentPath, name]
-    if (excluded.has(configurationUIFieldKey(path))) return false
+    if (isExcludedInspectorPath(configurationUIFieldKey(path), excluded)) return false
     const schema = objectValue(rawSchema)
     if (!schema) return true
     const type = schemaControl(schema)
     return type !== 'object' || hasVisibleSchemaFields(objectValue(schema.properties) ?? {}, path, excluded) || hasTypedConfigurationMap(schema)
   })
+}
+
+function isExcludedInspectorPath(path: string, excluded: ReadonlySet<string>): boolean {
+  for (const root of excluded) if (path === root || path.startsWith(`${root}/`)) return true
+  return false
 }
 
 function schemaScalarValue(value: unknown): string {
