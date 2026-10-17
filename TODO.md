@@ -1,5 +1,26 @@
 # Liapoldus Studio — TODO
 
+## Studio plugin management split — 2026-10-17
+
+- Kept package catalog, install/trust review, version inventory, removal, and
+  global service-button assignments in the global Settings manager. The Project
+  plugin page is now a usage view: connect an installed plugin and select its
+  version from the right Inspector. Project pins live in the existing
+  `workspace/v5` extension state and preserve unrelated state and filters.
+- Activity-bar surfaces and service-editor buttons are restricted to the
+  version pinned by the open Project. Service editor surfaces remain tied to
+  declared service buttons; workspace surfaces remain available through the
+  project plugin rail. No package is installed or removed by the Project UI.
+- Fixed legacy installed plugin metadata that serialized `context: ""`;
+  these surfaces now correctly default to the workspace context. Added
+  regressions for legacy parsing and project-local version persistence.
+- Verification: TypeScript, focused ESLint, Vite production build, and targeted
+  model/package tests pass (28/28). The full frontend suite has one existing
+  bindings-generation failure for `frontend/wailsjs/runtime/runtime.d.ts`; full
+  `make check` is blocked by that same worktree state, and full lint reports
+  generated-file `any` errors there. The pre-existing generated file was
+  preserved. A live macOS UI check of this new view is still pending.
+
 ## Lease-expiry recovery checkpoint — 2026-10-17
 
 - Current Studio Runtime → Status shows Core, Echo, and Server `running`;

@@ -17,7 +17,7 @@ export type WorkspaceTab = {
   projectId?: string
   serviceId?: string
 }
-export type Selection = { kind: 'service' | 'link'; id: string } | null
+export type Selection = { kind: 'service' | 'link' | 'plugin'; id: string } | null
 export type LayoutPoint = { x: number; y: number }
 export type Layout = Record<string, LayoutPoint>
 export type ProjectList = Awaited<ReturnType<StudioAPI['listProjects']>>
@@ -189,6 +189,32 @@ export function workspaceStateUpdate(saved: WorkspaceState, snapshot: WorkspaceS
     tabsJson: JSON.stringify({ ...previous, ...snapshot, tabs }),
     layoutJson: JSON.stringify({ ...oldLayout, schemaVersion: 'workspace/v5', nodes: snapshot.layout }),
   }
+}
+
+export function projectPluginVersionsFromState(saved: WorkspaceState): Record<string, string> {
+  try {
+    const workspace = saved.tabsJson === '[]' ? {} : record(JSON.parse(previewWorkspaceMigration(saved.tabsJson).after) as unknown)
+    const extensionState = record(workspace?.extensionState)
+    const versions = record(extensionState?.studioPlugins)
+    if (!versions) return {}
+    const result: Record<string, string> = {}
+    for (const [id, version] of Object.entries(versions)) {
+      if (/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u.test(id) && typeof version === 'string' && version.length <= 128) result[id] = version
+    }
+    return result
+  } catch { return {} }
+}
+
+export function workspaceStateWithProjectPluginVersions(saved: WorkspaceState, versions: Record<string, string>): WorkspaceState {
+  let previous: Record<string, unknown>
+  if (saved.tabsJson === '[]') previous = { schemaVersion: 'workspace/v5', activeTabId: 'canvas', tabs: initialWorkspaceTabs(), layout: parseLayout(saved.layoutJson) }
+  else {
+    const parsed = record(JSON.parse(previewWorkspaceMigration(saved.tabsJson).after) as unknown)
+    if (!parsed) throw new Error('Unsupported workspace state; recover the saved state before changing project plugins')
+    previous = parsed
+  }
+  const extensionState = record(previous.extensionState) ?? {}
+  return { ...saved, tabsJson: JSON.stringify({ ...previous, extensionState: { ...extensionState, studioPlugins: versions } }) }
 }
 
 export function workspaceStateWithApplyRecovery(saved: WorkspaceState, status: WorkspaceApplyRecoveryStatus, operationId: WorkspaceApplyRecoveryOperationId = null): WorkspaceState {

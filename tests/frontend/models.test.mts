@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { ProductInfo, ServiceSettingsSchemaPreview, models } from '../../frontend/src/api/info.ts'
 import { decodeWailsBytes } from '../../frontend/src/api/bytes.ts'
-import { initialWorkspaceTabs, messageOf, operationReplicaOutcomes, previewWorkspaceMigration, restoreWorkspaceState, summarizeCLIEvent, updateCLIStreamState, workspaceSnapshot, workspaceStateUpdate, workspaceStateWithApplyRecovery, type WorkspaceTab } from '../../frontend/src/models/studio.ts'
+import { initialWorkspaceTabs, messageOf, operationReplicaOutcomes, previewWorkspaceMigration, projectPluginVersionsFromState, restoreWorkspaceState, summarizeCLIEvent, updateCLIStreamState, workspaceSnapshot, workspaceStateUpdate, workspaceStateWithApplyRecovery, workspaceStateWithProjectPluginVersions, type WorkspaceTab } from '../../frontend/src/models/studio.ts'
 import { parseCoreServiceReadiness, parseServiceReadiness, runtimeServiceActionConfirmationText, runtimeStopConfirmationText } from '../../frontend/src/models/runtime.ts'
 import { graphEdgeHandles } from '../../frontend/src/models/graph.ts'
 import { groupDiagnostics } from '../../frontend/src/models/diagnostics.ts'
@@ -188,6 +188,18 @@ await test('workspace migration preview retires file/runtime tabs and preserves 
   assert.throws(() => previewWorkspaceMigration('{"schemaVersion":"workspace/v99","tabs":[]}'))
   const unsupported = await restoreWorkspaceState({ readWorkspaceState: () => Promise.resolve({ tabsJson: '{"schemaVersion":"workspace/v99","tabs":[]}', layoutJson: '{}' }) } as unknown as StudioAPI)
   assert.equal(unsupported.writable, false)
+})
+
+await test('Project plugin versions persist in workspace extension state without changing UI filters', () => {
+  const saved = { projectId: 'project-plugins', layoutJson: '{}', tabsJson: JSON.stringify({ schemaVersion: 'workspace/v5', activeTabId: 'canvas', tabs: [{ id: 'canvas', kind: 'canvas', title: 'Canvas' }], layout: {}, extensionState: { custom: 'preserved' }, applyRecovery: { schemaVersion: 'studio-apply-recovery/v2', state: 'confirmation-required', target: 'local' } }), filtersJson: '{"serviceFilter":"ready"}' }
+  const updated = workspaceStateWithProjectPluginVersions(saved, { 'liapoldus.server-editor': '0.3.50' })
+  const decoded = JSON.parse(updated.tabsJson) as Record<string, unknown>
+  assert.deepEqual(projectPluginVersionsFromState(updated), { 'liapoldus.server-editor': '0.3.50' })
+  assert.deepEqual(decoded.extensionState, { custom: 'preserved', studioPlugins: { 'liapoldus.server-editor': '0.3.50' } })
+  assert.deepEqual(decoded.applyRecovery, { schemaVersion: 'studio-apply-recovery/v2', state: 'confirmation-required', target: 'local' })
+  assert.equal(updated.filtersJson, saved.filtersJson)
+  const empty = workspaceStateWithProjectPluginVersions({ ...saved, tabsJson: '[]' }, {})
+  assert.deepEqual(projectPluginVersionsFromState(empty), {})
 })
 
 await test('graph edges use facing handles in either caller/target layout', () => {

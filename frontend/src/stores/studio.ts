@@ -138,6 +138,7 @@ export type StudioState = {
   tabs: WorkspaceTab[]
   activeTabId: string | null
   studioPluginSurfaces: StudioPluginSurface[]
+  projectPluginVersions: Record<string, string>
   busy: boolean
   initialized: boolean
   error: string | null
@@ -175,6 +176,7 @@ export type StudioState = {
   setView: (view: WorkspaceView) => void
   setTabs: (tabs: WorkspaceTab[], activeTabId: string | null) => void
   setStudioPluginSurfaces: (surfaces: StudioPluginSurface[]) => void
+  setProjectPluginVersions: (versions: Record<string, string>) => void
   setBusy: (busy: boolean) => void
   setInitialized: (initialized: boolean) => void
   setError: (error: string | null) => void
@@ -219,7 +221,7 @@ export type StudioState = {
 }
 
 export const useStudioStore = create<StudioState>((set, get) => ({
-  locale: 'ru', theme: 'system', workspace: null, projects: [], toolchain: null, view: 'home', tabs: initialWorkspaceTabs(), activeTabId: 'canvas', studioPluginSurfaces: [], busy: true, initialized: false, error: null, query: '', selected: null, cliEvents: [], cliStreamState: 'idle', diagnostics: [], traffic: [], commandOpen: false, commandQuery: '', createOpen: false, serviceOpen: false, projectID: '', projectName: '', serviceID: '', serviceName: '', target: 'local', profile: '', stateHydrated: false, applyRecoveryStatus: 'none', applyRecoveryOperationId: null, layout: {}, canvasNodes: [], canvasEdges: [], runtimeOutput: '', runtimeStatuses: {}, runtimeReplicas: {}, serviceSettingsDrafts: {},
+  locale: 'ru', theme: 'system', workspace: null, projects: [], toolchain: null, view: 'home', tabs: initialWorkspaceTabs(), activeTabId: 'canvas', studioPluginSurfaces: [], projectPluginVersions: {}, busy: true, initialized: false, error: null, query: '', selected: null, cliEvents: [], cliStreamState: 'idle', diagnostics: [], traffic: [], commandOpen: false, commandQuery: '', createOpen: false, serviceOpen: false, projectID: '', projectName: '', serviceID: '', serviceName: '', target: 'local', profile: '', stateHydrated: false, applyRecoveryStatus: 'none', applyRecoveryOperationId: null, layout: {}, canvasNodes: [], canvasEdges: [], runtimeOutput: '', runtimeStatuses: {}, runtimeReplicas: {}, serviceSettingsDrafts: {},
   setLocaleState: (locale) => { set({ locale }) },
   setThemeState: (theme) => { set({ theme }) },
   setWorkspace: (workspace) => { set({ workspace }) },
@@ -228,6 +230,7 @@ export const useStudioStore = create<StudioState>((set, get) => ({
   setView: (view) => { set({ view }) },
   setTabs: (tabs, activeTabId) => { set((state) => state.studioPluginSurfaces.length ? { ...reconcileStudioPluginTabs(tabs, activeTabId, state.studioPluginSurfaces) } : { tabs, activeTabId }) },
   setStudioPluginSurfaces: (studioPluginSurfaces) => { set((state) => ({ studioPluginSurfaces, ...reconcileStudioPluginTabs(state.tabs, state.activeTabId, studioPluginSurfaces) })) },
+  setProjectPluginVersions: (projectPluginVersions) => { set({ projectPluginVersions }) },
   setBusy: (busy) => { set({ busy }) },
   setInitialized: (initialized) => { set({ initialized }) },
   setError: (error) => { set({ error }) },

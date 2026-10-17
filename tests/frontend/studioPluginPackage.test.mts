@@ -56,6 +56,11 @@ await test('preview preserves declared command surfaces without treating them as
   assert.deepEqual(parseStudioPluginInspection(JSON.stringify(value)).surfaces, [{ id: 'compile', kind: 'command', context: 'workspace', title: 'Compile', route: '' }])
 })
 
+await test('legacy installed surfaces with an empty context default to workspace', () => {
+  const value = { ...inspection, manifest: { ...inspection.manifest, surfaces: [{ id: 'server-editor', kind: 'page', context: '', title: 'Server', route: 'ui/index.html' }] } }
+  assert.equal(parseStudioPluginInspection(JSON.stringify(value)).surfaces[0]?.context, 'workspace')
+})
+
 await test('Studio plugin inspection rejects invalid digests, traversal routes and duplicate permissions', () => {
   assert.throws(() => parseStudioPluginInspection(JSON.stringify({ ...inspection, digest: 'sha256:bad' })))
   assert.throws(() => parseStudioPluginInspection(JSON.stringify({ ...inspection, manifest: { ...inspection.manifest, surfaces: [{ id: 'unsafe', kind: 'page', title: 'Unsafe', route: '../manifest.json' }] } })))

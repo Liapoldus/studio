@@ -13,8 +13,9 @@ import { configurationDraftKey, isSensitiveConfigurationFieldName, mergeConfigur
 import { configurationSchemaArrayItem, configurationSchemaCanCreateProtectedArrayItem, configurationSchemaProtected, configurationSchemaRenderable, configurationSchemaVariants, configurationVariantValue, createConfigurationSchemaValue, effectiveConfigurationSchema, selectedConfigurationVariant } from '../models/configurationSchema'
 import { configurationArrayOperationRequest, createConfigurationArrayItem, duplicateConfigurationArrayItem, moveConfigurationArrayItem, removeConfigurationArrayItem, reorderConfigurationArrayItem } from '../models/configurationArray'
 import { configurationMapOperationRequest, configurationMapOperations, isConfigurationMapOperationRequest, removeConfigurationMapKey, safeConfigurationMapKey } from '../models/configurationMap'
+import { groupStudioPluginVersions, type StudioPluginPackageInfo } from '../models/studioPluginPackage'
 import { configurationSchemaDifferencePaths, configurationUIFieldKey, matchServiceConfigurationUIField, projectCertificateCanImport, projectResourceCanOpen, schemaAtPointer, supportsServiceResourceCatalog, type ServiceConfigurationResource, type ServiceConfigurationUI, type ServiceConfigurationUIField } from '../models/serviceConfigurationUI'
-import { messageOf, operationReplicaOutcomes, summarizeCLIEvent, type CLIStreamState, type Locale, type TabKind, type WorkspaceTab } from '../models/studio'
+import { messageOf, operationReplicaOutcomes, projectPluginVersionsFromState, summarizeCLIEvent, workspaceStateWithProjectPluginVersions, type CLIStreamState, type Locale, type TabKind, type WorkspaceTab } from '../models/studio'
 import { useStudioStore } from '../stores/studio'
 import type { StudioPluginSurface } from '../stores/studio'
 import { createStudioBridgeSessionID, isStudioPluginSurfaceReadyMessage, parseStudioPluginBridgeRequest, studioPluginBridgeFailureCode, studioPluginPermissionGranted, studioPluginSurfaceAssetURL, studioServiceEditorBridgeVersion, withPeerCatalogDeadline } from '../models/pluginSurface'
@@ -215,7 +216,7 @@ function ServiceFlowNode({ data, selected }: { data: { service: RuntimeService }
   </div>
 }
 
-export function Inspector({ controller, workspace, selected, output }: { controller: StudioController; workspace: Workspace; selected: { kind: 'service' | 'link'; id: string } | null; output: string }) {
+export function Inspector({ controller, workspace, selected, output }: { controller: StudioController; workspace: Workspace; selected: { kind: 'service' | 'link' | 'plugin'; id: string } | null; output: string }) {
   const service = selected?.kind === 'service' ? workspace.graph.services.find((item) => item.id === selected.id) : undefined
   const link = selected?.kind === 'link' ? workspace.graph.links.find((item) => item.id === selected.id) : undefined
   const readiness = useStudioStore((state) => service ? state.runtimeStatuses[service.id] ?? 'unknown' : 'unknown')
@@ -231,6 +232,7 @@ export function Inspector({ controller, workspace, selected, output }: { control
     void controller.readServiceEditorButtons(workspace.project.id, service.id).then((buttons) => { if (active) setEditorButtons(buttons) }).catch(() => { if (active) setEditorButtons([]) })
     return () => { active = false }
   }, [controller, service?.id, workspace.project?.id])
+  if (selected?.kind === 'plugin') return <ProjectPluginInspector controller={controller} projectID={workspace.project?.id ?? ''} pluginID={selected.id} surfaces={pluginSurfaces} locale={locale} />
   if (!service && !link) return <aside className="inspector"><div className="inspector-empty"><CircleDot size={18} /><span>{locale === 'ru' ? 'Выберите узел или связь' : 'Select a node or link'}</span></div></aside>
   return <><aside className="inspector"><div className="inspector-panel">
     <div className="inspector-heading"><span>{service ? (locale === 'ru' ? 'Свойства сервиса' : 'Service properties') : (locale === 'ru' ? 'Контракт связи' : 'Link contract')}</span><button className="icon-button small" title={locale === 'ru' ? 'Удалить' : 'Delete'} onClick={() => { if (service) void controller.deleteNodes([service.id]); if (link) void controller.deleteEdges([link.id]) }}><Trash2 size={15} /></button></div>
@@ -253,11 +255,59 @@ export function Inspector({ controller, workspace, selected, output }: { control
   </div></aside>{service && pendingServiceAction && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setPendingServiceAction(null) }}><section className="dialog" role="alertdialog" aria-modal="true" aria-labelledby="service-runtime-action-heading" aria-describedby="service-runtime-action-description"><div className="dialog-heading"><div><span className="eyebrow">{locale === 'ru' ? `Локальный target · ${target}` : `Local target · ${target}`}</span><h2 id="service-runtime-action-heading">{locale === 'ru' ? `${pendingServiceAction === 'stop' ? 'Остановить' : 'Перезапустить'} ${service.name}?` : `${pendingServiceAction === 'stop' ? 'Stop' : 'Restart'} ${service.name}?`}</h2></div><button type="button" className="icon-button" aria-label={locale === 'ru' ? 'Отмена' : 'Cancel'} onClick={() => { setPendingServiceAction(null) }}><X size={16} /></button></div><p id="service-runtime-action-description" className="dialog-hint">{runtimeServiceActionConfirmationText(pendingServiceAction, service.id, service.name, target, locale)}</p><div className="dialog-actions"><button type="button" className="secondary-button" autoFocus onClick={() => { setPendingServiceAction(null) }}>{locale === 'ru' ? 'Отмена' : 'Cancel'}</button><button type="button" className="primary-button" onClick={() => { const action = pendingServiceAction; setPendingServiceAction(null); void controller.runtimeCommand(action === 'stop' ? 'runtime.stop' : 'runtime.restart', service.id) }}>{locale === 'ru' ? `${pendingServiceAction === 'stop' ? 'Остановить' : 'Перезапустить'} ${service.id}` : `${pendingServiceAction === 'stop' ? 'Stop' : 'Restart'} ${service.id}`}</button></div></section></div>}</>
 }
 
+function ProjectPluginInspector({ controller, projectID, pluginID, surfaces, locale }: { controller: StudioController; projectID: string; pluginID: string; surfaces: import('../stores/studio').StudioPluginSurface[]; locale: Locale }) {
+  const [packages, setPackages] = useState<StudioPluginPackageInfo[]>([])
+  const [pins, setPins] = useState<Record<string, string>>({})
+  const [error, setError] = useState('')
+  const setProjectPluginVersions = useStudioStore((state) => state.setProjectPluginVersions)
+  const ru = locale === 'ru'
+  useEffect(() => {
+    let current = true
+    void Promise.all([controller.installedStudioPluginPackages(), controller.api.readWorkspaceState()]).then(([installed, state]) => {
+      const saved = projectPluginVersionsFromState(state)
+      if (current) { setPackages(installed); setPins(saved); setProjectPluginVersions(saved); setError('') }
+    }).catch((reason: unknown) => { if (current) setError(reason instanceof Error ? reason.message : String(reason)) })
+    return () => { current = false }
+  }, [controller, projectID])
+  const group = groupStudioPluginVersions(packages).find((entry) => entry.id === pluginID)
+  const versions = group ? [group.current, ...group.previous] : []
+  const activeVersion = pins[pluginID] ?? ''
+  const activePackage = versions.find((item) => item.version === activeVersion)
+  const pluginSurfaces = surfaces.filter((item) => item.studioPluginId === pluginID && item.version === activeVersion && item.context === 'workspace' && item.route)
+  const hasServiceEditor = activePackage?.surfaces.some((item) => item.context === 'service' && item.route) ?? false
+  async function save(version: string) {
+    try {
+      const state = await controller.api.readWorkspaceState()
+      let next = { ...pins }
+      if (version) next[pluginID] = version
+      else next = Object.fromEntries(Object.entries(next).filter(([id]) => id !== pluginID))
+      await controller.api.writeWorkspaceState(workspaceStateWithProjectPluginVersions({ ...state, projectId: projectID }, next))
+      setPins(next)
+      setProjectPluginVersions(next)
+      setError('')
+    } catch (reason: unknown) { setError(reason instanceof Error ? reason.message : String(reason)) }
+  }
+  return <aside className="inspector"><div className="inspector-panel">
+    <div className="inspector-heading"><span>{ru ? 'Плагин проекта' : 'Project plugin'}</span><Puzzle size={15} /></div>
+    {!group ? <p className="inline-error">{ru ? 'Плагин больше не установлен. Управление пакетами находится в общих настройках.' : 'This plugin is no longer installed. Manage packages in global Settings.'}</p> : <>
+      <InspectorSection title={ru ? 'Использование в проекте' : 'Project usage'}><h2>{group.name}</h2><code>{pluginID}</code><label className="plugin-reason">{ru ? 'Установленная версия' : 'Installed version'}<select aria-label={ru ? 'Версия плагина проекта' : 'Project plugin version'} value={activeVersion} onChange={(event) => { void save(event.target.value) }}><option value="">{ru ? 'Не подключён' : 'Not connected'}</option>{versions.map((item) => <option key={item.version} value={item.version}>{item.version}</option>)}</select></label>{activePackage && <><InspectorField label={ru ? 'SHA-256' : 'SHA-256'} value={activePackage.digest} /><InspectorField label={ru ? 'Поверхности' : 'Surfaces'} value={String(activePackage.surfaces.length)} /></>}</InspectorSection>
+      {activePackage && <InspectorSection title={ru ? 'Настройка плагина' : 'Plugin configuration'}>{pluginSurfaces.length === 0 && !hasServiceEditor ? <p className="muted">{ru ? 'У выбранной версии нет доступных редакторов.' : 'This version has no available editors.'}</p> : <>{pluginSurfaces.length > 0 && <div className="inspector-actions">{pluginSurfaces.map((surface) => <button type="button" className="secondary-button compact" key={surface.id} onClick={() => { useStudioStore.getState().openStudioPluginSurface(surface, { projectId: projectID }) }}>{ru ? `Настроить · ${surface.title}` : `Configure · ${surface.title}`}</button>)}</div>}{hasServiceEditor && <p className="muted">{ru ? 'Редактор сервиса открывается кнопкой, объявленной самим сервисом, в его Inspector на канвасе.' : 'Open this service editor from the button declared by the service in its Canvas Inspector.'}</p>}</>}</InspectorSection>}
+    </>}
+    {error && <p className="inline-error" role="alert">{error}</p>}
+  </div></aside>
+}
+
 function ServiceEditorButtons({ controller, service, projectID, locale, buttons, surfaces }: { controller: StudioController; service: RuntimeService; projectID: string; locale: Locale; buttons: Array<{ id: string; key: string; label: { ru: string; en: string }; description: { ru: string; en: string } }>; surfaces: StudioPluginSurface[] }) {
   const [bindings, setBindings] = useState<Array<{ buttonId: string; pluginId: string; surfaceId: string }>>([])
-  useEffect(() => { let active = true; void controller.studioPluginEditorBindings().then((items) => { if (active) setBindings(items) }).catch(() => { if (active) setBindings([]) }); return () => { active = false } }, [controller])
-  const entries = resolveServiceEditorButtons(buttons, bindings, surfaces)
-  if (entries.length === 0) return <InspectorSection title={locale === 'ru' ? 'Редактор сервиса' : 'Service editor'}><p className="muted">{locale === 'ru' ? 'Установите плагин-редактор и назначьте ему эту кнопку в настройках плагинов Studio.' : 'Install an editor plugin and assign this button to it in Studio plugin settings.'}</p></InspectorSection>
+  const projectPluginVersions = useStudioStore((state) => state.projectPluginVersions)
+  useEffect(() => {
+    let active = true
+    void controller.studioPluginEditorBindings().then((items) => { if (active) setBindings(items) }).catch(() => { if (active) setBindings([]) })
+    return () => { active = false }
+  }, [controller, projectID])
+  const selectedVersionSurfaces = surfaces.filter((surface) => projectPluginVersions[surface.studioPluginId] === surface.version)
+  const entries = resolveServiceEditorButtons(buttons, bindings, selectedVersionSurfaces)
+  if (entries.length === 0) return <InspectorSection title={locale === 'ru' ? 'Редактор сервиса' : 'Service editor'}><p className="muted">{locale === 'ru' ? 'Подключите плагин к проекту, выберите установленную версию справа и назначьте редактору кнопку сервиса в общих настройках.' : 'Connect a plugin to the Project, choose an installed version in the Inspector, and assign the service button to an editor in global Settings.'}</p></InspectorSection>
   return <InspectorSection title={locale === 'ru' ? 'Редакторы сервиса' : 'Service editors'}><div className="inspector-actions">{entries.map(({ button, surface }) => <button type="button" className="secondary-button compact" key={button.id} title={button.description[locale]} onClick={() => { useStudioStore.getState().openStudioPluginSurface(surface, { projectId: projectID, serviceId: service.id }) }}>{button.label[locale]}</button>)}</div></InspectorSection>
 }
 
