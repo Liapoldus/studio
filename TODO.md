@@ -14,6 +14,27 @@
   multi-replica and crash/restart acceptance still require the current CLI/Core
   binaries and the action-time install confirmation recorded below.
 
+## Rotation configuration apply handoff — 2026-10-18
+
+- Fixed the Studio rotation flow so the reviewed replacement is written to the
+  canonical Project settings, then explicitly submitted through the existing
+  typed Core apply path. Previously, the plugin save deliberately paused
+  auto-apply but the secret manager only checked replica readiness, leaving the
+  new reference saved yet unapplied.
+- If the first apply fails after the Project save, the old reference remains
+  active and the UI keeps the redacted JSON-pointer diff and offers an explicit
+  retry for the saved candidate. Rotation still cannot revoke the old
+  reference until the exact digest/generation is acknowledged by every
+  required ready replica.
+- Regression coverage verifies all reviewed paths are replaced before save,
+  explicit apply uses the active Project/service draft key, stale paths fail
+  closed, and a Project still using the old reference is never applied. The
+  targeted secret/settings suite passes 45/45; the production frontend build
+  passes. Studio `make check` passes with 178/178 frontend tests,
+  `make check-race` passes, and `make desktop-build` produces the macOS/arm64
+  app with reproducible bindings. The existing Vite large-chunk advisory
+  remains.
+
 ## Local runtime and packaged-editor preflight — 2026-10-18
 
 - Current Project `Server Echo Studio`, target `local`: typed `runtime start`

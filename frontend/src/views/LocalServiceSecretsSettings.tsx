@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { KeyRound, RefreshCw, RotateCw, Trash2 } from 'lucide-react'
 import type { Locale, Workspace } from '../api/types'
 import type { StudioController } from '../controllers/studioController'
+import { applySavedServiceSecretRotation, replaceServiceSecretReferencesAndSave } from '../controllers/serviceSecretRotation'
 import { parseServiceRuntimeStatus, projectSettingsApplied } from '../models/runtime'
 import { messageOf } from '../models/studio'
 import { parseDeclaredSecretPurposes, parseServiceSecretCatalogDetails, parseServiceSecretRotationResult, serviceSecretJSONPointer, serviceSecretReferencePaths, type PendingServiceSecretRotation, type ServiceSecretReference } from '../models/serviceSecrets'
@@ -19,7 +20,7 @@ export function LocalServiceSecretsSettings({ controller, workspace, locale }: {
   const [secret, setSecret] = useState('')
   const [confirmCreate, setConfirmCreate] = useState(false)
   const [rotationReference, setRotationReference] = useState('')
-  const [pendingRotation, setPendingRotation] = useState<{ previous: string; created: ServiceSecretReference; paths: string[][] | null } | null>(null)
+  const [pendingRotation, setPendingRotation] = useState<{ previous: string; created: ServiceSecretReference; paths: string[][] | null; reviewPaths: string[][] } | null>(null)
   const [rotationReady, setRotationReady] = useState(false)
   const [confirmRotationApply, setConfirmRotationApply] = useState(false)
   const [confirmRevoke, setConfirmRevoke] = useState('')
@@ -78,7 +79,7 @@ export function LocalServiceSecretsSettings({ controller, workspace, locale }: {
         const raw = await api.rotateLocalServiceSecret?.(selectedService.id, rotationReference, purpose, label.trim(), byteValues, true)
         if (typeof raw !== 'string') throw new Error('Secret rotation is unavailable')
         const created = parseServiceSecretRotationResult(raw, selectedService.id, rotationReference, purpose)
-        setPendingRotation({ previous: rotationReference, created, paths: null })
+        setPendingRotation({ previous: rotationReference, created, paths: null, reviewPaths: [] })
         setRotationReady(false)
         setNotice(russian
           ? `Новая ссылка ${created.reference} создана и доступна для безопасной замены в конфигурации Project.`
@@ -106,12 +107,12 @@ export function LocalServiceSecretsSettings({ controller, workspace, locale }: {
       }
       const paths = serviceSecretReferencePaths(settings.values, pendingRotation.previous)
       if (paths.length > 0) {
-        setPendingRotation((current) => current && current.previous === pendingRotation.previous ? { ...current, paths } : current)
+        setPendingRotation((current) => current && current.previous === pendingRotation.previous ? { ...current, paths, reviewPaths: paths } : current)
         setRotationReady(false)
       } else {
         const replacementPaths = serviceSecretReferencePaths(settings.values, pendingRotation.created.reference)
         if (replacementPaths.length === 0) throw new Error(russian ? 'Конфигурация Project не содержит ни старую, ни новую ссылку. Ротация сохранена; проверьте конфигурацию перед продолжением.' : 'The Project configuration contains neither reference. The staged rotation is preserved; review the configuration before continuing.')
-        setPendingRotation((current) => current && current.previous === pendingRotation.previous ? { ...current, paths: [] } : current)
+        setPendingRotation((current) => current && current.previous === pendingRotation.previous ? { ...current, paths: [], reviewPaths: replacementPaths } : current)
         const status = await refreshRotationReadiness(pendingRotation)
         setRotationReady(status.applied)
         setNotice(status.applied
@@ -131,12 +132,17 @@ export function LocalServiceSecretsSettings({ controller, workspace, locale }: {
     setError('')
     setNotice('')
     try {
-      for (const path of pendingRotation.paths) {
-        await controller.pluginPatchServiceSettings(workspace.project.id, selectedService.id, path, pendingRotation.created.reference)
-      }
-      await controller.pluginSaveServiceSettings(workspace.project.id, selectedService.id)
-      setPendingRotation((current) => current && current.previous === pendingRotation.previous ? { ...current, paths: [] } : current)
+      await replaceServiceSecretReferencesAndSave(
+        controller, workspace.project.id, selectedService.id, pendingRotation.previous,
+        pendingRotation.created.reference, pendingRotation.paths,
+      )
+      const savedRotation = { ...pendingRotation, paths: [], reviewPaths: pendingRotation.paths }
+      setPendingRotation((current) => current && current.previous === pendingRotation.previous ? savedRotation : current)
       setRotationReady(false)
+      await applySavedServiceSecretRotation(
+        controller, workspace.project.id, workspace.project.rootPath, selectedService.id,
+        savedRotation.previous, savedRotation.created.reference,
+      )
       const status = await refreshRotationReadiness(pendingRotation)
       setRotationReady(status.applied)
       setNotice(status.applied
@@ -145,6 +151,31 @@ export function LocalServiceSecretsSettings({ controller, workspace, locale }: {
       await reloadAfterMutation()
     } catch (reason: unknown) {
       setError(messageOf(reason, russian ? 'Не удалось применить ротацию секрета.' : 'Could not apply the secret rotation.'))
+    } finally { setBusy(false); setConfirmRotationApply(false) }
+  }
+
+  async function retrySavedRotationApply() {
+    if (!pendingRotation || pendingRotation.paths === null || pendingRotation.paths.length > 0 || !workspace?.project || !selectedService || busy) return
+    if (!confirmRotationApply) {
+      setConfirmRotationApply(true)
+      return
+    }
+    setBusy(true)
+    setError('')
+    setNotice('')
+    try {
+      await applySavedServiceSecretRotation(
+        controller, workspace.project.id, workspace.project.rootPath, selectedService.id,
+        pendingRotation.previous, pendingRotation.created.reference,
+      )
+      const status = await refreshRotationReadiness(pendingRotation)
+      setRotationReady(status.applied)
+      setNotice(status.applied
+        ? (russian ? `Новая конфигурация подтверждена всеми ${String(status.replicaCount)} готовыми репликами; старую ссылку теперь можно отозвать.` : `All ${String(status.replicaCount)} ready replicas acknowledged the new configuration; the old reference can now be revoked.`)
+        : (russian ? 'Применение не подтверждено всеми репликами. Кандидат и старая ссылка сохранены; проверьте runtime и повторите проверку.' : 'The apply is not acknowledged by every replica. The candidate and previous reference remain available; inspect runtime and retry the check.'))
+      await reloadAfterMutation()
+    } catch (reason: unknown) {
+      setError(messageOf(reason, russian ? 'Не удалось повторно применить конфигурацию Project.' : 'Could not retry applying the saved Project configuration.'))
     } finally { setBusy(false); setConfirmRotationApply(false) }
   }
 
@@ -230,7 +261,7 @@ export function LocalServiceSecretsSettings({ controller, workspace, locale }: {
       setError(russian ? 'Новая ссылка ротации отсутствует в каталоге. Обновите список и проверьте CLI/Core.' : 'The staged replacement is missing from the catalog. Refresh and check CLI/Core.')
       return
     }
-    setPendingRotation({ previous: rotation.previousReference, created, paths: null })
+    setPendingRotation({ previous: rotation.previousReference, created, paths: null, reviewPaths: [] })
     setRotationReady(false)
     setConfirmRotationApply(false)
     setError('')
@@ -288,14 +319,20 @@ export function LocalServiceSecretsSettings({ controller, workspace, locale }: {
               : pendingRotation.paths.length === 0
                 ? <>
                   <p className="muted">{russian ? 'Новая ссылка уже записана в Project. Старую ссылку пока не отзывайте.' : 'The replacement is already saved in the Project. Keep the previous reference active until readiness is confirmed.'}</p>
+                  <p className="muted">{russian ? 'Изменения в сохранённой конфигурации:' : 'Changes in the saved configuration:'}</p>
+                  <ul>{pendingRotation.reviewPaths.map((path) => <li key={JSON.stringify(path)}><code>{serviceSecretJSONPointer(path)}</code><small><code>{pendingRotation.previous}</code> → <code>{pendingRotation.created.reference}</code></small></li>)}</ul>
                   <button type="button" className="secondary-button compact" disabled={busy} onClick={() => void recheckRotationReadiness()}>{russian ? 'Повторить проверку готовности' : 'Recheck readiness'}</button>
                 </>
                 : <>
                 <p className="muted">{russian ? 'Будут заменены ссылки в сохранённой конфигурации Project:' : 'The following references will be replaced in the saved Project configuration:'}</p>
-                <ul>{pendingRotation.paths.map((path) => <li key={JSON.stringify(path)}><code>{serviceSecretJSONPointer(path)}</code></li>)}</ul>
+                <ul>{pendingRotation.reviewPaths.map((path) => <li key={JSON.stringify(path)}><code>{serviceSecretJSONPointer(path)}</code><small><code>{pendingRotation.previous}</code> → <code>{pendingRotation.created.reference}</code></small></li>)}</ul>
                 {confirmRotationApply && <p className="dialog-hint" role="alert">{russian ? 'Подтвердите замену ссылок, сохранение конфигурации Project и применение через Core. При отказе старая активная конфигурация и старая ссылка останутся рабочими.' : 'Confirm replacing these references, saving the Project configuration and applying it through Core. If validation fails, the old active configuration and old reference remain available.'}</p>}
                 <button type="button" className="primary-button compact" disabled={busy} onClick={() => void applyRotation()}>{confirmRotationApply ? (russian ? 'Подтвердить и применить' : 'Confirm and apply') : (russian ? 'Заменить и применить' : 'Replace and apply')}</button>
               </>}
+            {pendingRotation.paths.length === 0 && pendingRotation.reviewPaths.length > 0 && !rotationReady && <>
+              {confirmRotationApply && <p className="dialog-hint" role="alert">{russian ? 'Подтвердите повторное применение сохранённой конфигурации через Core. Старая ссылка останется активной до подтверждения всех реплик.' : 'Confirm retrying the saved Project configuration through Core. The previous reference remains active until every replica acknowledges it.'}</p>}
+              <button type="button" className="secondary-button compact" disabled={busy} onClick={() => void retrySavedRotationApply()}>{confirmRotationApply ? (russian ? 'Подтвердить применение' : 'Confirm apply') : (russian ? 'Применить сохранённую конфигурацию' : 'Apply saved configuration')}</button>
+            </>}
           </>}
       </section>}
       {!busy && items.length > 0 && <div className="service-secret-list">{items.map((item) => <div className="service-secret-row" key={item.reference}><span className="service-secret-icon"><KeyRound size={15} /></span><span className="service-secret-detail"><strong>{item.label}</strong><small>{item.purpose} · {item.reference} · {russian ? 'создан' : 'created'} {item.createdAt}</small></span><span className={`service-secret-state ${item.state}`}>{item.state === 'active' ? (russian ? 'Активен' : 'Active') : (russian ? 'Отозван' : 'Revoked')}</span>{item.state === 'active' && <>

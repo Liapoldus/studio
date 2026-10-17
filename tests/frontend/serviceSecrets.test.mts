@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { applySavedServiceSecretRotation, replaceServiceSecretReferencesAndSave } from '../../frontend/src/controllers/serviceSecretRotation.ts'
+import { configurationDraftKey } from '../../frontend/src/models/configurationDraft.ts'
 import { parseDeclaredSecretPurposes, parseServiceSecretCatalog, parseServiceSecretCatalogDetails, parseServiceSecretRotationResult, serviceSecretJSONPointer, serviceSecretReferencePaths } from '../../frontend/src/models/serviceSecrets.ts'
 
 await test('secret manager purposes are deduplicated and validated as public manifest metadata', () => {
@@ -84,4 +86,82 @@ await test('rotation preview finds only exact references and renders escaped pat
   const paths = serviceSecretReferencePaths(values, reference)
   assert.deepEqual(paths, [['config', 'routes', '0', 'auth', 'secretRef'], ['config', 'feature/name']])
   assert.equal(serviceSecretJSONPointer(paths[1]), '/config/feature~1name')
+})
+
+await test('rotation saves every reviewed reference before explicitly applying the Project configuration', async () => {
+  const previous = 'ssr:v1:00112233445566778899aabbccddeeff'
+  const created = 'ssr:v1:11112222333344445555666677778888'
+  const values: Record<string, unknown> = { config: { routes: [{ auth: { secretRef: previous } }, { auth: { secretRef: previous } }] } }
+  const paths = serviceSecretReferencePaths(values, previous)
+  const calls: string[] = []
+  const controller = {
+    pluginReadServiceSettings: () => {
+      calls.push('read')
+      return Promise.resolve({ serviceId: 'server', values: structuredClone(values), patch: {}, status: 'clean', errorCode: '' })
+    },
+    pluginPatchServiceSettings: (_projectID: string, _serviceID: string, path: string[], value: unknown) => {
+      calls.push(`patch:${JSON.stringify(path)}:${String(value)}`)
+      let parent: unknown = values
+      for (const segment of path.slice(0, -1)) {
+        if (Array.isArray(parent)) {
+          const index = Number(segment)
+          if (!Number.isSafeInteger(index) || String(index) !== segment) throw new Error('invalid test path')
+          parent = parent[index]
+        } else if (typeof parent === 'object' && parent !== null) {
+          parent = (parent as Record<string, unknown>)[segment]
+        } else {
+          throw new Error('invalid test path')
+        }
+      }
+      const leaf = path.at(-1) ?? ''
+      if (Array.isArray(parent)) {
+        const index = Number(leaf)
+        if (!Number.isSafeInteger(index) || String(index) !== leaf || index >= parent.length) throw new Error('invalid test path')
+        parent[index] = value
+      } else if (typeof parent === 'object' && parent !== null) {
+        (parent as Record<string, unknown>)[leaf] = value
+      } else {
+        throw new Error('invalid test path')
+      }
+      return Promise.resolve({ serviceId: 'server', values: structuredClone(values), patch: {}, status: 'dirty', errorCode: '' })
+    },
+    pluginSaveServiceSettings: () => {
+      calls.push('save-project')
+      return Promise.resolve({ serviceId: 'server', values: structuredClone(values), patch: {}, status: 'clean', errorCode: '' })
+    },
+    applyServiceSettings: (key: string) => { calls.push(`apply:${key}`); return Promise.resolve() },
+  } as unknown as Parameters<typeof replaceServiceSecretReferencesAndSave>[0]
+
+  await replaceServiceSecretReferencesAndSave(controller, 'project-1', 'server', previous, created, paths)
+  assert.deepEqual(calls, [
+    'read',
+    `patch:${JSON.stringify(paths[0])}:${created}`,
+    `patch:${JSON.stringify(paths[1])}:${created}`,
+    'save-project',
+  ])
+  assert.equal(serviceSecretReferencePaths(values, previous).length, 0)
+  assert.equal(serviceSecretReferencePaths(values, created).length, paths.length)
+
+  await applySavedServiceSecretRotation(controller, 'project-1', '/project-1', 'server', previous, created)
+  assert.equal(calls.at(-2), 'read')
+  assert.equal(calls.at(-1), `apply:${configurationDraftKey('/project-1', 'server')}`)
+})
+
+await test('rotation refuses stale reviewed paths and never applies a Project that still uses the old reference', async () => {
+  const previous = 'ssr:v1:00112233445566778899aabbccddeeff'
+  const created = 'ssr:v1:11112222333344445555666677778888'
+  const current = { auth: { secretRef: previous } }
+  let patches = 0
+  let applies = 0
+  const controller = {
+    pluginReadServiceSettings: () => Promise.resolve({ serviceId: 'server', values: structuredClone(current), patch: {}, status: 'clean', errorCode: '' }),
+    pluginPatchServiceSettings: () => { patches += 1; return Promise.resolve({ serviceId: 'server', values: current, patch: {}, status: 'dirty', errorCode: '' }) },
+    pluginSaveServiceSettings: () => Promise.resolve({ serviceId: 'server', values: current, patch: {}, status: 'clean', errorCode: '' }),
+    applyServiceSettings: () => { applies += 1; return Promise.resolve() },
+  } as unknown as Parameters<typeof replaceServiceSecretReferencesAndSave>[0]
+
+  await assert.rejects(replaceServiceSecretReferencesAndSave(controller, 'project-1', 'server', previous, created, [['wrong', 'path']]), /secret_rotation_project_changed/u)
+  await assert.rejects(applySavedServiceSecretRotation(controller, 'project-1', '/project-1', 'server', previous, created), /secret_rotation_project_not_ready/u)
+  assert.equal(patches, 0)
+  assert.equal(applies, 0)
 })
