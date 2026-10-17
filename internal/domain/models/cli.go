@@ -79,6 +79,10 @@ func (r CLIRequest) Validate() error {
 	if (secretCreate || secretRotate) != (len(r.SecretInput) > 0) {
 		return ErrInvalidCLIRequest
 	}
+	if len(r.Args) == 12 && r.Args[0] == "service" && r.Args[1] == "secret" && r.Args[2] == "revoke" &&
+		r.Args[5] == "--project" && filepath.Clean(r.Args[6]) != root {
+		return ErrInvalidCLIRequest
+	}
 	return validateCLICommand(r.Args)
 }
 
@@ -291,14 +295,17 @@ func validateCLICommand(args []string) error {
 		}
 		return requireLocalTarget(args[4])
 	}
-	if len(args) == 10 && args[0] == "service" && args[1] == "secret" && args[2] == "revoke" && args[3] == "--target" && args[5] == "--service" && args[7] == "--reference" && args[9] == "--confirm" {
+	if len(args) == 12 && args[0] == "service" && args[1] == "secret" && args[2] == "revoke" && args[3] == "--target" && args[5] == "--project" && args[7] == "--service" && args[9] == "--reference" && args[11] == "--confirm" {
 		if err := requireLocalTarget(args[4]); err != nil {
 			return err
 		}
-		if err := validCLIIdentifier(args[6]); err != nil {
+		if err := validCLIAbsoluteProjectPath(args[6]); err != nil {
 			return err
 		}
-		if !validOpaqueServiceSecretReference(args[8]) {
+		if err := validCLIIdentifier(args[8]); err != nil {
+			return err
+		}
+		if !validOpaqueServiceSecretReference(args[10]) {
 			return ErrInvalidCLIRequest
 		}
 		return nil

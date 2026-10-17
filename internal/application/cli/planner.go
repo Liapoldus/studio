@@ -168,7 +168,7 @@ func Plan(intent models.CLIIntent, projectRoot string) ([]string, error) {
 		if target != "local" || !validTarget(intent.ServiceID) || !validStudioSecretReference(intent.Reference) || intent.Purpose != "" || intent.Label != "" {
 			return nil, ErrInvalidIntent
 		}
-		args = []string{"service", "secret", "revoke", "--target", target, "--service", intent.ServiceID, "--reference", intent.Reference, "--confirm"}
+		args = []string{"service", "secret", "revoke", "--target", target, "--project", root, "--service", intent.ServiceID, "--reference", intent.Reference, "--confirm"}
 	case "service.resource.list":
 		if target != "local" || !validTarget(intent.ServiceID) || !validTarget(intent.ResourceID) {
 			return nil, ErrInvalidIntent

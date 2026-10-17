@@ -38,7 +38,7 @@ func TestCLIRequestAllowsOnlyReviewedStudioCommandShapes(t *testing.T) {
 		{name: "service secret create requires trusted stdin", args: []string{"service", "secret", "create", "--target", "local", "--service", "server", "--purpose", "http.auth.bearer", "--label", "edge token", "--secret-stdin", "--confirm"}},
 		{name: "service secret rotate requires trusted stdin", args: []string{"service", "secret", "rotate", "--target", "local", "--service", "server", "--reference", "ssr:v1:00112233445566778899aabbccddeeff", "--purpose", "http.auth.bearer", "--label", "edge token v2", "--secret-stdin", "--confirm"}},
 		{name: "service secret register uses only staged reference", args: []string{"service", "secret", "register", "--target", "local", "--service", "server", "--reference", "ssr:v1:00112233445566778899aabbccddeeff", "--confirm"}, want: true},
-		{name: "service secret revoke", args: []string{"service", "secret", "revoke", "--target", "local", "--service", "server", "--reference", "ssr:v1:00112233445566778899aabbccddeeff", "--confirm"}, want: true},
+		{name: "service secret revoke is Project-scoped", args: []string{"service", "secret", "revoke", "--target", "local", "--project", root, "--service", "server", "--reference", "ssr:v1:00112233445566778899aabbccddeeff", "--confirm"}, want: true},
 		{name: "development apply waits for Core", args: []string{"dev", "apply", "--project", root, "--target", "local", "--confirm", "--wait"}, want: true},
 		{name: "development apply without observation rejected", args: []string{"dev", "apply", "--project", root, "--target", "local", "--confirm"}},
 		{name: "old plugin status rejected", args: []string{"plugin", "status", "echo", "--target", "local"}},
@@ -54,6 +54,19 @@ func TestCLIRequestAllowsOnlyReviewedStudioCommandShapes(t *testing.T) {
 				t.Fatal("expected command to be rejected")
 			}
 		})
+	}
+}
+
+func TestSecretRevokeMustUseTheSameProjectRootAsItsRequest(t *testing.T) {
+	root := t.TempDir()
+	otherProject := t.TempDir()
+	request := CLIRequest{
+		ProjectRoot: root,
+		WorkingDir:  root,
+		Args:        []string{"service", "secret", "revoke", "--target", "local", "--project", otherProject, "--service", "server", "--reference", "ssr:v1:00112233445566778899aabbccddeeff", "--confirm"},
+	}
+	if err := request.Validate(); err == nil {
+		t.Fatal("secret revocation accepted a Project path different from the host request scope")
 	}
 }
 

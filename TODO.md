@@ -1,5 +1,17 @@
 # Liapoldus Studio — TODO
 
+## Secret retirement host boundary — 2026-10-18
+
+- Studio's typed `service.secret.revoke` intent now passes the open Project root
+  explicitly. The pushed CLI `f60ce65` independently snapshots that Project,
+  verifies that service settings no longer contain the reference, and blocks
+  revocation unless every Core-reported replica is ready on the exact settings
+  digest and acknowledged generation. CLI regression tests cover stale Project,
+  digest mismatch, and an unready replica; owner checks pass. This closes the
+  direct CLI bypass in the normal local workflow, but live multi-replica and
+  crash/restart acceptance still require the current CLI/Core binaries and the
+  action-time install confirmation recorded below.
+
 ## Local runtime and packaged-editor preflight — 2026-10-18
 
 - Current Project `Server Echo Studio`, target `local`: typed `runtime start`
