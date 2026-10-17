@@ -22,16 +22,17 @@
   `echo: studio-http-check-20261018` body.
 - The Studio-selected `/Users/docup/go/bin/liapoldus` is stale for secret
   operations: `service secret list` returns `unsupported service command`.
-  A host CLI candidate built from the current CLI source has SHA-256
-  `556545996aeba3c260a4f17afb91ebb44795b2e0bbe6baf9cc56ba7d2dce1a2f`.
-  It reaches the Core secret route, which currently returns HTTP 404.
+  Current CLI commit `f60ce65` adds a fail-closed retirement gate, and its
+  Darwin/arm64 candidate is `/tmp/liapoldus-cli-2026-10-18-f60ce65`, SHA-256
+  `3901057bd6a2b279a03a2926eb8bae8648b4163ab1801dfc2a04bd1c563b55e6`. It
+  reaches the Core secret route, which currently returns HTTP 404.
 - The running Core container label reports binary SHA-256
   `9189b7731207bd4434fcfbffa7d6a2083df1c1ceb79c1e9ae724c6199631b9b5` and
-  lacks the new secret-catalog route. A Linux/arm64 candidate built from the
-  current Core source has SHA-256
-  `0ad10d7141adaad6a91775cd6dd915e69a2b5f2971d7346e64cc0f60bfc464d0`; it
-  differs from the previously approved digest and has not been installed. The
-  local secret workflow is therefore not live-accepted yet.
+  lacks the new secret-catalog route. The current Linux/arm64 candidate is
+  `/tmp/liapoldus-core-linux-arm64-2026-10-18-b87dd1c`, SHA-256
+  `9aa6bce94f24239ca277af5008b1a094cb4909903d8d82ccb38b2ff1c66c127f`; this
+  exact digest has not been installed. The local secret workflow is therefore
+  not live-accepted yet.
 - The running Studio UI has the existing Server Editor `0.3.55`. Studio's
   native trust review for `0.3.59` displayed the exact digest and seven
   requested permissions; install remains pending action-time confirmation.
