@@ -6,6 +6,7 @@ import { initialWorkspaceTabs, messageOf, operationReplicaOutcomes, previewWorks
 import { parseCoreServiceReadiness, parseServiceReadiness, runtimeServiceActionConfirmationText, runtimeStopConfirmationText } from '../../frontend/src/models/runtime.ts'
 import { graphEdgeHandles } from '../../frontend/src/models/graph.ts'
 import { groupDiagnostics } from '../../frontend/src/models/diagnostics.ts'
+import { configurationSecretReferencePathEditable } from '../../frontend/src/models/configurationDraft.ts'
 import type { StudioAPI } from '../../frontend/src/api/types.ts'
 import { useStudioStore } from '../../frontend/src/stores/studio.ts'
 
@@ -26,13 +27,23 @@ await test('schema preview adapter validates bounded schema and exact review dig
   const source = {
     schemaJson: '{"type":"object"}',
     schemaDigest: `sha256:${'a'.repeat(64)}`,
+    previousSchemaDigest: `sha256:${'d'.repeat(64)}`,
     settingsDigest: `sha256:${'b'.repeat(64)}`,
     draftDigest: `sha256:${'c'.repeat(64)}`,
+    migrationRequired: false,
+    migrationFromVersion: 0,
+    migrationToVersion: 0,
+    migrationCandidateDigest: '',
+    migrationChangedPaths: [],
+    recoveryCopyPath: '',
+    recoverySchemaCopyPath: '',
     valuesCompatible: true,
   }
   const preview = new ServiceSettingsSchemaPreview(source)
   assert.equal(preview.valuesCompatible, true)
   assert.equal(preview.schemaDigest, `sha256:${'a'.repeat(64)}`)
+  assert.equal(preview.migrationRequired, false)
+  assert.throws(() => new ServiceSettingsSchemaPreview({ ...source, recoveryCopyPath: '/tmp/untrusted.bak' }), /Invalid Studio service settings schema preview/u)
   assert.throws(() => new ServiceSettingsSchemaPreview({ ...source, draftDigest: 'unchecked' }), /Invalid Studio service settings schema preview/u)
   assert.throws(() => new ServiceSettingsSchemaPreview({ ...source, valuesCompatible: 'yes' }), /Invalid Studio service settings schema preview/u)
   assert.throws(() => new ServiceSettingsSchemaPreview({ ...source, schemaJson: 'x'.repeat(1_048_577) }), /Invalid Studio service settings schema preview/u)
@@ -43,6 +54,49 @@ await test('Wails byte responses decode both base64 and numeric-array payloads',
   assert.deepEqual(decodeWailsBytes(btoa(new TextDecoder().decode(expected))), expected)
   assert.deepEqual(decodeWailsBytes(Array.from(expected)), expected)
   assert.throws(() => decodeWailsBytes({ data: 'not-bytes' }), /Unexpected Wails byte payload/u)
+})
+
+await test('opaque secret reference edits are limited to the declared schema path and purpose', () => {
+  const schema = {
+    type: 'object',
+    properties: {
+      config: {
+        type: 'object',
+        properties: {
+          routes: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                features: {
+                  type: 'object',
+                  properties: {
+                    auth: {
+                      type: 'object',
+                      properties: {
+                        secretRef: {
+                          type: 'string',
+                          pattern: '^ssr:v1:[a-f0-9]{32}$',
+                          'x-liapoldus-secret-reference': true,
+                          'x-studio-secret-purpose': 'server.http.auth.credential',
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  }
+  const path = ['config', 'routes', '0', 'features', 'auth', 'secretRef']
+  const reference = 'ssr:v1:00112233445566778899aabbccddeeff'
+  assert.equal(configurationSecretReferencePathEditable(schema, path, 'server.http.auth.credential', reference), true)
+  assert.equal(configurationSecretReferencePathEditable(schema, path, 'server.tls.private-key', reference), false)
+  assert.equal(configurationSecretReferencePathEditable(schema, path, 'server.http.auth.credential', 'plaintext'), false)
+  assert.equal(configurationSecretReferencePathEditable(schema, ['config', 'routes', '0', 'features', 'auth', 'username'], 'server.http.auth.credential', reference), false)
 })
 
 await test('CLI output renders bounded structured events without hiding diagnostics', () => {
@@ -163,8 +217,8 @@ await test('SDK readiness display does not claim replica provenance or configura
   assert.equal(parseCoreServiceReadiness('{"instanceId":"echo"}', 'echo'), 'unknown')
 })
 
-await test('workspace migration removes plugin manager tabs while preserving plugin surfaces and layout', async () => {
-  const tabs = [{ id: 'plugins', kind: 'plugins', title: 'Extensions' }, { id: 'studio-plugin:p:1:ui', kind: 'studio-plugin', title: 'UI', pluginId: 'p', pluginVersion: '1', surfaceId: 'ui', route: 'ui/index.html' }, { id: 'files', kind: 'files', title: 'Files' }, { id: 'artifacts', kind: 'artifacts', title: 'Artifacts' }, { id: 'runtime', kind: 'runtime', title: 'Runtime' }, { id: 'canvas', kind: 'canvas', title: 'Canvas' }]
+await test('workspace migration removes retired navigation tabs while preserving plugin surfaces and layout', async () => {
+  const tabs = [{ id: 'plugins', kind: 'plugins', title: 'Extensions' }, { id: 'studio-plugin:p:1:ui', kind: 'studio-plugin', title: 'UI', pluginId: 'p', pluginVersion: '1', surfaceId: 'ui', route: 'ui/index.html' }, { id: 'files', kind: 'files', title: 'Files' }, { id: 'git', kind: 'git', title: 'Git' }, { id: 'artifacts', kind: 'artifacts', title: 'Artifacts' }, { id: 'runtime', kind: 'runtime', title: 'Runtime' }, { id: 'canvas', kind: 'canvas', title: 'Canvas' }]
   const layout = { 'neutral-id': { x: -12, y: 48 } }
   const before = JSON.stringify({ schemaVersion: 'workspace/v3', tabs, activeTabId: 'plugins', layout, userData: { retained: true } })
   const preview = previewWorkspaceMigration(before)
@@ -172,7 +226,7 @@ await test('workspace migration removes plugin manager tabs while preserving plu
   assert.equal(preview.changed, true)
   const after: unknown = JSON.parse(preview.after)
   const { pluginId, pluginVersion, ...extension } = tabs[1]
-  assert.deepEqual(after, { schemaVersion: 'workspace/v5', tabs: [{ ...extension, studioPluginId: pluginId, studioPluginVersion: pluginVersion }, tabs[5]], activeTabId: 'canvas', layout, userData: { retained: true } })
+  assert.deepEqual(after, { schemaVersion: 'workspace/v5', tabs: [{ ...extension, studioPluginId: pluginId, studioPluginVersion: pluginVersion }, tabs[6]], activeTabId: 'canvas', layout, userData: { retained: true } })
   assert.equal(previewWorkspaceMigration(preview.after).changed, false)
   const restored = await restoreWorkspaceState({ readWorkspaceState: () => Promise.resolve({ tabsJson: before, layoutJson: '{}' }) } as unknown as StudioAPI)
   assert.deepEqual(restored.tabs.map((tab) => tab.id), ['studio-plugin:p:1:ui', 'canvas'])
@@ -232,7 +286,7 @@ await test('apply recovery marker survives workspace updates and restores ambigu
   const applying = workspaceStateWithApplyRecovery(saved, 'applying', 'op-123')
   assert.deepEqual(JSON.parse(applying.tabsJson), {
     schemaVersion: 'workspace/v5', activeTabId: 'canvas', tabs: [{ id: 'canvas', kind: 'canvas', title: 'Canvas' }], layout: {}, extensionState: { retained: true },
-    applyRecovery: { schemaVersion: 'studio-apply-recovery/v2', state: 'applying', target: 'local', operationId: 'op-123' },
+    applyRecovery: { schemaVersion: 'studio-apply-recovery/v3', state: 'applying', target: 'local', operationId: 'op-123' },
   })
   const updated = workspaceStateUpdate(applying, workspaceSnapshot({ activeTabId: 'canvas', tabs: initialWorkspaceTabs(), layout: {} }))
   assert.equal((JSON.parse(updated.tabsJson) as { applyRecovery: { state: string } }).applyRecovery.state, 'applying')
@@ -248,6 +302,14 @@ await test('apply recovery marker survives workspace updates and restores ambigu
   const initialized = workspaceStateWithApplyRecovery({ ...saved, tabsJson: '[]' }, 'confirmation-required')
   assert.equal((JSON.parse(initialized.tabsJson) as Record<string, unknown>).schemaVersion, 'workspace/v5')
   assert.equal((await restoreWorkspaceState({ readWorkspaceState: () => Promise.resolve(initialized) } as unknown as StudioAPI)).applyRecoveryStatus, 'confirmation-required')
+})
+
+await test('apply review paths survive workspace persistence and restore as confirmation requirements', async () => {
+  const saved = { projectId: 'review-project', layoutJson: '{}', tabsJson: JSON.stringify({ schemaVersion: 'workspace/v5', activeTabId: 'canvas', tabs: [{ id: 'canvas', kind: 'canvas', title: 'Canvas' }], layout: {} }), filtersJson: '{}' }
+  const staged = workspaceStateWithApplyRecovery(saved, 'confirmation-required', null, ['server.routes', 'server.listeners'])
+  const restored = await restoreWorkspaceState({ readWorkspaceState: () => Promise.resolve(staged) } as unknown as StudioAPI)
+  assert.equal(restored.applyRecoveryStatus, 'confirmation-required')
+  assert.deepEqual(restored.applyReviewPaths, ['server.routes', 'server.listeners'])
 })
 
 await test('malformed apply recovery markers restore fail-closed', async () => {

@@ -37,8 +37,16 @@ export interface CoreSettingsView {
 export interface ServiceSettingsSchemaPreview {
   schemaJson: string
   schemaDigest: string
+  previousSchemaDigest: string
   settingsDigest: string
   draftDigest: string
+  migrationRequired: boolean
+  migrationFromVersion: number
+  migrationToVersion: number
+  migrationCandidateDigest: string
+  migrationChangedPaths: string[]
+  recoveryCopyPath: string
+  recoverySchemaCopyPath: string
   valuesCompatible: boolean
 }
 
@@ -68,13 +76,13 @@ export interface StudioAPI {
   refreshServiceSettingsSchema(projectId: string, serviceId: string, preview: ServiceSettingsSchemaPreview, patchJson: string): Promise<Workspace>
   readProjectSettings(projectId: string, serviceId: string): Promise<ProjectSettingsSnapshot>
   writeProjectSettings(projectId: string, serviceId: string, expectedDigest: string, patch: Uint8Array): Promise<void>
+  writeProjectCandidateSettings?(projectId: string, serviceId: string, expectedDigest: string, patch: Uint8Array): Promise<void>
   readServiceSettingsDraft(projectId: string, serviceId: string): Promise<PersistedServiceSettingsDraft | null>
   saveServiceSettingsDraft(projectId: string, serviceId: string, baseDigest: string, patchJson: string): Promise<void>
   deleteServiceSettingsDraft(projectId: string, serviceId: string): Promise<void>
   runStudioCommand(command: string, target?: string, operationID?: string, profilePath?: string): Promise<void>
   runStudioCommandAndWait(command: string, target?: string, operationID?: string, profilePath?: string): Promise<void>
   runStudioRuntimeCommand(command: string, serviceID: string): Promise<void>
-  initializeGit(): Promise<Workspace>
   createRuntimeService(input: RuntimeServiceInput): Promise<Workspace>
   deleteRuntimeService(id: string, confirmed: boolean): Promise<Workspace>
   createServiceLink(input: ServiceLinkInput): Promise<Workspace>
@@ -90,10 +98,15 @@ export interface StudioAPI {
   readRuntimeServiceMetadata(projectId: string, serviceID: string, view: 'manifest' | 'schema' | 'status'): Promise<string>
   readRuntimeServiceAdminSurface?(projectId: string, serviceID: string): Promise<string>
   selectRuntimeServiceResourceArtifact?(projectId: string, serviceID: string): Promise<string>
+  selectRuntimeServiceProjectDirectory?(projectId: string, serviceID: string): Promise<string>
   importRuntimeServiceProjectCertificate?(projectId: string, serviceID: string, resourceID: string): Promise<string>
   publishRuntimeServiceResourceJSON?(projectId: string, serviceID: string, pageID: string, actionID: string, artifactPath: string, contentType: string, metadataJSON: string, ifMatch: string): Promise<string>
   readRuntimeServiceResource?(projectId: string, serviceID: string, resourceID: string): Promise<string>
-  prepareRemoteHandoff(target: string): Promise<string>
+  readLocalServiceSecretReferences?(serviceID: string): Promise<string>
+  registerLocalServiceSecret?(serviceID: string, reference: string, confirmed: boolean): Promise<void>
+  createLocalServiceSecret?(serviceID: string, purpose: string, label: string, secret: number[], confirmed: boolean): Promise<string>
+  rotateLocalServiceSecret?(serviceID: string, reference: string, purpose: string, label: string, secret: number[], confirmed: boolean): Promise<string>
+  revokeLocalServiceSecret?(serviceID: string, reference: string, confirmed: boolean): Promise<void>
   onCLIEvent(callback: (event: CLIEvent) => void): () => void
   trafficRecords(): Promise<TrafficRecordView[]>
   latestReportSummary(): Promise<ReportSummary | null>
@@ -112,26 +125,6 @@ export interface StudioAPI {
   startStudioPluginProcess(studioPluginId: string, version: string): Promise<string>
   stopStudioPluginProcess(studioPluginId: string, version: string): Promise<void>
   studioPluginProcessStatus(studioPluginId: string, version: string): Promise<string>
-  gitDiff(path: string): Promise<GitDiff>
-  gitConflict(path: string): Promise<GitConflict>
-  gitResolveConflict(path: string, side: 'ours' | 'theirs', confirmed: boolean): Promise<void>
-  gitStage(paths: string[], confirmed: boolean): Promise<void>
-  gitUnstage(paths: string[], confirmed: boolean): Promise<void>
-  gitCommitStaged(message: string, confirmed: boolean): Promise<string>
-  gitStashes(limit: number): Promise<GitStash[]>
-  gitStash(message: string, includeUntracked: boolean, confirmed: boolean): Promise<string>
-  gitApplyStash(index: number, drop: boolean, confirmed: boolean): Promise<void>
-  gitBranches(): Promise<GitBranch[]>
-  gitHistory(limit: number): Promise<GitCommit[]>
-  gitRemotes(): Promise<GitRemote[]>
-  gitCheckout(branch: string, confirmed: boolean): Promise<void>
-  gitCommit(message: string, paths: string[], confirmed: boolean): Promise<string>
-  gitPull(remote: string, branch: string, confirmed: boolean): Promise<void>
-  gitPush(remote: string, branch: string, confirmed: boolean): Promise<void>
-  gitMerge(branch: string, confirmed: boolean): Promise<void>
-  gitRebase(branch: string, confirmed: boolean): Promise<void>
-  gitCherryPick(commit: string, confirmed: boolean): Promise<void>
-  gitAbort(operation: string, confirmed: boolean): Promise<void>
   selectRuntimeArtifactBinary(): Promise<string>
   inspectCoreBinary(binaryPath: string): Promise<string>
   updateLocalCoreBinary(binaryPath: string, digest: string, confirmed: boolean): Promise<string>
@@ -263,51 +256,6 @@ export interface EditorAssociation {
   application: string
 }
 
-export interface GitBranch {
-  name: string
-  remote: string
-  current: boolean
-}
-
-export interface GitCommit {
-  hash: string
-  shortHash: string
-  author: string
-  timestamp: string
-  subject: string
-}
-
-export interface GitRemote {
-  name: string
-  fetchUrl: string
-  pushUrl: string
-}
-
-export interface GitDiff {
-  path: string
-  patch: string
-  truncated: boolean
-}
-
-export interface GitConflictSide {
-  available: boolean
-  content: string
-  truncated: boolean
-}
-
-export interface GitConflict {
-  path: string
-  base: GitConflictSide
-  ours: GitConflictSide
-  theirs: GitConflictSide
-}
-
-export interface GitStash {
-  ref: string
-  message: string
-  createdAt: string
-}
-
 export interface Project {
   id: string
   name: string
@@ -320,25 +268,9 @@ export interface ProjectFile {
   bytes: number
 }
 
-export interface GitStatus {
-  branch: string
-  revision: string
-  changes: GitChange[]
-  dirty: boolean
-  available: boolean
-  conflict: boolean
-}
-
-export interface GitChange {
-  path: string
-  indexStatus: string
-  worktreeStatus: string
-}
-
 export interface Workspace {
   project: Project | null
   files: ProjectFile[]
-  git: GitStatus
   graph: ServiceGraph
 }
 

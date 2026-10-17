@@ -1,9 +1,9 @@
 import { create } from 'zustand'
 import type { Edge, Node } from '@xyflow/react'
 import type { CLIEvent, Diagnostic, RuntimeReplicaStatus, RuntimeServiceReadiness, ThemePreference, ToolchainStatus, TrafficRecordView, Workspace } from '../api/types'
-import { initialWorkspaceTabs, updateCLIStreamState, type CLIStreamState, type Layout, type Locale, type ProjectList, type Selection, type TabKind, type WorkspaceApplyRecoveryOperationId, type WorkspaceApplyRecoveryStatus, type WorkspaceTab, type WorkspaceView } from '../models/studio'
+import { initialWorkspaceTabs, updateCLIStreamState, type CLIStreamState, type Layout, type Locale, type ProjectList, type Selection, type TabKind, type WorkspaceApplyRecoveryOperationId, type WorkspaceApplyRecoveryStatus, type WorkspaceApplyReviewPaths, type WorkspaceTab, type WorkspaceView } from '../models/studio'
 import type { ServiceConfigurationUI } from '../models/serviceConfigurationUI'
-import { cloneConfigurationObject, configurationDraftKey, configurationJSONDocumentPatch, configurationPathEditable, configurationPathIsJSONDocument, configurationValuesEqual, isConfigurationMapOperationPath, isConfigurationPatchEmpty, isProtectedConfigurationArrayFieldPath, isProtectedConfigurationArrayPath, mergeConfiguration, updateConfigurationMapOperationPatch, updateConfigurationPatch, updateProtectedConfigurationArrayFieldPatch, updateProtectedConfigurationArrayOperationPatch, type ConfigurationDraftIdentity, type ConfigurationObject } from '../models/configurationDraft'
+import { cloneConfigurationObject, configurationDraftKey, configurationJSONDocumentPatch, configurationPathEditable, configurationPathIsJSONDocument, configurationSecretReferencePathEditable, configurationValuesEqual, isConfigurationMapOperationPath, isConfigurationPatchEmpty, isProtectedConfigurationArrayFieldPath, isProtectedConfigurationArrayPath, mergeConfiguration, updateConfigurationMapOperationPatch, updateConfigurationPatch, updateProtectedConfigurationArrayFieldPatch, updateProtectedConfigurationArrayOperationPatch, type ConfigurationDraftIdentity, type ConfigurationObject } from '../models/configurationDraft'
 import { configurationArrayOperations } from '../models/configurationArray'
 import { configurationMapOperations, configurationMapOperationsKey, isConfigurationMapOperationRequest } from '../models/configurationMap'
 import { latestStudioPluginSurfaces } from '../models/studioPluginPackage'
@@ -161,6 +161,7 @@ export type StudioState = {
   stateHydrated: boolean
   applyRecoveryStatus: WorkspaceApplyRecoveryStatus
   applyRecoveryOperationId: WorkspaceApplyRecoveryOperationId
+  applyReviewPaths: WorkspaceApplyReviewPaths
   layout: Layout
   canvasNodes: Node[]
   canvasEdges: Edge[]
@@ -182,7 +183,7 @@ export type StudioState = {
   setDiagnostics: (diagnostics: Diagnostic[]) => void
   setTraffic: (traffic: TrafficRecordView[]) => void
   setStateHydrated: (hydrated: boolean) => void
-  setApplyRecovery: (status: WorkspaceApplyRecoveryStatus, operationId: WorkspaceApplyRecoveryOperationId) => void
+  setApplyRecovery: (status: WorkspaceApplyRecoveryStatus, operationId: WorkspaceApplyRecoveryOperationId, reviewPaths?: WorkspaceApplyReviewPaths) => void
   setLayout: (layout: Layout) => void
   setCanvasNodes: (nodes: Node[]) => void
   setCanvasEdges: (edges: Edge[]) => void
@@ -198,6 +199,7 @@ export type StudioState = {
   failServiceSettingsDraftLoad: (key: string, error: string) => void
   setServiceSettingsDraftError: (key: string, error: string) => void
   updateServiceSettingsDraft: (key: string, path: string[], value: unknown) => void
+  updateServiceSettingsSecretReference: (key: string, path: string[], purpose: string, reference: string) => void
   undoServiceSettingsDraft: (key: string) => void
   redoServiceSettingsDraft: (key: string) => void
   beginServiceSettingsDraftSave: (key: string) => number | null
@@ -220,7 +222,7 @@ export type StudioState = {
 }
 
 export const useStudioStore = create<StudioState>((set, get) => ({
-  locale: 'ru', theme: 'system', workspace: null, projects: [], toolchain: null, view: 'home', tabs: initialWorkspaceTabs(), activeTabId: 'canvas', studioPluginSurfaces: [], busy: true, initialized: false, error: null, query: '', selected: null, cliEvents: [], cliStreamState: 'idle', diagnostics: [], traffic: [], commandOpen: false, commandQuery: '', createOpen: false, serviceOpen: false, projectID: '', projectName: '', serviceID: '', serviceName: '', target: 'local', profile: '', stateHydrated: false, applyRecoveryStatus: 'none', applyRecoveryOperationId: null, layout: {}, canvasNodes: [], canvasEdges: [], runtimeOutput: '', runtimeStatuses: {}, runtimeReplicas: {}, serviceSettingsDrafts: {},
+  locale: 'ru', theme: 'system', workspace: null, projects: [], toolchain: null, view: 'home', tabs: initialWorkspaceTabs(), activeTabId: 'canvas', studioPluginSurfaces: [], busy: true, initialized: false, error: null, query: '', selected: null, cliEvents: [], cliStreamState: 'idle', diagnostics: [], traffic: [], commandOpen: false, commandQuery: '', createOpen: false, serviceOpen: false, projectID: '', projectName: '', serviceID: '', serviceName: '', target: 'local', profile: '', stateHydrated: false, applyRecoveryStatus: 'none', applyRecoveryOperationId: null, applyReviewPaths: [], layout: {}, canvasNodes: [], canvasEdges: [], runtimeOutput: '', runtimeStatuses: {}, runtimeReplicas: {}, serviceSettingsDrafts: {},
   setLocaleState: (locale) => { set({ locale }) },
   setThemeState: (theme) => { set({ theme }) },
   setWorkspace: (workspace) => { set({ workspace }) },
@@ -235,7 +237,7 @@ export const useStudioStore = create<StudioState>((set, get) => ({
   setDiagnostics: (diagnostics) => { set({ diagnostics }) },
   setTraffic: (traffic) => { set({ traffic }) },
   setStateHydrated: (stateHydrated) => { set({ stateHydrated }) },
-  setApplyRecovery: (applyRecoveryStatus, applyRecoveryOperationId) => { set({ applyRecoveryStatus, applyRecoveryOperationId }) },
+  setApplyRecovery: (applyRecoveryStatus, applyRecoveryOperationId, applyReviewPaths = []) => { set({ applyRecoveryStatus, applyRecoveryOperationId, applyReviewPaths }) },
   setLayout: (layout) => { set({ layout }) },
   setCanvasNodes: (canvasNodes) => { set({ canvasNodes }) },
   setCanvasEdges: (canvasEdges) => { set({ canvasEdges }) },
@@ -338,6 +340,17 @@ export const useStudioStore = create<StudioState>((set, get) => ({
     if (configurationValuesEqual(draft.patch, patch)) return {}
     const actionKey = operations || mapOperations ? '' : JSON.stringify(path)
     const history = recordConfigurationDraftEdit(draft.history, draft.patch, actionKey)
+    const status = isConfigurationPatchEmpty(patch) ? 'clean' : 'dirty'
+    return { serviceSettingsDrafts: { ...state.serviceSettingsDrafts, [key]: { ...draft, patch, history, status, error: null, revision: draft.revision + 1 } } }
+  }) },
+  updateServiceSettingsSecretReference: (key, path, purpose, reference) => { set((state) => {
+    const draft = state.serviceSettingsDrafts[key]
+    if (!draft?.schema || draft.status === 'loading' || draft.status === 'saving' || draft.status === 'conflict' || draft.refreshingContract) return {}
+    if (draft.configurationContractState !== 'matched') throw new Error('Live service schema is not verified')
+    if (!configurationSecretReferencePathEditable(draft.schema, path, purpose, reference)) throw new Error('Secret reference path or metadata is invalid')
+    const patch = updateConfigurationPatch(draft.base, draft.patch, path, reference)
+    if (configurationValuesEqual(draft.patch, patch)) return {}
+    const history = recordConfigurationDraftEdit(draft.history, draft.patch, JSON.stringify(path))
     const status = isConfigurationPatchEmpty(patch) ? 'clean' : 'dirty'
     return { serviceSettingsDrafts: { ...state.serviceSettingsDrafts, [key]: { ...draft, patch, history, status, error: null, revision: draft.revision + 1 } } }
   }) },
@@ -446,6 +459,6 @@ export const useStudioStore = create<StudioState>((set, get) => ({
 }))
 
 function tabTitle(kind: TabKind): string {
-  const titles: Record<TabKind, string> = { canvas: 'Canvas', git: 'Git', reports: 'Reports', problems: 'Problems', output: 'Output', 'studio-plugin': 'Plugin' }
+  const titles: Record<TabKind, string> = { canvas: 'Canvas', reports: 'Reports', problems: 'Problems', output: 'Output', 'studio-plugin': 'Plugin' }
   return titles[kind]
 }

@@ -77,7 +77,7 @@ await test('service artifact selection refreshes the Project file index after na
   }
   const baseWorkspace = {
     project: { id: 'project-1', name: 'Test', rootPath: '/tmp/test-project' },
-    files: [], git: { branch: 'main', revision: 'abc', changes: [], dirty: false, available: true, conflict: false },
+    files: [],
     graph: { services: [service], links: [] },
   }
   const importedPath = 'resources/site-1234567890abcdef.tar.gz'
@@ -108,7 +108,7 @@ await test('Project certificate import refreshes the host file index before acce
   }
   const baseWorkspace = {
     project: { id: 'project-1', name: 'Test', rootPath: '/tmp/test-project' },
-    files: [], git: { branch: 'main', revision: 'abc', changes: [], dirty: false, available: true, conflict: false },
+    files: [],
     graph: { services: [service], links: [] },
   }
   const importedPath = 'resources/certificate-0123456789abcdef.crt'
@@ -139,7 +139,7 @@ await test('resource publication operation watch is restricted to the operation 
   }
   useStudioStore.getState().setWorkspace({
     project: { id: 'project-1', name: 'Test', rootPath: '/tmp/test-project' },
-    files: [], git: { branch: 'main', revision: 'abc', changes: [], dirty: false, available: true, conflict: false },
+    files: [],
     graph: { services: [service], links: [] },
   })
   let onEvent: ((event: { type: string; target?: string; operationId?: string; state?: string; code?: string }) => void) | undefined

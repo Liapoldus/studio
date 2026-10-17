@@ -11,7 +11,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/Liapoldus/studio/internal/domain/interfaces"
 	"github.com/Liapoldus/studio/internal/domain/models"
 )
 
@@ -20,9 +19,7 @@ var ErrProjectDirectoryExists = errors.New("project directory already exists")
 var ErrInvalidProjectIdentity = errors.New("project id and name contain unsupported characters")
 var ErrLegacyRuntimeProject = errors.New("legacy project path plugins/ is unsupported; migrate the project to services before opening it in Studio")
 
-type Source struct {
-	Git interfaces.GitRepository
-}
+type Source struct{}
 
 func (s Source) Open(ctx context.Context, root string) (models.Workspace, error) {
 	if err := ctx.Err(); err != nil {
@@ -64,19 +61,9 @@ func (s Source) Open(ctx context.Context, root string) (models.Workspace, error)
 	if err != nil {
 		return models.Workspace{}, err
 	}
-	git := models.GitStatus{Changes: []models.GitChange{}}
-	if sourceGit := s.Git; sourceGit != nil {
-		git, err = sourceGit.Status(ctx, root)
-		if err != nil {
-			// A project remains useful offline when Git is missing or the folder
-			// has not been initialized yet. The UI will render an empty Git state.
-			git = models.GitStatus{Changes: []models.GitChange{}}
-		}
-	}
 	return models.Workspace{
 		Project: &value,
 		Files:   files,
-		Git:     git,
 		Graph:   serviceGraph,
 	}, nil
 }
@@ -150,11 +137,6 @@ func (s Source) Create(ctx context.Context, root, id, name string) (models.Works
 	}
 	if closeErr := file.Close(); closeErr != nil {
 		return models.Workspace{}, closeErr
-	}
-	if s.Git != nil {
-		if initErr := s.Git.Init(ctx, root); initErr != nil {
-			return models.Workspace{}, initErr
-		}
 	}
 	createdDir = false
 	return s.Open(ctx, root)

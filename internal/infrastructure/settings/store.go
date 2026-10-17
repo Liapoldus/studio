@@ -139,6 +139,34 @@ func (s Store) ValidateValuesAgainstSchemaDocument(ctx context.Context, root, se
 	}
 }
 
+// ValidateSettingsDocumentAgainstSchemaDocument validates a complete candidate
+// settings document without reading or mutating the canonical Project file.
+// It is used by deterministic migrations whose safe preview must preserve
+// unknown values in the candidate while still reporting that they block apply.
+func (s Store) ValidateSettingsDocumentAgainstSchemaDocument(ctx context.Context, root, schemaPath string, candidateSchema, candidateSettings []byte) (bool, error) {
+	if s.Files == nil || len(candidateSettings) == 0 || len(candidateSettings) > 8<<20 {
+		return false, ErrInvalidSchema
+	}
+	resolvedCandidate, err := s.resolveSchemaDocument(ctx, root, schemaPath, candidateSchema)
+	if err != nil {
+		return false, err
+	}
+	var values any
+	if err := json.Unmarshal(candidateSettings, &values); err != nil {
+		return false, fmt.Errorf("decode candidate settings: %w", err)
+	}
+	if _, ok := values.(map[string]any); !ok {
+		return false, ErrInvalidSchema
+	}
+	if err := validateValue(values, resolvedCandidate, "$"); err != nil {
+		if errors.Is(err, ErrUnsupportedPatch) {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
+}
+
 func (s Store) Read(ctx context.Context, root, settingsPath, schemaPath string) ([]byte, error) {
 	snapshot, err := s.Snapshot(ctx, root, settingsPath, schemaPath)
 	if err != nil {
@@ -231,7 +259,22 @@ func (s Store) UpdateIfDigest(ctx context.Context, root, settingsPath, schemaPat
 	return s.update(ctx, root, settingsPath, schemaPath, expectedDigest, patch)
 }
 
+// UpdateProjectCandidateIfDigest persists a schema-declared candidate even
+// when required fields are still incomplete. It retains ordinary patch safety
+// checks and digest conflict protection; full-document validation is deferred
+// to the service/Core apply boundary.
+func (s Store) UpdateProjectCandidateIfDigest(ctx context.Context, root, settingsPath, schemaPath, expectedDigest string, patch []byte) error {
+	if expectedDigest == "" {
+		return ErrSettingsConflict
+	}
+	return s.updateWithCandidatePolicy(ctx, root, settingsPath, schemaPath, expectedDigest, patch, true)
+}
+
 func (s Store) update(ctx context.Context, root, settingsPath, schemaPath, expectedDigest string, patch []byte) error {
+	return s.updateWithCandidatePolicy(ctx, root, settingsPath, schemaPath, expectedDigest, patch, false)
+}
+
+func (s Store) updateWithCandidatePolicy(ctx context.Context, root, settingsPath, schemaPath, expectedDigest string, patch []byte, allowIncomplete bool) error {
 	if s.Files == nil {
 		return ErrInvalidSchema
 	}
@@ -265,8 +308,10 @@ func (s Store) update(ctx context.Context, root, settingsPath, schemaPath, expec
 	if err != nil {
 		return err
 	}
-	if validationErr := validateValue(merged, schema, "$"); validationErr != nil {
-		return validationErr
+	if !allowIncomplete {
+		if validationErr := validateValue(merged, schema, "$"); validationErr != nil {
+			return validationErr
+		}
 	}
 	data, err := json.MarshalIndent(merged, "", "  ")
 	if err != nil {
@@ -342,6 +387,9 @@ func markedJSONValue(value any) (any, error) {
 
 func validatePatchSafety(value, schema any, propertyName string) error {
 	if isSensitive(schema, propertyName) {
+		if validOpaqueSecretReference(value, schema, propertyName) {
+			return nil
+		}
 		return ErrSensitiveField
 	}
 	schemaObject, schemaOK := schema.(map[string]any)
@@ -466,7 +514,7 @@ func validatePatchSafety(value, schema any, propertyName string) error {
 				return fmt.Errorf("%w: forbidden property %s", ErrUnsupportedPatch, key)
 			}
 			childSchema := propertySchema(schemaObject, key)
-			if isSensitive(childSchema, key) {
+			if isSensitive(childSchema, key) && !validOpaqueSecretReference(child, childSchema, key) {
 				return fmt.Errorf("%w: %s", ErrSensitiveField, key)
 			}
 			if childObject, ok := childSchema.(map[string]any); ok {
@@ -808,6 +856,9 @@ func redactValue(value any, schema any, propertyName ...string) any {
 	if len(propertyName) > 0 {
 		name = propertyName[0]
 	}
+	if validOpaqueSecretReference(value, schema, name) {
+		return value
+	}
 	if isSensitive(schema, name) {
 		return nil
 	}
@@ -925,6 +976,19 @@ func combineRedactionSchemas(candidates []any, propertyName string) any {
 	if len(candidates) == 0 {
 		return nil
 	}
+	if isSensitive(nil, propertyName) {
+		allOpaqueReferences := true
+		for _, candidate := range candidates {
+			object, ok := candidate.(map[string]any)
+			if !ok || !validSecretReferenceSchema(object, propertyName) {
+				allOpaqueReferences = false
+				break
+			}
+		}
+		if allOpaqueReferences {
+			return candidates[0]
+		}
+	}
 	for _, candidate := range candidates {
 		if redactionSchemaContainsSensitive(candidate, propertyName, 0) {
 			return map[string]any{"x-sensitive": true}
@@ -943,6 +1007,9 @@ func redactionSchemaContainsSensitive(schema any, propertyName string, depth int
 	object, ok := schema.(map[string]any)
 	if !ok {
 		return true
+	}
+	if validSecretReferenceSchema(object, propertyName) {
+		return false
 	}
 	if isSensitive(object, propertyName) {
 		return true
@@ -967,6 +1034,9 @@ func redactionSchemaContainsSensitive(schema any, propertyName string, depth int
 
 func mergeSafe(current, patch, schema any) (any, error) {
 	if isSensitive(schema, "") {
+		if validOpaqueSecretReference(patch, schema, "") {
+			return patch, nil
+		}
 		return nil, ErrSensitiveField
 	}
 	schemaObject, schemaOK := schema.(map[string]any)
@@ -1142,6 +1212,10 @@ func mergeSafe(current, patch, schema any) (any, error) {
 			childSchema = additional
 		}
 		if isSensitive(childSchema, key) {
+			if validOpaqueSecretReference(child, childSchema, key) {
+				currentObject[key] = child
+				continue
+			}
 			return nil, fmt.Errorf("%w: %s", ErrSensitiveField, key)
 		}
 		if childObject, ok := childSchema.(map[string]any); ok {
@@ -1667,6 +1741,50 @@ func isSensitive(schema any, propertyName string) bool {
 		}
 	}
 	return false
+}
+
+func validOpaqueSecretReference(value any, schema any, propertyName string) bool {
+	if !validSecretReferenceSchema(schema, propertyName) {
+		return false
+	}
+	reference, ok := value.(string)
+	if !ok || len(reference) != len("ssr:v1:")+32 || !strings.HasPrefix(reference, "ssr:v1:") {
+		return false
+	}
+	for _, character := range reference[len("ssr:v1:"):] {
+		if !strings.ContainsRune("0123456789abcdef", character) {
+			return false
+		}
+	}
+	return true
+}
+
+func validSecretReferenceSchema(schema any, propertyName string) bool {
+	object, ok := schema.(map[string]any)
+	if !ok || propertyName == "" || !isSensitive(nil, propertyName) {
+		return false
+	}
+	pattern, patternOK := object["pattern"].(string)
+	purpose, purposeOK := object["x-studio-secret-purpose"].(string)
+	return object["type"] == "string" && patternOK && pattern == `^ssr:v1:[a-f0-9]{32}$` &&
+		object["x-liapoldus-secret-reference"] == true && purposeOK && validSecretPurposeMetadata(purpose)
+}
+
+func validSecretPurposeMetadata(value string) bool {
+	if value == "" || len(value) > 192 || strings.TrimSpace(value) != value {
+		return false
+	}
+	for _, part := range strings.Split(value, ".") {
+		if part == "" || part[0] < 'a' || part[0] > 'z' {
+			return false
+		}
+		for _, character := range part {
+			if !strings.ContainsRune("abcdefghijklmnopqrstuvwxyz0123456789-", character) {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 // validateValue intentionally implements the schema subset that Studio can

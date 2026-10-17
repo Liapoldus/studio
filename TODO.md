@@ -1,5 +1,33 @@
 # Liapoldus Studio — TODO
 
+## Cross-owner Server/editor and local-secret checkpoint — 2026-10-18
+
+- Studio `make check`, `make check-race` and `make desktop-build` pass on this
+  source tree. The full gate includes a production frontend build, reproducible
+  Wails bindings, strict Go/TypeScript lint, Go tests/vet/build and all 176
+  frontend tests. Vite reports its existing large-chunk advisory.
+- Local secret management is implemented in Studio host UI, CLI and Core:
+  native secure input sends values only through typed CLI stdin into the OS
+  vault; Core and Projects keep opaque references/metadata; Studio's v2 bridge
+  gives plugins only active service/purpose-filtered references. Rotation is
+  manual/assisted and retains both references until Project no longer points
+  at the old one and all required replicas acknowledge the exact digest and
+  generation. No scheduler or remote secret backend is claimed.
+- The Server Editor `0.3.59` source has compact route/default/listener/resource
+  sections, per-route inherited overrides, redirect/reverse-proxy handlers,
+  HTTP security controls and contextual secret selection. Its package passes
+  plugin tests and Studio package inspection, but is not installed. The exact
+  package digest still requires the normal native trust confirmation before
+  macOS WebView acceptance.
+- Settings migration preview preserves original Project bytes and fails closed
+  on unknown/invalid fields. Sensitive changes persist to Project first, show a
+  redacted before/after summary and require explicit apply confirmation; a Core
+  refusal leaves the Project candidate available for retry.
+- Live multi-replica rotation ACK/timeout/restart recovery, Server settings
+  failure in a running Core, the packaged editor in macOS WebView, and hosted
+  Windows/Linux release checks remain open. Do not mark those source-level
+  checks as runtime acceptance.
+
 ## Studio plugin management split — 2026-10-17
 
 - Kept package catalog, install/trust review, version inventory, removal, and

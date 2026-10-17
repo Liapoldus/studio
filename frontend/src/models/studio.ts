@@ -4,7 +4,7 @@ import type { CLIEvent, StudioAPI, WorkspaceState } from '../api/types'
 export type Locale = 'ru' | 'en'
 export type CLIStreamState = 'idle' | 'running' | 'cancelling'
 export type WorkspaceView = 'home' | 'settings' | 'workspace'
-export type TabKind = 'canvas' | 'git' | 'reports' | 'problems' | 'output' | 'studio-plugin'
+export type TabKind = 'canvas' | 'reports' | 'problems' | 'output' | 'studio-plugin'
 export type WorkspaceTab = {
   id: string
   kind: TabKind
@@ -24,6 +24,7 @@ export type ProjectList = Awaited<ReturnType<StudioAPI['listProjects']>>
 export type CanvasNode = Node
 export type CanvasEdge = Edge
 export type WorkspaceApplyRecoveryOperationId = string | null
+export type WorkspaceApplyReviewPaths = string[]
 
 export type WorkspaceSnapshot = {
   schemaVersion: 'workspace/v5'
@@ -133,7 +134,7 @@ export function parseLayout(value: unknown): Layout {
   return layout
 }
 
-const tabKinds: readonly TabKind[] = ['canvas', 'git', 'reports', 'problems', 'output', 'studio-plugin']
+const tabKinds: readonly TabKind[] = ['canvas', 'reports', 'problems', 'output', 'studio-plugin']
 
 function restoreTab(value: unknown): WorkspaceTab | null {
   const tab = record(value)
@@ -169,7 +170,7 @@ export function previewWorkspaceMigration(tabsJson: string): { before: string; a
   })
   const retainedTabs = tabs.filter((value: unknown) => {
     const tab = record(value)
-    return tab && !['files', 'artifacts', 'runtime', 'plugins', 'studio-plugins'].includes(String(tab.kind))
+    return tab && !['files', 'git', 'artifacts', 'runtime', 'plugins', 'studio-plugins'].includes(String(tab.kind))
   })
   if (!retainedTabs.some((value: unknown) => { const tab = record(value); return tab?.id === 'canvas' && tab.kind === 'canvas' })) retainedTabs.push({ id: 'canvas', kind: 'canvas', title: 'Canvas' })
   const uniqueTabs = retainedTabs.filter((value: unknown, index: number, all: unknown[]) => {
@@ -197,19 +198,21 @@ export function workspaceStateUpdate(saved: WorkspaceState, snapshot: WorkspaceS
   }
 }
 
-export function workspaceStateWithApplyRecovery(saved: WorkspaceState, status: WorkspaceApplyRecoveryStatus, operationId: WorkspaceApplyRecoveryOperationId = null): WorkspaceState {
+export function workspaceStateWithApplyRecovery(saved: WorkspaceState, status: WorkspaceApplyRecoveryStatus, operationId: WorkspaceApplyRecoveryOperationId = null, reviewPaths: WorkspaceApplyReviewPaths = []): WorkspaceState {
   const normalized = saved.tabsJson === '[]'
     ? workspaceStateUpdate(saved, workspaceSnapshot({ activeTabId: 'canvas', tabs: initialWorkspaceTabs(), layout: parseLayout(saved.layoutJson) }))
     : saved
   const previous = record(JSON.parse(previewWorkspaceMigration(normalized.tabsJson).after) as unknown)
   if (!previous) throw new Error('Unsupported workspace state; recover the saved state before changing apply recovery')
   const tabs = { ...previous }
+  const safeReviewPaths = [...new Set(reviewPaths.filter((path): path is string => typeof path === 'string' && /^[A-Za-z0-9_.: -]{1,800}$/u.test(path)))].slice(0, 64)
   if (status === 'none') delete tabs.applyRecovery
   else tabs.applyRecovery = {
-    schemaVersion: 'studio-apply-recovery/v2',
+    schemaVersion: 'studio-apply-recovery/v3',
     state: status,
     target: 'local',
     ...(isSafeApplyOperationID(operationId) ? { operationId } : {}),
+    ...(status === 'confirmation-required' && safeReviewPaths.length > 0 ? { reviewPaths: safeReviewPaths } : {}),
   }
   return { ...normalized, tabsJson: JSON.stringify(tabs) }
 }
@@ -218,28 +221,31 @@ export function isSafeApplyOperationID(value: unknown): value is string {
   return typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u.test(value)
 }
 
-function restoredApplyRecovery(snapshot: Record<string, unknown>): { status: WorkspaceApplyRecoveryStatus; operationId: WorkspaceApplyRecoveryOperationId } {
-  if (!Object.hasOwn(snapshot, 'applyRecovery')) return { status: 'none', operationId: null }
+function restoredApplyRecovery(snapshot: Record<string, unknown>): { status: WorkspaceApplyRecoveryStatus; operationId: WorkspaceApplyRecoveryOperationId; reviewPaths: WorkspaceApplyReviewPaths } {
+  if (!Object.hasOwn(snapshot, 'applyRecovery')) return { status: 'none', operationId: null, reviewPaths: [] }
   const recovery = record(snapshot.applyRecovery)
-  if (!recovery) return { status: 'confirmation-required', operationId: null }
+  if (!recovery) return { status: 'confirmation-required', operationId: null, reviewPaths: [] }
   if (recovery.schemaVersion === 'studio-apply-recovery/v1') {
-    if (recovery.state === 'none') return { status: 'none', operationId: null }
-    return { status: 'confirmation-required', operationId: null }
+    if (recovery.state === 'none') return { status: 'none', operationId: null, reviewPaths: [] }
+    return { status: 'confirmation-required', operationId: null, reviewPaths: [] }
   }
-  if (recovery.schemaVersion !== 'studio-apply-recovery/v2' || recovery.target !== 'local') {
-    return { status: 'confirmation-required', operationId: null }
+  if (!['studio-apply-recovery/v2', 'studio-apply-recovery/v3'].includes(String(recovery.schemaVersion)) || recovery.target !== 'local') {
+    return { status: 'confirmation-required', operationId: null, reviewPaths: [] }
   }
-  if (recovery.state === 'none') return { status: 'none', operationId: null }
+  if (recovery.state === 'none') return { status: 'none', operationId: null, reviewPaths: [] }
   const operationId = isSafeApplyOperationID(recovery.operationId) ? recovery.operationId : null
+  const reviewPaths = recovery.schemaVersion === 'studio-apply-recovery/v3' && Array.isArray(recovery.reviewPaths) && recovery.reviewPaths.length <= 64 &&
+    recovery.reviewPaths.every((path) => typeof path === 'string' && /^[A-Za-z0-9_.: -]{1,800}$/u.test(path))
+    ? [...new Set(recovery.reviewPaths as string[])] : []
   // A process restart during an apply is ambiguous: require an explicit retry.
-  return { status: 'confirmation-required', operationId }
+  return { status: 'confirmation-required', operationId, reviewPaths }
 }
 
-export async function restoreWorkspaceState(api: StudioAPI): Promise<{ tabs: WorkspaceTab[]; activeTabId: string | null; layout: Layout; writable: boolean; applyRecoveryStatus: WorkspaceApplyRecoveryStatus; applyRecoveryOperationId: WorkspaceApplyRecoveryOperationId }> {
-  const fallback = { tabs: initialWorkspaceTabs(), activeTabId: 'canvas', layout: {}, writable: false, applyRecoveryStatus: 'confirmation-required' as const, applyRecoveryOperationId: null }
+export async function restoreWorkspaceState(api: StudioAPI): Promise<{ tabs: WorkspaceTab[]; activeTabId: string | null; layout: Layout; writable: boolean; applyRecoveryStatus: WorkspaceApplyRecoveryStatus; applyRecoveryOperationId: WorkspaceApplyRecoveryOperationId; applyReviewPaths: WorkspaceApplyReviewPaths }> {
+  const fallback = { tabs: initialWorkspaceTabs(), activeTabId: 'canvas', layout: {}, writable: false, applyRecoveryStatus: 'confirmation-required' as const, applyRecoveryOperationId: null, applyReviewPaths: [] }
   try {
     const saved = await api.readWorkspaceState()
-    if (saved.tabsJson === '[]') return { ...fallback, layout: parseLayout(saved.layoutJson), writable: true, applyRecoveryStatus: 'none', applyRecoveryOperationId: null }
+    if (saved.tabsJson === '[]') return { ...fallback, layout: parseLayout(saved.layoutJson), writable: true, applyRecoveryStatus: 'none', applyRecoveryOperationId: null, applyReviewPaths: [] }
     const preview = previewWorkspaceMigration(saved.tabsJson)
     const snapshot = JSON.parse(preview.after) as Record<string, unknown>
     if (!Array.isArray(snapshot.tabs)) return fallback
@@ -247,6 +253,6 @@ export async function restoreWorkspaceState(api: StudioAPI): Promise<{ tabs: Wor
     const tabs = validTabs.filter((tab, index) => validTabs.findIndex((candidate) => candidate.id === tab.id) === index)
     const activeTabId = typeof snapshot.activeTabId === 'string' && tabs.some((tab) => tab.id === snapshot.activeTabId) ? snapshot.activeTabId : tabs[0]?.id ?? null
     const recovery = restoredApplyRecovery(snapshot)
-    return { tabs, activeTabId, layout: parseLayout(snapshot.layout ?? saved.layoutJson), writable: true, applyRecoveryStatus: recovery.status, applyRecoveryOperationId: recovery.operationId }
+    return { tabs, activeTabId, layout: parseLayout(snapshot.layout ?? saved.layoutJson), writable: true, applyRecoveryStatus: recovery.status, applyRecoveryOperationId: recovery.operationId, applyReviewPaths: recovery.reviewPaths }
   } catch { return fallback }
 }

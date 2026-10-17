@@ -18,7 +18,7 @@ func NewStaticReader(features ...string) StaticReader {
 func (r StaticReader) Read(context.Context) (models.ProductInfo, error) {
 	return models.NewProductInfo(
 		"Liapoldus Studio",
-		"Среда разработки проектов, конфигураций и Git-версий Liapoldus.",
+		"Среда разработки проектов, конфигураций и локальных сервисных сценариев Liapoldus.",
 		r.features,
 	)
 }

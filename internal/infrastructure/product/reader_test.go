@@ -14,12 +14,12 @@ func TestProductInfoParity(t *testing.T) {
 		name     string
 		features []string
 	}{
-		{"desktop", []string{"project", "file-tree", "git", "cli-reports"}},
+		{"desktop", []string{"project", "file-tree", "cli-reports"}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			reader := NewStaticReader(test.features...)
 			want := models.ProductInfo{
-				Name: "Liapoldus Studio", Description: "Среда разработки проектов, конфигураций и Git-версий Liapoldus.",
+				Name: "Liapoldus Studio", Description: "Среда разработки проектов, конфигураций и локальных сервисных сценариев Liapoldus.",
 				WorkspaceFeatures: test.features,
 			}
 			value, err := reader.Read(context.Background())

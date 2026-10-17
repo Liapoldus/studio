@@ -1,7 +1,9 @@
 package wails
 
 import (
+	"archive/tar"
 	"bytes"
+	"compress/gzip"
 	"context"
 	"crypto/sha256"
 	"crypto/x509"
@@ -18,6 +20,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 	"unicode"
 
 	"github.com/Liapoldus/studio/internal/domain/interfaces"
@@ -359,6 +362,105 @@ func sensitiveResourceExtension(value string) bool {
 }
 
 const maxImportedServiceArtifactBytes = 128 << 20
+
+const (
+	maxProjectDirectoryFiles = 10000
+	maxProjectDirectoryBytes = 128 << 20
+)
+
+// packageProjectDirectory produces a deterministic tar.gz from a directory
+// already inside the canonical Project. Symlinks and non-regular entries are
+// rejected so an artifact cannot include files outside the selected tree.
+func packageProjectDirectory(selected string) (archivePath string, returnErr error) {
+	rootInfo, err := os.Lstat(selected)
+	if err != nil || !rootInfo.IsDir() || rootInfo.Mode()&os.ModeSymlink != 0 {
+		return "", fmt.Errorf("%w: choose a regular Project directory", errInvalidProjectResource)
+	}
+	output, err := os.CreateTemp("", "liapoldus-project-assets-*.tar.gz")
+	if err != nil {
+		return "", fmt.Errorf("%w: could not create a temporary archive", errInvalidProjectResource)
+	}
+	outputPath := output.Name()
+	succeeded := false
+	defer func() {
+		if !succeeded {
+			if cleanupErr := os.Remove(outputPath); cleanupErr != nil && !errors.Is(cleanupErr, os.ErrNotExist) {
+				returnErr = errors.Join(returnErr, cleanupErr)
+			}
+		}
+	}()
+	gzipWriter := gzip.NewWriter(output)
+	gzipWriter.Name = ""
+	gzipWriter.ModTime = time.Time{}
+	tarWriter := tar.NewWriter(gzipWriter)
+	files := 0
+	var totalBytes int64
+	err = filepath.WalkDir(selected, func(fullPath string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if fullPath == selected {
+			return nil
+		}
+		info, infoErr := os.Lstat(fullPath)
+		if infoErr != nil || info.Mode()&os.ModeSymlink != 0 {
+			return errInvalidProjectResource
+		}
+		if info.IsDir() {
+			return nil
+		}
+		if !info.Mode().IsRegular() || sensitiveResourceExtension(fullPath) || sensitiveArchiveName(filepath.Base(fullPath)) {
+			return errInvalidProjectResource
+		}
+		relative, relErr := filepath.Rel(selected, fullPath)
+		if relErr != nil || !filepath.IsLocal(relative) || strings.Contains(filepath.ToSlash(relative), "../") {
+			return errInvalidProjectResource
+		}
+		files++
+		totalBytes += info.Size()
+		if files > maxProjectDirectoryFiles || info.Size() < 0 || totalBytes > maxProjectDirectoryBytes {
+			return errInvalidProjectResource
+		}
+		header := &tar.Header{Name: filepath.ToSlash(relative), Mode: 0o644, Size: info.Size(), Typeflag: tar.TypeReg, ModTime: time.Time{}, AccessTime: time.Time{}, ChangeTime: time.Time{}, Format: tar.FormatPAX}
+		if headerErr := tarWriter.WriteHeader(header); headerErr != nil {
+			return headerErr
+		}
+		// The descriptor is statted and compared with the non-following Lstat
+		// result before any bytes are read, so an intervening symlink swap fails closed.
+		file, openErr := os.Open(fullPath) //nolint:gosec // Guarded by Lstat, regular-file checks, and SameFile before CopyN.
+		if openErr != nil {
+			return openErr
+		}
+		openedInfo, statErr := file.Stat()
+		if statErr != nil || !openedInfo.Mode().IsRegular() || !os.SameFile(info, openedInfo) {
+			closeErr := file.Close()
+			return errors.Join(errInvalidProjectResource, statErr, closeErr)
+		}
+		_, copyErr := io.CopyN(tarWriter, file, info.Size())
+		closeErr := file.Close()
+		if copyErr != nil {
+			return copyErr
+		}
+		return closeErr
+	})
+	if err == nil && files == 0 {
+		err = errInvalidProjectResource
+	}
+	if closeErr := tarWriter.Close(); err == nil {
+		err = closeErr
+	}
+	if closeErr := gzipWriter.Close(); err == nil {
+		err = closeErr
+	}
+	if closeErr := output.Close(); err == nil {
+		err = closeErr
+	}
+	if err != nil {
+		return "", fmt.Errorf("%w: could not package Project directory", errInvalidProjectResource)
+	}
+	succeeded = true
+	return outputPath, nil
+}
 
 // importProjectResourceArtifact copies a user-selected archive into the
 // canonical Project tree using a content-addressed filename. The source is

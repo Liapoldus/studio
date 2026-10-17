@@ -19,6 +19,8 @@ export type ConfigurationDraftIdentity = {
 const forbiddenPathSegments = new Set(['__proto__', 'prototype', 'constructor'])
 const maxDraftBytes = 1_048_576
 const maxDraftDepth = 64
+const secretReferencePattern = /^ssr:v1:[a-f0-9]{32}$/u
+const secretPurposePattern = /^[a-z][a-z0-9-]*(?:\.[a-z][a-z0-9-]*)*$/u
 
 export function configurationDraftKey(projectRoot: string, serviceId: string): string {
   return JSON.stringify([projectRoot, serviceId])
@@ -127,6 +129,31 @@ export function configurationPathEditable(schema: ConfigurationObject, path: str
     if (nextValue === undefined || !configurationSchemaHasSafeValue(schema, resolved, nextValue)) return false
   }
   return !configurationSchemaPathNodeSensitive(schema, resolved, path.at(-1) ?? '')
+}
+
+/** Allows only an opaque reference on a schema-declared secret-reference leaf. */
+export function configurationSecretReferencePathEditable(schema: ConfigurationObject, path: string[], purpose: string, reference: string): boolean {
+  if (path.length === 0 || path.length > 64 || path.some((segment) => !segment || forbiddenPathSegments.has(segment)) ||
+      !secretPurposePattern.test(purpose) || !secretReferencePattern.test(reference)) return false
+  let current = resolveConfigurationSchema(schema, schema)
+  for (let index = 0; index < path.length; index++) {
+    const segment = path[index]
+    if (!current || (index < path.length - 1 && configurationSchemaPathNodeSensitive(schema, current, segment))) return false
+    const effective = effectiveConfigurationSchema(schema, current, {})
+    if (!effective) return false
+    if (schemaKind(effective) === 'array') {
+      if (canonicalArrayIndex(segment) === null) return false
+      current = configurationSchemaArrayItem(schema, current)
+      continue
+    }
+    const next = configurationSchemaChild(schema, current, segment)
+    if (!next) return false
+    current = next
+  }
+  const resolved = current ? resolveConfigurationSchema(schema, current) : null
+  return Boolean(resolved && schemaKind(resolved) === 'string' && resolved.pattern === '^ssr:v1:[a-f0-9]{32}$' &&
+    resolved['x-liapoldus-secret-reference'] === true && resolved['x-studio-secret-purpose'] === purpose &&
+    !('default' in resolved) && !('const' in resolved) && !('enum' in resolved) && !('examples' in resolved))
 }
 
 function configurationSchemaHasSafeValue(root: ConfigurationObject, value: unknown, nextValue: unknown, depth = 0): boolean {

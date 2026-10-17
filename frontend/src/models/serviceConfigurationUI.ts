@@ -8,17 +8,18 @@ export type ServiceConfigurationUIField = {
   label: LocalizedConfigurationText
   help?: LocalizedConfigurationText
   unit?: LocalizedConfigurationText
-  widget: 'auto' | 'text' | 'textarea' | 'number' | 'slider' | 'toggle' | 'select' | 'array' | 'resource' | 'peer'
-  resourceKind?: 'file' | 'certificate' | 'site' | 'artifact'
+  widget: 'auto' | 'text' | 'textarea' | 'number' | 'slider' | 'toggle' | 'select' | 'array' | 'resource' | 'peer' | 'secret'
+  resourceKind?: 'file' | 'certificate' | 'site' | 'site-release' | 'artifact'
   resourceId?: string
   peerContractId?: string
+  secretPurpose?: string
   order: number
   segments: string[]
 }
 
 export type ServiceConfigurationResource = {
   id: string
-  kind: 'file' | 'certificate' | 'site' | 'artifact'
+  kind: 'file' | 'certificate' | 'site' | 'site-release' | 'artifact'
   provider: 'project' | 'service-admin'
   pageId?: string
   queryResource?: string
@@ -77,9 +78,10 @@ export function parseCompatiblePeerService(manifestJSON: string, expectedService
 const maxManifestBytes = 262_144
 const maxGroups = 128
 const maxFields = 2048
-const widgets = new Set<ServiceConfigurationUIField['widget']>(['auto', 'text', 'textarea', 'number', 'slider', 'toggle', 'select', 'array', 'resource', 'peer'])
-const resourceKinds = new Set(['file', 'certificate', 'site', 'artifact'])
+const widgets = new Set<ServiceConfigurationUIField['widget']>(['auto', 'text', 'textarea', 'number', 'slider', 'toggle', 'select', 'array', 'resource', 'peer', 'secret'])
+const resourceKinds = new Set(['file', 'certificate', 'site', 'site-release', 'artifact'])
 const identifier = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u
+const secretPurposePattern = /^[a-z][a-z0-9-]*(?:\.[a-z][a-z0-9-]*)*$/u
 
 /**
  * Confirms that the Project's editable schema is the same contract currently
@@ -237,6 +239,11 @@ export function parseServiceConfigurationUI(manifestJSON: string, schema: Record
       resourceById.set(parsed.id, parsed)
     }
     const peerContracts = new Set<string>()
+    const secretPurposes = new Set<string>()
+    if (manifest?.secretPurposes !== undefined) {
+      if (!Array.isArray(manifest.secretPurposes) || manifest.secretPurposes.length > 128 || manifest.secretPurposes.some((purpose) => typeof purpose !== 'string' || purpose.length > 192 || !secretPurposePattern.test(purpose))) return null
+      for (const purpose of manifest.secretPurposes) secretPurposes.add(purpose as string)
+    }
     if (Array.isArray(manifest?.peerContracts)) {
       for (const value of manifest.peerContracts) {
         const contract = objectValue(value)
@@ -265,7 +272,12 @@ export function parseServiceConfigurationUI(manifestJSON: string, schema: Record
         paths.add(field.path)
         const resolved = schemaAtPointer(schema, segments)
         const view = resolved ? effectiveConfigurationSchema(schema, resolved, {}) : null
-        if (!resolved || sensitiveSchemaNode(resolved, segments.at(-1)) || !widgetMatches(field.widget, view ?? resolved)) return null
+        const secretPurpose = field.secretPurpose
+        const isSecretReference = field.widget === 'secret'
+        if (isSecretReference) {
+          if (typeof secretPurpose !== 'string' || !secretPurposePattern.test(secretPurpose) || !secretPurposes.has(secretPurpose) ||
+              !resolved || resolved.type !== 'string' || resolved.pattern !== '^ssr:v1:[a-f0-9]{32}$' || !isSensitiveConfigurationFieldName(segments.at(-1) ?? '')) return null
+        } else if (secretPurpose !== undefined || !resolved || sensitiveSchemaNode(resolved, segments.at(-1)) || !widgetMatches(field.widget, view ?? resolved)) return null
         const help = field.help === undefined ? undefined : localized(field.help)
         const unit = field.unit === undefined ? undefined : localized(field.unit)
         if ((field.help !== undefined && !help) || (field.unit !== undefined && !unit)) return null
@@ -277,6 +289,8 @@ export function parseServiceConfigurationUI(manifestJSON: string, schema: Record
           if (typeof resourceKind !== 'string' || !resourceKinds.has(resourceKind) || !resource || resource.kind !== resourceKind || peerContractId !== undefined) return null
         } else if (field.widget === 'peer') {
           if (typeof peerContractId !== 'string' || !identifier.test(peerContractId) || !peerContracts.has(peerContractId) || resourceKind !== undefined || resourceId !== undefined) return null
+        } else if (field.widget === 'secret') {
+          if (resourceKind !== undefined || resourceId !== undefined || peerContractId !== undefined) return null
         } else if (resourceKind !== undefined || resourceId !== undefined || peerContractId !== undefined) return null
         fields.push({
           path: field.path,
@@ -285,6 +299,7 @@ export function parseServiceConfigurationUI(manifestJSON: string, schema: Record
           ...(help ? { help } : {}),
           ...(unit ? { unit } : {}),
           widget: field.widget as ServiceConfigurationUIField['widget'],
+          ...(isSecretReference && typeof secretPurpose === 'string' ? { secretPurpose } : {}),
           ...(resourceKind ? { resourceKind } : {}),
           ...(typeof resourceId === 'string' ? { resourceId } : {}),
           ...(peerContractId ? { peerContractId } : {}),

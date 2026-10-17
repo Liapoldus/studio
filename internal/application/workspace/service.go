@@ -91,7 +91,6 @@ func (s *Service) Current(ctx context.Context) (models.Workspace, error) {
 		return models.Workspace{
 			Files: []models.ProjectFile{},
 			Graph: models.ServiceGraph{Services: []models.RuntimeService{}, Links: []models.ServiceLink{}},
-			Git:   models.GitStatus{Changes: []models.GitChange{}},
 		}, nil
 	}
 	projects, err := s.projects.ListProjects(ctx)
@@ -106,6 +105,5 @@ func (s *Service) Current(ctx context.Context) (models.Workspace, error) {
 	return models.Workspace{
 		Files: []models.ProjectFile{},
 		Graph: models.ServiceGraph{Services: []models.RuntimeService{}, Links: []models.ServiceLink{}},
-		Git:   models.GitStatus{Changes: []models.GitChange{}},
 	}, nil
 }

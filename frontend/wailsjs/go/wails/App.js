@@ -18,6 +18,10 @@ export function ConfigureCLIExecutable(arg1) {
   return window['go']['wails']['App']['ConfigureCLIExecutable'](arg1);
 }
 
+export function CreateLocalServiceSecret(arg1, arg2, arg3, arg4, arg5) {
+  return window['go']['wails']['App']['CreateLocalServiceSecret'](arg1, arg2, arg3, arg4, arg5);
+}
+
 export function CreateProject(arg1, arg2, arg3) {
   return window['go']['wails']['App']['CreateProject'](arg1, arg2, arg3);
 }
@@ -54,96 +58,12 @@ export function ExportTrafficReport() {
   return window['go']['wails']['App']['ExportTrafficReport']();
 }
 
-export function GitAbort(arg1, arg2) {
-  return window['go']['wails']['App']['GitAbort'](arg1, arg2);
-}
-
-export function GitApplyStash(arg1, arg2, arg3) {
-  return window['go']['wails']['App']['GitApplyStash'](arg1, arg2, arg3);
-}
-
-export function GitBranches() {
-  return window['go']['wails']['App']['GitBranches']();
-}
-
-export function GitCheckout(arg1, arg2) {
-  return window['go']['wails']['App']['GitCheckout'](arg1, arg2);
-}
-
-export function GitCherryPick(arg1, arg2) {
-  return window['go']['wails']['App']['GitCherryPick'](arg1, arg2);
-}
-
-export function GitCommit(arg1, arg2, arg3) {
-  return window['go']['wails']['App']['GitCommit'](arg1, arg2, arg3);
-}
-
-export function GitCommitStaged(arg1, arg2) {
-  return window['go']['wails']['App']['GitCommitStaged'](arg1, arg2);
-}
-
-export function GitConflict(arg1) {
-  return window['go']['wails']['App']['GitConflict'](arg1);
-}
-
-export function GitDiff(arg1) {
-  return window['go']['wails']['App']['GitDiff'](arg1);
-}
-
-export function GitHistory(arg1) {
-  return window['go']['wails']['App']['GitHistory'](arg1);
-}
-
-export function GitMerge(arg1, arg2) {
-  return window['go']['wails']['App']['GitMerge'](arg1, arg2);
-}
-
-export function GitPull(arg1, arg2, arg3) {
-  return window['go']['wails']['App']['GitPull'](arg1, arg2, arg3);
-}
-
-export function GitPush(arg1, arg2, arg3) {
-  return window['go']['wails']['App']['GitPush'](arg1, arg2, arg3);
-}
-
-export function GitRebase(arg1, arg2) {
-  return window['go']['wails']['App']['GitRebase'](arg1, arg2);
-}
-
-export function GitRemotes() {
-  return window['go']['wails']['App']['GitRemotes']();
-}
-
-export function GitResolveConflict(arg1, arg2, arg3) {
-  return window['go']['wails']['App']['GitResolveConflict'](arg1, arg2, arg3);
-}
-
-export function GitStage(arg1, arg2) {
-  return window['go']['wails']['App']['GitStage'](arg1, arg2);
-}
-
-export function GitStash(arg1, arg2, arg3) {
-  return window['go']['wails']['App']['GitStash'](arg1, arg2, arg3);
-}
-
-export function GitStashes(arg1) {
-  return window['go']['wails']['App']['GitStashes'](arg1);
-}
-
-export function GitUnstage(arg1, arg2) {
-  return window['go']['wails']['App']['GitUnstage'](arg1, arg2);
-}
-
 export function ImportRuntimeServiceProjectCertificate(arg1, arg2, arg3) {
   return window['go']['wails']['App']['ImportRuntimeServiceProjectCertificate'](arg1, arg2, arg3);
 }
 
 export function ImportServiceSettingsSchema(arg1, arg2) {
   return window['go']['wails']['App']['ImportServiceSettingsSchema'](arg1, arg2);
-}
-
-export function InitializeGit() {
-  return window['go']['wails']['App']['InitializeGit']();
 }
 
 export function InspectCoreBinary(arg1) {
@@ -186,10 +106,6 @@ export function OpenProject(arg1) {
   return window['go']['wails']['App']['OpenProject'](arg1);
 }
 
-export function PrepareRemoteHandoff(arg1) {
-  return window['go']['wails']['App']['PrepareRemoteHandoff'](arg1);
-}
-
 export function PreviewServiceSettingsSchema(arg1, arg2, arg3) {
   return window['go']['wails']['App']['PreviewServiceSettingsSchema'](arg1, arg2, arg3);
 }
@@ -204,6 +120,10 @@ export function PublishRuntimeServiceResourceJSON(arg1, arg2, arg3, arg4, arg5, 
 
 export function ReadCoreSettings() {
   return window['go']['wails']['App']['ReadCoreSettings']();
+}
+
+export function ReadLocalServiceSecretReferences(arg1) {
+  return window['go']['wails']['App']['ReadLocalServiceSecretReferences'](arg1);
 }
 
 export function ReadProjectSchema(arg1, arg2) {
@@ -238,8 +158,12 @@ export function ReadWorkspaceState() {
   return window['go']['wails']['App']['ReadWorkspaceState']();
 }
 
-export function RefreshServiceSettingsSchema(arg1, arg2, arg3, arg4, arg5, arg6) {
-  return window['go']['wails']['App']['RefreshServiceSettingsSchema'](arg1, arg2, arg3, arg4, arg5, arg6);
+export function RefreshServiceSettingsSchema(arg1, arg2, arg3, arg4) {
+  return window['go']['wails']['App']['RefreshServiceSettingsSchema'](arg1, arg2, arg3, arg4);
+}
+
+export function RegisterLocalServiceSecret(arg1, arg2, arg3) {
+  return window['go']['wails']['App']['RegisterLocalServiceSecret'](arg1, arg2, arg3);
 }
 
 export function RegisterRuntimeArtifact(arg1, arg2, arg3, arg4) {
@@ -256,6 +180,14 @@ export function RemoveRuntimeArtifact(arg1, arg2, arg3, arg4, arg5) {
 
 export function RemoveStudioPlugin(arg1, arg2) {
   return window['go']['wails']['App']['RemoveStudioPlugin'](arg1, arg2);
+}
+
+export function RevokeLocalServiceSecret(arg1, arg2, arg3) {
+  return window['go']['wails']['App']['RevokeLocalServiceSecret'](arg1, arg2, arg3);
+}
+
+export function RotateLocalServiceSecret(arg1, arg2, arg3, arg4, arg5, arg6) {
+  return window['go']['wails']['App']['RotateLocalServiceSecret'](arg1, arg2, arg3, arg4, arg5, arg6);
 }
 
 export function RunStudioCommand(arg1, arg2, arg3, arg4) {
@@ -314,6 +246,10 @@ export function SelectRuntimeArtifactBinary() {
   return window['go']['wails']['App']['SelectRuntimeArtifactBinary']();
 }
 
+export function SelectRuntimeServiceProjectDirectory(arg1, arg2) {
+  return window['go']['wails']['App']['SelectRuntimeServiceProjectDirectory'](arg1, arg2);
+}
+
 export function SelectRuntimeServiceResourceArtifact(arg1, arg2) {
   return window['go']['wails']['App']['SelectRuntimeServiceResourceArtifact'](arg1, arg2);
 }
@@ -368,6 +304,10 @@ export function UpdateServiceLink(arg1) {
 
 export function Workspace() {
   return window['go']['wails']['App']['Workspace']();
+}
+
+export function WriteProjectCandidateSettings(arg1, arg2, arg3, arg4) {
+  return window['go']['wails']['App']['WriteProjectCandidateSettings'](arg1, arg2, arg3, arg4);
 }
 
 export function WriteProjectSettings(arg1, arg2, arg3, arg4) {

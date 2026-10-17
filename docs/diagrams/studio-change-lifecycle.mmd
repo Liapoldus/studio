@@ -1,12 +1,9 @@
 flowchart LR
     A["Open project"] --> B["Index file tree"]
     B --> C["Validate manifest and schemas"]
-    C --> D["Git diff"]
-    D --> E["Create commit"]
-    E --> F["Push / remote approval"]
-    F --> G["liapoldus plan/apply"]
-    G --> H["Core API operation"]
-    H --> I["Import CLI deploy report"]
-    I --> J{"Result"}
-    J -->|"succeeded"| K["Imported succeeded report"]
-    J -->|"failed / degraded"| L["Evidence and next step"]
+    C --> D["Run typed liapoldus workflow"]
+    D --> E["Core API operation"]
+    E --> F["Import CLI deploy report"]
+    F --> G{"Result"}
+    G -->|"succeeded"| H["Imported succeeded report"]
+    G -->|"failed / degraded"| I["Evidence and next step"]

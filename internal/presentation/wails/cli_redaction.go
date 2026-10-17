@@ -37,7 +37,12 @@ func isJSONSchema(value any) bool {
 	}
 	_, hasDefinitions := object["$defs"]
 	_, hasLegacyDefinitions := object["definitions"]
-	return hasDefinitions || hasLegacyDefinitions
+	if hasDefinitions || hasLegacyDefinitions {
+		return true
+	}
+	objectType, isObjectSchema := object["type"].(string)
+	properties, hasProperties := object["properties"].(map[string]any)
+	return isObjectSchema && objectType == "object" && hasProperties && len(properties) <= 4096
 }
 
 // safeCLISchemaValue redacts secret-bearing examples/defaults without
@@ -79,6 +84,23 @@ func safeCLISchemaText(value string) string {
 }
 
 func safeCLIValue(value any, key string) any {
+	// Purpose identifiers are public service-manifest capabilities. Preserve
+	// only well-formed names; secret values and references remain redacted.
+	if key == "secretPurposes" {
+		values, ok := value.([]any)
+		if !ok || len(values) > 128 {
+			return "[redacted]"
+		}
+		result := make([]any, 0, len(values))
+		for _, item := range values {
+			purpose, ok := item.(string)
+			if !ok || !validSecretPurpose(purpose) {
+				return "[redacted]"
+			}
+			result = append(result, purpose)
+		}
+		return result
+	}
 	if sensitiveCLIField(key) {
 		return "[redacted]"
 	}

@@ -1,7 +1,7 @@
-import { BindRuntimeServiceArtifact, CancelCLI, ClientPreferences as ReadClientPreferences, ConfigureCLIExecutable, CreateServiceLink, CreateProject, CreateRuntimeService, DeleteServiceLink, DeleteRuntimeService, DeleteServiceSettingsDraft, Diagnostics, EditorAssociations as ReadEditorAssociations, ExportTrafficReport, GitAbort, GitApplyStash, GitBranches, GitCheckout, GitCherryPick, GitCommit as RunGitCommit, GitCommitStaged, GitConflict as ReadGitConflict, GitDiff as ReadGitDiff, GitHistory, GitMerge, GitPull, GitPush, GitRebase, GitRemotes, GitResolveConflict, GitStage, GitStash, GitStashes, GitUnstage, ImportServiceSettingsSchema, PreviewServiceSettingsSchema, RefreshServiceSettingsSchema, InitializeGit, InspectCoreBinary, InspectStudioPlugin, InstallStudioPlugin, InstalledStudioPluginManifests, InstalledStudioPlugins, LatestReportSummary, ListProjects, ListRuntimeArtifacts, OpenFileExternally, OpenProject, PrepareRemoteHandoff, ProductInfo, PublishRuntimeServiceResourceJSON, ReadCoreSettings as ReadCoreSettingsView, ReadProjectSchema, ReadProjectSettings, ReadRuntimeServiceMetadata, ReadRuntimeServiceAdminSurface, ReadRuntimeServiceResource, ReadServiceSettingsDraft, ReadStudioPluginSurface, ReadWorkspaceState, RemoveEditorAssociation, RemoveRuntimeArtifact, RemoveStudioPlugin, RunStudioCommand, RunStudioCommandAndWait, RunStudioRuntimeCommand, RunStudioPluginTool, SaveClientLocale, SaveClientPreferences, SaveEditorAssociation, SaveServiceSettingsDraft, SelectCLIExecutable, SelectExternalEditor, SelectProjectCreationDirectory, SelectProjectDirectory, SelectRuntimeServiceResourceArtifact, ImportRuntimeServiceProjectCertificate, SelectRuntimeArtifactBinary, SelectStudioPluginPackage, SelectTargetProfile, StartStudioPluginProcess, StopStudioPluginProcess, StudioPluginProcessStatus, ToolchainStatus as ReadToolchainStatus, TrafficRecords, TrustRuntimeArtifact, RegisterRuntimeArtifact, UpdateCoreSettings as ApplyCoreSettings, UpdateLocalCoreBinary, UpdateServiceLink, Workspace as ReadWorkspace, WriteProjectSettings, WriteWorkspaceState } from '../../wailsjs/go/wails/App'
+import { BindRuntimeServiceArtifact, CancelCLI, ClientPreferences as ReadClientPreferences, ConfigureCLIExecutable, CreateLocalServiceSecret, RotateLocalServiceSecret, RegisterLocalServiceSecret, CreateServiceLink, CreateProject, CreateRuntimeService, DeleteServiceLink, DeleteRuntimeService, DeleteServiceSettingsDraft, Diagnostics, EditorAssociations as ReadEditorAssociations, ExportTrafficReport, ImportServiceSettingsSchema, PreviewServiceSettingsSchema, RefreshServiceSettingsSchema, InspectCoreBinary, InspectStudioPlugin, InstallStudioPlugin, InstalledStudioPluginManifests, InstalledStudioPlugins, LatestReportSummary, ListProjects, ListRuntimeArtifacts, OpenFileExternally, OpenProject, ProductInfo, PublishRuntimeServiceResourceJSON, ReadCoreSettings as ReadCoreSettingsView, ReadLocalServiceSecretReferences, ReadProjectSchema, ReadProjectSettings, ReadRuntimeServiceMetadata, ReadRuntimeServiceAdminSurface, ReadRuntimeServiceResource, ReadServiceSettingsDraft, ReadStudioPluginSurface, ReadWorkspaceState, RemoveEditorAssociation, RemoveRuntimeArtifact, RemoveStudioPlugin, RevokeLocalServiceSecret, RunStudioCommand, RunStudioCommandAndWait, RunStudioRuntimeCommand, RunStudioPluginTool, SaveClientLocale, SaveClientPreferences, SaveEditorAssociation, SaveServiceSettingsDraft, SelectCLIExecutable, SelectExternalEditor, SelectProjectCreationDirectory, SelectProjectDirectory, SelectRuntimeServiceResourceArtifact, SelectRuntimeServiceProjectDirectory, ImportRuntimeServiceProjectCertificate, SelectRuntimeArtifactBinary, SelectStudioPluginPackage, SelectTargetProfile, StartStudioPluginProcess, StopStudioPluginProcess, StudioPluginProcessStatus, ToolchainStatus as ReadToolchainStatus, TrafficRecords, TrustRuntimeArtifact, RegisterRuntimeArtifact, UpdateCoreSettings as ApplyCoreSettings, UpdateLocalCoreBinary, UpdateServiceLink, Workspace as ReadWorkspace, WriteProjectCandidateSettings, WriteProjectSettings, WriteWorkspaceState } from '../../wailsjs/go/wails/App'
 import { EventsOn } from '../../wailsjs/runtime/runtime'
 import { SaveStudioPluginEditorBindings, StudioPluginEditorBindings } from '../../wailsjs/go/wails/App'
-import { Diagnostic as DiagnosticDataModel, GitBranch, GitCommit, GitConflict, GitDiff, GitRemote, GitStash as GitStashDataModel, InstalledStudioPluginState, ProductInfo as ProductInfoData, Project, ServiceSettingsSchemaPreview as ServiceSettingsSchemaPreviewData, TrafficRecordView, Workspace as WorkspaceData, WorkspaceState } from './info'
+import { Diagnostic as DiagnosticDataModel, InstalledStudioPluginState, ProductInfo as ProductInfoData, Project, ServiceSettingsSchemaPreview as ServiceSettingsSchemaPreviewData, TrafficRecordView, Workspace as WorkspaceData, WorkspaceState } from './info'
 import { decodeWailsBytes } from './bytes'
 import type { CLIEvent, ClientPreferences, EditorAssociation, Locale, PersistedServiceSettingsDraft, ProjectSettingsSnapshot, ServiceLinkInput, RuntimeServiceInput, StudioAPI } from './types'
 import { parseCoreSettingsView } from '../models/coreSettings'
@@ -79,6 +79,9 @@ export function createWailsStudioAPI(): StudioAPI {
     writeProjectSettings(projectID, serviceID, expectedDigest, patch) {
       return WriteProjectSettings(projectID, serviceID, expectedDigest, Array.from(patch))
     },
+    writeProjectCandidateSettings(projectID, serviceID, expectedDigest, patch) {
+      return WriteProjectCandidateSettings(projectID, serviceID, expectedDigest, Array.from(patch))
+    },
     async readServiceSettingsDraft(projectID, serviceID) {
       const encoded = await ReadServiceSettingsDraft(projectID, serviceID)
       return encoded ? parsePersistedSettingsDraft(encoded) : null
@@ -99,7 +102,7 @@ export function createWailsStudioAPI(): StudioAPI {
       return new ServiceSettingsSchemaPreviewData(await PreviewServiceSettingsSchema(projectID, serviceID, patchJSON))
     },
     async refreshServiceSettingsSchema(projectID, serviceID, preview, patchJSON) {
-      return new WorkspaceData(await RefreshServiceSettingsSchema(projectID, serviceID, preview.schemaDigest, preview.settingsDigest, preview.draftDigest, patchJSON))
+      return new WorkspaceData(await RefreshServiceSettingsSchema(projectID, serviceID, JSON.stringify(preview), patchJSON))
     },
     runStudioCommand(command, target, operationID, profilePath) {
       return RunStudioCommand(command, target ?? '', operationID ?? '', profilePath ?? '')
@@ -108,9 +111,6 @@ export function createWailsStudioAPI(): StudioAPI {
       return RunStudioCommandAndWait(command, target ?? '', operationID ?? '', profilePath ?? '')
     },
     runStudioRuntimeCommand(command, serviceID) { return RunStudioRuntimeCommand(command, serviceID) },
-    initializeGit() {
-      return InitializeGit().then((value) => new WorkspaceData(value))
-    },
     createRuntimeService(input: RuntimeServiceInput) {
       return CreateRuntimeService(input).then((value) => new WorkspaceData(value))
     },
@@ -156,6 +156,9 @@ export function createWailsStudioAPI(): StudioAPI {
     selectRuntimeServiceResourceArtifact(projectID, serviceID) {
       return SelectRuntimeServiceResourceArtifact(projectID, serviceID)
     },
+    selectRuntimeServiceProjectDirectory(projectID, serviceID) {
+      return SelectRuntimeServiceProjectDirectory(projectID, serviceID)
+    },
     importRuntimeServiceProjectCertificate(projectID, serviceID, resourceID) {
       return ImportRuntimeServiceProjectCertificate(projectID, serviceID, resourceID)
     },
@@ -165,8 +168,20 @@ export function createWailsStudioAPI(): StudioAPI {
     readRuntimeServiceResource(projectID, serviceID, resourceID) {
       return ReadRuntimeServiceResource(projectID, serviceID, resourceID)
     },
-    prepareRemoteHandoff(target) {
-      return PrepareRemoteHandoff(target)
+    readLocalServiceSecretReferences(serviceID) {
+      return ReadLocalServiceSecretReferences(serviceID)
+    },
+    registerLocalServiceSecret(serviceID, reference, confirmed) {
+      return RegisterLocalServiceSecret(serviceID, reference, confirmed)
+    },
+    createLocalServiceSecret(serviceID, purpose, label, secret, confirmed) {
+      return CreateLocalServiceSecret(serviceID, purpose, label, secret, confirmed)
+    },
+    rotateLocalServiceSecret(serviceID, reference, purpose, label, secret, confirmed) {
+      return RotateLocalServiceSecret(serviceID, reference, purpose, label, secret, confirmed)
+    },
+    revokeLocalServiceSecret(serviceID, reference, confirmed) {
+      return RevokeLocalServiceSecret(serviceID, reference, confirmed)
     },
     onCLIEvent(callback) {
       return EventsOn('studio.cli.event', (...data: unknown[]) => {
@@ -221,66 +236,6 @@ export function createWailsStudioAPI(): StudioAPI {
     },
     studioPluginProcessStatus(studioPluginId, version) {
       return StudioPluginProcessStatus(studioPluginId, version)
-    },
-    async gitDiff(path) {
-      return new GitDiff(await ReadGitDiff(path))
-    },
-    async gitConflict(path) {
-      return new GitConflict(await ReadGitConflict(path))
-    },
-    gitResolveConflict(path, side, confirmed) {
-      return GitResolveConflict(path, side, confirmed)
-    },
-    gitStage(paths, confirmed) {
-      return GitStage(paths, confirmed)
-    },
-    gitUnstage(paths, confirmed) {
-      return GitUnstage(paths, confirmed)
-    },
-    gitCommitStaged(message, confirmed) {
-      return GitCommitStaged(message, confirmed)
-    },
-    async gitStashes(limit) {
-      return (await GitStashes(limit)).map((stash) => new GitStashDataModel(stash))
-    },
-    gitStash(message, includeUntracked, confirmed) {
-      return GitStash(message, includeUntracked, confirmed)
-    },
-    gitApplyStash(index, drop, confirmed) {
-      return GitApplyStash(index, drop, confirmed)
-    },
-    async gitBranches() {
-      return (await GitBranches()).map((branch) => new GitBranch(branch))
-    },
-    async gitHistory(limit) {
-      return (await GitHistory(limit)).map((commit) => new GitCommit(commit))
-    },
-    async gitRemotes() {
-      return (await GitRemotes()).map((remote) => new GitRemote(remote))
-    },
-    gitCheckout(branch, confirmed) {
-      return GitCheckout(branch, confirmed)
-    },
-    gitCommit(message, paths, confirmed) {
-      return RunGitCommit(message, paths, confirmed)
-    },
-    gitPull(remote, branch, confirmed) {
-      return GitPull(remote, branch, confirmed)
-    },
-    gitPush(remote, branch, confirmed) {
-      return GitPush(remote, branch, confirmed)
-    },
-    gitMerge(branch, confirmed) {
-      return GitMerge(branch, confirmed)
-    },
-    gitRebase(branch, confirmed) {
-      return GitRebase(branch, confirmed)
-    },
-    gitCherryPick(commit, confirmed) {
-      return GitCherryPick(commit, confirmed)
-    },
-    gitAbort(operation, confirmed) {
-      return GitAbort(operation, confirmed)
     },
     selectRuntimeArtifactBinary() { return SelectRuntimeArtifactBinary() },
     inspectCoreBinary(binaryPath) { return InspectCoreBinary(binaryPath) },

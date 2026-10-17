@@ -300,6 +300,121 @@ func TestCoreSettingsUpdateRejectsInvalidValuesBeforeRunningCLI(t *testing.T) {
 	}
 }
 
+func TestLocalServiceSecretManagerUsesTypedCLIAndNeverSendsValueInArguments(t *testing.T) {
+	root := t.TempDir()
+	project := models.Project{ID: "service-secrets", Name: "Service secrets", RootPath: root}
+	settingsPath := "services/server/settings.json"
+	if err := os.MkdirAll(filepath.Dir(filepath.Join(root, settingsPath)), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	settingsJSON := []byte(`{"schemaVersion":2,"config":{"routes":[]}}`)
+	if err := os.WriteFile(filepath.Join(root, settingsPath), settingsJSON, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	configurationJSON, err := json.Marshal(json.RawMessage(settingsJSON))
+	if err != nil {
+		t.Fatal(err)
+	}
+	configurationDigest := sha256.Sum256(configurationJSON)
+	digest := fmt.Sprintf("sha256:%x", configurationDigest)
+	statusPayload := fmt.Sprintf(`{"instanceId":"server","replicas":[{"replicaId":"replica-a","artifactVersion":"1.2.0","artifactDigest":"sha256:%s","ready":true,"identity":{"instanceId":"server","replicaId":"replica-a"},"readiness":{"instanceId":"server","replicaId":"replica-a","ready":true,"generation":"7","pendingGeneration":"","schemaVersion":"service-readiness/v1","sha256":%q},"configuration":{"state":"acknowledged","desiredGeneration":7,"appliedGeneration":7,"lastFailureCode":""}}]}`, strings.Repeat("b", 64), digest)
+	workspace := models.Workspace{Project: &project, Graph: models.ServiceGraph{Services: []models.RuntimeService{{ID: "server", Name: "Server", SettingsPath: settingsPath}}}}
+	store := selectedProjectStore{metadataProjectStore: metadataProjectStore{projects: []models.Project{project}}}
+	cli := &serviceSecretCLIRunner{statusPayload: statusPayload}
+	app := NewApp(nil, workspaceapp.New(store, metadataProjectSource{workspace: workspace}), nil, projectfs.FileSystem{}, nil, cli, nil, nil, nil, nil, nil, nil, nil)
+
+	listed, err := app.ReadLocalServiceSecretReferences("server")
+	if err != nil || !strings.Contains(listed, "ssr:v1:00112233445566778899aabbccddeeff") {
+		t.Fatalf("list returned invalid catalog: %s error=%v", listed, err)
+	}
+	secret := []byte("host-owned-sensitive-value")
+	created, err := app.CreateLocalServiceSecret("server", "server.http.auth.credential", "edge token", secret, true)
+	if err != nil || !strings.Contains(created, "service-secret-create-result/v1") {
+		t.Fatalf("create returned invalid result: %s error=%v", created, err)
+	}
+	if !reflect.DeepEqual(secret, make([]byte, len(secret))) {
+		t.Fatal("host secret input remained in memory after CLI completion")
+	}
+	if len(cli.requests) != 3 || cli.requests[2].Args[0] != "service" || cli.requests[2].Args[1] != "secret" || cli.requests[2].Args[2] != "create" ||
+		!reflect.DeepEqual(cli.requests[2].SecretInput, make([]byte, len("host-owned-sensitive-value"))) || strings.Contains(strings.Join(cli.requests[2].Args, " "), "host-owned-sensitive-value") {
+		t.Fatalf("secret value escaped the stdin boundary or request was retained: %+v", cli.requests)
+	}
+	if err := app.RevokeLocalServiceSecret("server", "ssr:v1:00112233445566778899aabbccddeeff", true); err != nil {
+		t.Fatalf("revoke: %v", err)
+	}
+	if len(cli.requests) != 5 || cli.requests[3].Args[1] != "status" || cli.requests[4].Args[2] != "revoke" {
+		t.Fatalf("revoke did not use the typed CLI contract: %+v", cli.requests)
+	}
+}
+
+func TestLocalServiceSecretManagerRequiresCurrentServiceAndConfirmation(t *testing.T) {
+	root := filepath.Join(string(filepath.Separator), "tmp", "service-secrets-invalid")
+	project := models.Project{ID: "service-secrets-invalid", Name: "Service secrets", RootPath: root}
+	workspace := models.Workspace{Project: &project, Graph: models.ServiceGraph{Services: []models.RuntimeService{{ID: "server", Name: "Server"}}}}
+	store := selectedProjectStore{metadataProjectStore: metadataProjectStore{projects: []models.Project{project}}}
+	cli := &serviceSecretCLIRunner{}
+	app := NewApp(nil, workspaceapp.New(store, metadataProjectSource{workspace: workspace}), nil, nil, nil, cli, nil, nil, nil, nil, nil, nil, nil)
+	if _, err := app.CreateLocalServiceSecret("other", "server.http.auth.credential", "edge", []byte("value"), true); err == nil {
+		t.Fatal("secret creation accepted a service outside the active Project")
+	}
+	if _, err := app.CreateLocalServiceSecret("server", "server.http.auth.credential", "edge", []byte("value"), false); err == nil {
+		t.Fatal("secret creation skipped explicit host confirmation")
+	}
+	if err := app.RevokeLocalServiceSecret("server", "ssr:v1:00112233445566778899aabbccddeeff", false); err == nil {
+		t.Fatal("secret revoke skipped explicit confirmation")
+	}
+	if len(cli.requests) != 0 {
+		t.Fatalf("invalid secret operations reached CLI: %+v", cli.requests)
+	}
+}
+
+func TestLocalServiceSecretManagerRedactsCLIErrorAndClearsInput(t *testing.T) {
+	root := filepath.Join(string(filepath.Separator), "tmp", "service-secrets-error")
+	project := models.Project{ID: "service-secrets-error", Name: "Service secrets", RootPath: root}
+	workspace := models.Workspace{Project: &project, Graph: models.ServiceGraph{Services: []models.RuntimeService{{ID: "server", Name: "Server"}}}}
+	store := selectedProjectStore{metadataProjectStore: metadataProjectStore{projects: []models.Project{project}}}
+	cli := &serviceSecretCLIRunner{failCreate: true}
+	app := NewApp(nil, workspaceapp.New(store, metadataProjectSource{workspace: workspace}), nil, nil, nil, cli, nil, nil, nil, nil, nil, nil, nil)
+	secret := []byte("private-secret-material")
+	if _, err := app.CreateLocalServiceSecret("server", "server.http.auth.credential", "edge", secret, true); err == nil || strings.Contains(err.Error(), string(secret)) {
+		t.Fatalf("CLI failure leaked the value or was hidden: %v", err)
+	}
+	if !reflect.DeepEqual(secret, make([]byte, len(secret))) {
+		t.Fatal("secret input remained in memory after CLI failure")
+	}
+}
+
+type serviceSecretCLIRunner struct {
+	statusPayload string
+	requests      []models.CLIRequest
+	failCreate    bool
+}
+
+func (runner *serviceSecretCLIRunner) Run(_ context.Context, request models.CLIRequest) (<-chan models.CLIEvent, error) {
+	request.SecretInput = append([]byte(nil), request.SecretInput...)
+	secretEcho := string(request.SecretInput)
+	runner.requests = append(runner.requests, request)
+	const item = `{"reference":"ssr:v1:00112233445566778899aabbccddeeff","serviceId":"server","purpose":"server.http.auth.credential","label":"edge token","state":"active","createdAt":"2026-10-17T00:00:00Z"}`
+	payload := `{"schemaVersion":"service-secret-references/v1","target":"local","serviceId":"server","items":[` + item + `],"pendingRotations":[],"pendingRegistrations":[]}`
+	if len(request.Args) > 2 && request.Args[2] == "create" {
+		payload = `{"schemaVersion":"service-secret-create-result/v1","target":"local","item":` + item + `}`
+	}
+	if len(request.Args) > 2 && request.Args[2] == "revoke" {
+		payload = `{"schemaVersion":"service-secret-revoke-result/v1","target":"local","serviceId":"server","reference":"ssr:v1:00112233445566778899aabbccddeeff","state":"revoked"}`
+	}
+	if len(request.Args) > 1 && request.Args[0] == "service" && request.Args[1] == "status" && runner.statusPayload != "" {
+		payload = runner.statusPayload
+	}
+	if len(request.Args) > 1 && request.Args[0] == "service" && request.Args[1] == "manifest" {
+		payload = `{"id":"server","secretPurposes":["server.http.auth.credential"]}`
+	}
+	clear(request.SecretInput)
+	if runner.failCreate && len(request.Args) > 2 && request.Args[2] == "create" {
+		return closedCLIEvents(models.CLIEvent{SchemaVersion: "cli-events/v1", Type: "run.failed", Code: "secret.store", Message: "store rejected value: " + secretEcho}), nil
+	}
+	return closedCLIEvents(models.CLIEvent{SchemaVersion: "cli-events/v1", Type: "run.output", Payload: []byte(payload)}, models.CLIEvent{SchemaVersion: "cli-events/v1", Type: "run.completed"}), nil
+}
+
 func (runner *metadataCLIRunner) Run(_ context.Context, request models.CLIRequest) (<-chan models.CLIEvent, error) {
 	runner.request = request
 	runner.calls = append(runner.calls, request)
@@ -646,7 +761,11 @@ func TestRefreshServiceSettingsSchemaReplacesOnlyTheDerivedSchemaThroughCoreCLI(
 	if strings.Contains(preview.SchemaJSON, "must-not-leak") {
 		t.Fatalf("schema preview disclosed a sensitive default: %s", preview.SchemaJSON)
 	}
-	refreshed, err := app.RefreshServiceSettingsSchema(project.ID, service.ID, preview.SchemaDigest, preview.SettingsDigest, preview.DraftDigest, patch)
+	previewJSON, marshalErr := json.Marshal(preview)
+	if marshalErr != nil {
+		t.Fatal(marshalErr)
+	}
+	refreshed, err := app.RefreshServiceSettingsSchema(project.ID, service.ID, string(previewJSON), patch)
 	if err != nil || refreshed.Project == nil || refreshed.Project.ID != project.ID {
 		t.Fatalf("schema refresh returned workspace=%+v err=%v", refreshed, err)
 	}
@@ -660,6 +779,67 @@ func TestRefreshServiceSettingsSchemaReplacesOnlyTheDerivedSchemaThroughCoreCLI(
 	}
 	if len(cli.calls) != 2 || !reflect.DeepEqual(cli.request.Args, []string{"service", "schema", "server", "--target", "local"}) || cli.request.ProjectRoot != root {
 		t.Fatalf("schema refresh did not use typed Core-backed CLI: %+v", cli.calls)
+	}
+}
+
+func TestRefreshServiceSettingsSchemaMigratesOnlyTheVersionAndKeepsExactRecoveryCopies(t *testing.T) {
+	root := t.TempDir()
+	project := models.Project{ID: "project-schema-migration", Name: "Schema migration", RootPath: root}
+	service := models.RuntimeService{ID: "server", SettingsPath: "services/server/settings.json", SettingsSchemaPath: "schemas/server/settings.json"}
+	workspace := models.Workspace{Project: &project, Graph: models.ServiceGraph{Services: []models.RuntimeService{service}}}
+	store := metadataProjectStore{projects: []models.Project{project}}
+	cli := &metadataCLIRunner{}
+	oldSchema := []byte(`{"type":"object","required":["schemaVersion","config"],"properties":{"schemaVersion":{"const":1},"config":{"type":"object","additionalProperties":true}}}`)
+	newSchema := []byte(`{"type":"object","required":["schemaVersion","config"],"additionalProperties":false,"properties":{"schemaVersion":{"const":2},"config":{"type":"object","additionalProperties":true}}}`)
+	originalSettings := []byte(`{"schemaVersion":1,"config":{"unknown":{"keep":"opaque"}},"legacyField":{"preserve":true}}`)
+	cli.schema = newSchema
+	files := projectfs.FileSystem{}
+	if err := files.WriteFile(context.Background(), root, service.SettingsSchemaPath, oldSchema); err != nil {
+		t.Fatal(err)
+	}
+	if err := files.WriteFile(context.Background(), root, service.SettingsPath, originalSettings); err != nil {
+		t.Fatal(err)
+	}
+	app := NewApp(nil, workspaceapp.New(store, metadataProjectSource{workspace: workspace}), nil, files, settingsinfra.Store{Files: files}, cli, nil, nil, nil, nil, nil, nil, nil)
+	preview, err := app.PreviewServiceSettingsSchema(project.ID, service.ID, `{}`)
+	if err != nil || !preview.MigrationRequired || preview.MigrationFromVersion != 1 || preview.MigrationToVersion != 2 || preview.ValuesCompatible {
+		t.Fatalf("migration preview=%+v err=%v", preview, err)
+	}
+	if !reflect.DeepEqual(preview.MigrationChangedPaths, []string{"/schemaVersion"}) || preview.RecoveryCopyPath == "" || !validSettingsDigest(preview.MigrationCandidateDigest) {
+		t.Fatalf("migration preview lacks bounded review metadata: %+v", preview)
+	}
+	settingsBefore, err := files.ReadFile(context.Background(), root, service.SettingsPath)
+	if err != nil || !reflect.DeepEqual(settingsBefore, originalSettings) {
+		t.Fatalf("preview mutated the source Project file: %s err=%v", settingsBefore, err)
+	}
+	previewJSON, err := json.Marshal(preview)
+	if err != nil {
+		t.Fatal(err)
+	}
+	refreshed, err := app.RefreshServiceSettingsSchema(project.ID, service.ID, string(previewJSON), `{}`)
+	if err != nil || refreshed.Project == nil || refreshed.Project.ID != project.ID {
+		t.Fatalf("schema migration failed: workspace=%+v err=%v", refreshed, err)
+	}
+	migratedSettings, err := files.ReadFile(context.Background(), root, service.SettingsPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var migrated map[string]json.RawMessage
+	if json.Unmarshal(migratedSettings, &migrated) != nil || string(migrated["schemaVersion"]) != "2" || string(migrated["config"]) != `{"unknown":{"keep":"opaque"}}` || string(migrated["legacyField"]) != `{"preserve":true}` {
+		t.Fatalf("migration changed fields other than schemaVersion: %s", migratedSettings)
+	}
+	recoveredSettings, err := files.ReadFile(context.Background(), root, preview.RecoveryCopyPath)
+	if err != nil || !reflect.DeepEqual(recoveredSettings, originalSettings) {
+		t.Fatalf("exact original settings bytes were not preserved: %s err=%v", recoveredSettings, err)
+	}
+	recoveredSchema, err := files.ReadFile(context.Background(), root, preview.RecoverySchemaCopyPath)
+	if err != nil || !reflect.DeepEqual(recoveredSchema, oldSchema) {
+		t.Fatalf("exact original schema bytes were not preserved: %s err=%v", recoveredSchema, err)
+	}
+	updatedSchema, err := files.ReadFile(context.Background(), root, service.SettingsSchemaPath)
+	expectedSchema, schemaErr := safeCLIJSON(newSchema)
+	if err != nil || schemaErr != nil || !reflect.DeepEqual(updatedSchema, expectedSchema) {
+		t.Fatalf("new schema was not installed: %s err=%v schemaErr=%v", updatedSchema, err, schemaErr)
 	}
 }
 
@@ -687,7 +867,11 @@ func TestRefreshServiceSettingsSchemaRejectsChangedSettingsAfterPreview(t *testi
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = app.RefreshServiceSettingsSchema(project.ID, service.ID, preview.SchemaDigest, preview.SettingsDigest, preview.DraftDigest, patch)
+	previewJSON, marshalErr := json.Marshal(preview)
+	if marshalErr != nil {
+		t.Fatal(marshalErr)
+	}
+	_, err = app.RefreshServiceSettingsSchema(project.ID, service.ID, string(previewJSON), patch)
 	if !errors.Is(err, ErrSchemaPreviewStale) {
 		t.Fatalf("expected stale preview rejection, got %v", err)
 	}
@@ -700,12 +884,12 @@ func TestRefreshServiceSettingsSchemaRejectsChangedSettingsAfterPreview(t *testi
 		t.Fatal(err)
 	}
 	cli.schema = []byte(`{"type":"object","properties":{"port":{"type":"integer","maximum":100}}}`)
-	_, err = app.RefreshServiceSettingsSchema(project.ID, service.ID, preview.SchemaDigest, preview.SettingsDigest, preview.DraftDigest, patch)
+	_, err = app.RefreshServiceSettingsSchema(project.ID, service.ID, string(previewJSON), patch)
 	if !errors.Is(err, ErrSchemaPreviewStale) {
 		t.Fatalf("expected changed live schema rejection, got %v", err)
 	}
 	cli.schema = nil
-	_, err = app.RefreshServiceSettingsSchema(project.ID, service.ID, preview.SchemaDigest, preview.SettingsDigest, preview.DraftDigest, `{"port":8081}`)
+	_, err = app.RefreshServiceSettingsSchema(project.ID, service.ID, string(previewJSON), `{"port":8081}`)
 	if !errors.Is(err, ErrSchemaPreviewStale) {
 		t.Fatalf("expected changed draft rejection, got %v", err)
 	}

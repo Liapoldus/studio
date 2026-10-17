@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { isStudioPluginSurfaceReadyMessage, parseStudioPluginBridgeRequest, studioPluginBridgeFailureCode, studioPluginPermissionGranted, studioPluginSurfaceAssetURL, withPeerCatalogDeadline } from '../../frontend/src/models/pluginSurface.ts'
+import { isStudioPluginSurfaceReadyMessage, parseStudioPluginBridgeRequest, startStudioPluginHandshake, studioPluginBridgeFailureCode, studioPluginPermissionGranted, studioPluginSurfaceAssetURL, withPeerCatalogDeadline } from '../../frontend/src/models/pluginSurface.ts'
 import { latestStudioPluginSurfaces, workspacePluginNavigationSurfaces } from '../../frontend/src/models/studioPluginPackage.ts'
 
 await test('plugin surface URLs accept only relative HTML routes and encode each segment', () => {
@@ -13,17 +13,35 @@ await test('plugin surface URLs accept only relative HTML routes and encode each
 })
 
 await test('plugin surface bridge accepts only the versioned ready message shape', () => {
-  const ready = { type: 'studio.surface.ready', schemaVersion: 'studio-service-editor/v1', sessionId: 'a'.repeat(32) }
+  const ready = { type: 'studio.surface.ready', schemaVersion: 'studio-service-editor/v2', sessionId: 'a'.repeat(32) }
   assert.equal(isStudioPluginSurfaceReadyMessage(ready), true)
   assert.equal(isStudioPluginSurfaceReadyMessage(ready, 'b'.repeat(32)), false)
   assert.equal(isStudioPluginSurfaceReadyMessage({ ...ready, payload: { token: 'secret' } }), false)
-  assert.equal(isStudioPluginSurfaceReadyMessage({ type: 'studio.host.ready', schemaVersion: 'studio-service-editor/v1', sessionId: 'a'.repeat(32) }), false)
+  assert.equal(isStudioPluginSurfaceReadyMessage({ type: 'studio.host.ready', schemaVersion: 'studio-service-editor/v2', sessionId: 'a'.repeat(32) }), false)
   assert.equal(isStudioPluginSurfaceReadyMessage(null), false)
   assert.equal(isStudioPluginSurfaceReadyMessage([]), false)
 })
 
+await test('plugin surface handshake retries until the host stops it after acknowledgement', () => {
+  let scheduled: (() => void) | undefined
+  let delay = 0
+  let cancelled: unknown
+  let sends = 0
+  const stop = startStudioPluginHandshake(
+    () => { sends++ },
+    (callback, delayMillis) => { scheduled = callback; delay = delayMillis; return 'timer' },
+    (handle) => { cancelled = handle },
+  )
+  assert.equal(sends, 1)
+  assert.equal(delay, 250)
+  scheduled?.()
+  assert.equal(sends, 2)
+  stop()
+  assert.equal(cancelled, 'timer')
+})
+
 await test('plugin bridge requests are bounded, versioned and reject unsafe scopes', () => {
-  const base = { type: 'studio.bridge.request', schemaVersion: 'studio-service-editor/v1', sessionId: 'a'.repeat(32), requestId: 'req-1' }
+  const base = { type: 'studio.bridge.request', schemaVersion: 'studio-service-editor/v2', sessionId: 'a'.repeat(32), requestId: 'req-1' }
   assert.equal(parseStudioPluginBridgeRequest({ ...base, method: 'context.get' })?.method, 'context.get')
   assert.equal(parseStudioPluginBridgeRequest({ ...base, method: 'service.configuration-ui.read' })?.method, 'service.configuration-ui.read')
   assert.equal(parseStudioPluginBridgeRequest({ ...base, method: 'service.configuration-ui.read', payload: {} }), null)
@@ -44,6 +62,9 @@ await test('plugin bridge requests are bounded, versioned and reject unsafe scop
   assert.equal(parseStudioPluginBridgeRequest({ ...base, method: 'service.peer.catalog.read', payload: { targetServiceId: 'echo' } })?.method, 'service.peer.catalog.read')
   assert.equal(parseStudioPluginBridgeRequest({ ...base, method: 'service.peer.catalog.read', payload: { targetServiceId: '../echo' } }), null)
   assert.equal(parseStudioPluginBridgeRequest({ ...base, method: 'service.peer.catalog.read', payload: { targetServiceId: 'echo', endpoint: 'https://service' } }), null)
+  assert.equal(parseStudioPluginBridgeRequest({ ...base, method: 'service.secret.references.read', payload: { purpose: 'server.http.auth.credential' } })?.method, 'service.secret.references.read')
+  assert.equal(parseStudioPluginBridgeRequest({ ...base, method: 'service.secret.references.read', payload: { purpose: '../secret' } }), null)
+  assert.equal(parseStudioPluginBridgeRequest({ ...base, method: 'service.secret.references.read', payload: { purpose: 'server.http.auth.credential', serviceId: 'other' } }), null)
   assert.equal(parseStudioPluginBridgeRequest({ ...base, method: 'service.settings.patch', payload: { path: ['__proto__'], value: true } }), null)
   assert.equal(parseStudioPluginBridgeRequest({ ...base, method: 'service.settings.patch', payload: { path: ['settings', 'port'], value: 8080 } })?.method, 'service.settings.patch')
   assert.equal(parseStudioPluginBridgeRequest({ ...base, method: 'service.settings.patch', payload: { path: [], value: true } }), null)
@@ -68,6 +89,13 @@ await test('peer catalog access requires its own explicit declaration and grant'
   assert.equal(studioPluginPermissionGranted(declared, declared, 'service.peer.catalog.read'), true)
   assert.equal(studioPluginPermissionGranted(['service.settings.read'], declared, 'service.peer.catalog.read'), false)
   assert.equal(studioPluginPermissionGranted(declared, ['service.settings.read'], 'service.peer.catalog.read'), false)
+})
+
+await test('secret reference catalog requires its own explicit declaration and grant', () => {
+  const declared = ['service.settings.read', 'service.secrets.read']
+  assert.equal(studioPluginPermissionGranted(declared, declared, 'service.secrets.read'), true)
+  assert.equal(studioPluginPermissionGranted(['service.settings.read'], declared, 'service.secrets.read'), false)
+  assert.equal(studioPluginPermissionGranted(declared, ['service.settings.read'], 'service.secrets.read'), false)
 })
 
 await test('plugin host preserves only safe typed CLI failure codes', () => {

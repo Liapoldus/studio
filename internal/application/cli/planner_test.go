@@ -32,6 +32,12 @@ func TestPlanInjectsProjectContext(t *testing.T) {
 		{"service manifest", models.CLIIntent{Command: "service.manifest", ServiceID: "echo", Target: "local"}, []string{"service", "manifest", "echo", "--target", "local"}},
 		{"service schema", models.CLIIntent{Command: "service.schema", ServiceID: "echo", Target: "local"}, []string{"service", "schema", "echo", "--target", "local"}},
 		{"service admin surface", models.CLIIntent{Command: "service.admin-surface.inspect", ServiceID: "server", Target: "local"}, []string{"service", "admin-surface", "inspect", "server", "--target", "local"}},
+		{"service secret list", models.CLIIntent{Command: "service.secret.list", ServiceID: "server", Target: "local"}, []string{"service", "secret", "list", "--target", "local", "--service", "server"}},
+		{"service secret list filtered by declared purpose", models.CLIIntent{Command: "service.secret.list", ServiceID: "server", Purpose: "http.auth.bearer", Target: "local"}, []string{"service", "secret", "list", "--target", "local", "--service", "server", "--purpose", "http.auth.bearer"}},
+		{"service secret create", models.CLIIntent{Command: "service.secret.create", ServiceID: "server", Purpose: "http.auth.bearer", Label: "edge token", Target: "local"}, []string{"service", "secret", "create", "--target", "local", "--service", "server", "--purpose", "http.auth.bearer", "--label", "edge token", "--secret-stdin", "--confirm"}},
+		{"service secret rotate", models.CLIIntent{Command: "service.secret.rotate", ServiceID: "server", Purpose: "http.auth.bearer", Label: "edge token v2", Reference: "ssr:v1:00112233445566778899aabbccddeeff", Target: "local"}, []string{"service", "secret", "rotate", "--target", "local", "--service", "server", "--reference", "ssr:v1:00112233445566778899aabbccddeeff", "--purpose", "http.auth.bearer", "--label", "edge token v2", "--secret-stdin", "--confirm"}},
+		{"service secret register staged reference", models.CLIIntent{Command: "service.secret.register", ServiceID: "server", Reference: "ssr:v1:00112233445566778899aabbccddeeff", Target: "local"}, []string{"service", "secret", "register", "--target", "local", "--service", "server", "--reference", "ssr:v1:00112233445566778899aabbccddeeff", "--confirm"}},
+		{"service secret revoke", models.CLIIntent{Command: "service.secret.revoke", ServiceID: "server", Reference: "ssr:v1:00112233445566778899aabbccddeeff", Target: "local"}, []string{"service", "secret", "revoke", "--target", "local", "--service", "server", "--reference", "ssr:v1:00112233445566778899aabbccddeeff", "--confirm"}},
 		{"service resource list", models.CLIIntent{Command: "service.resource.list", ServiceID: "server", ResourceID: "sites", Target: "local"}, []string{"service", "resource", "list", "server", "--resource", "sites", "--target", "local"}},
 		{"service resource publish", models.CLIIntent{Command: "service.resource.publish", Target: "local", ServiceID: "server", PageID: "sites", ActionID: "publish", ArtifactPath: "resources/site.tar.gz", ContentType: "application/gzip", MetadataPath: "resources/publish.json", IfMatch: `"surface-1"`, IdempotencyKey: "publish-1"}, []string{"service", "resource", "publish", "server", "--project", root, "--page", "sites", "--action", "publish", "--artifact-file", "resources/site.tar.gz", "--content-type", "application/gzip", "--metadata-file", "resources/publish.json", "--if-match", `"surface-1"`, "--idempotency-key", "publish-1", "--target", "local"}},
 		{"service resource publish without optional CAS", models.CLIIntent{Command: "service.resource.publish", Target: "local", ServiceID: "server", PageID: "sites", ActionID: "publish", ArtifactPath: "resources/site.tar.gz", ContentType: "application/gzip", MetadataPath: "resources/publish.json", IdempotencyKey: "publish-2"}, []string{"service", "resource", "publish", "server", "--project", root, "--page", "sites", "--action", "publish", "--artifact-file", "resources/site.tar.gz", "--content-type", "application/gzip", "--metadata-file", "resources/publish.json", "--idempotency-key", "publish-2", "--target", "local"}},
@@ -52,7 +58,11 @@ func TestPlanInjectsProjectContext(t *testing.T) {
 			if !reflect.DeepEqual(got, test.want) {
 				t.Fatalf("Plan() = %#v, want %#v", got, test.want)
 			}
-			if err := (models.CLIRequest{ProjectRoot: root, WorkingDir: root, Args: got}).Validate(); err != nil {
+			request := models.CLIRequest{ProjectRoot: root, WorkingDir: root, Args: got}
+			if test.intent.Command == "service.secret.create" || test.intent.Command == "service.secret.rotate" {
+				request.SecretInput = []byte("test-secret-value")
+			}
+			if err := request.Validate(); err != nil {
 				t.Fatalf("planned request rejected: %v", err)
 			}
 		})

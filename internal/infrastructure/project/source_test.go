@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	"github.com/Liapoldus/studio/internal/domain/models"
-	gitrepo "github.com/Liapoldus/studio/internal/infrastructure/git"
 )
 
 func TestOpenReadsCanonicalProjectTree(t *testing.T) {
@@ -39,9 +38,6 @@ func TestOpenReadsCanonicalProjectTree(t *testing.T) {
 	}
 	if value.Project == nil || value.Project.ID != "demo" || value.Project.Name != "Demo Project" {
 		t.Fatalf("project identity: %+v", value.Project)
-	}
-	if value.Git.Changes == nil {
-		t.Fatal("git changes must be an empty array when Git is unavailable")
 	}
 	if len(value.Files) != 5 {
 		t.Fatalf("source files: %+v", value.Files)
@@ -197,20 +193,6 @@ func TestCreateCreatesCanonicalProjectDirectoryUnderSelectedParent(t *testing.T)
 	}
 	if string(data) != "id: \"demo\"\nname: \"Demo Project\"\nversion: 1\n" {
 		t.Fatalf("unexpected manifest: %s", data)
-	}
-}
-
-func TestCreateInitializesGitForNewProject(t *testing.T) {
-	parent := t.TempDir()
-	workspace, err := (Source{Git: gitrepo.Repository{}}).Create(context.Background(), parent, "demo", "Demo")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !workspace.Git.Available {
-		t.Fatalf("new project Git is unavailable: %+v", workspace.Git)
-	}
-	if info, statErr := os.Stat(filepath.Join(parent, "demo", ".git")); statErr != nil || !info.IsDir() {
-		t.Fatalf("new project has no .git directory: %v", statErr)
 	}
 }
 

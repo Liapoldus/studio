@@ -38,7 +38,7 @@ Every release candidate runs:
 - frontend typecheck, lint and component tests;
 - Wails binding reproducibility;
 - SQLite migration tests;
-- native Git and CLI runner integration tests;
+- typed CLI runner integration tests (version-control operations are external to Studio);
 - package install/trust/rollback tests;
 - manifest Ed25519 verification against release trust roots and artifact
   SHA-256 verification;

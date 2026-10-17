@@ -7,7 +7,7 @@ Control plane: Studio → CLI → Core → Service SDK REST
 `plugin` CLI-команды и API aliases не поддерживаются.
 
 Liapoldus Studio — отдельная среда разработки проектов Liapoldus. Она управляет
-файлами проекта, локальным состоянием, Git-версиями и импортированными отчётами
+файлами проекта, локальным состоянием и импортированными отчётами
 универсального `liapoldus` CLI. Studio не запускает Core и не вызывает Core или
 service API напрямую: управляющий путь проходит только через typed CLI intents.
 
@@ -15,7 +15,7 @@ service API напрямую: управляющий путь проходит �
 
 | Вариант | Entry point | Presentation | Ответственность |
 | --- | --- | --- | --- |
-| Desktop | `main.go` | Wails bindings | проект, дерево файлов, локальные Git-операции и отчёты CLI |
+| Desktop | `main.go` | Wails bindings | проект, дерево файлов, сервисный граф и отчёты CLI |
 
 React-приложение использует Wails bindings через адаптер
 `frontend/src/api/wails.ts`. Core credentials, Core endpoint и service REST URLs

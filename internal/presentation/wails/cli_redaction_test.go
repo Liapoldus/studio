@@ -29,6 +29,20 @@ func TestSafeCLIJSONRedactsCredentialsAndLocalRuntimePaths(t *testing.T) {
 	}
 }
 
+func TestSafeCLIJSONPreservesOnlyValidDeclaredSecretPurposeMetadata(t *testing.T) {
+	output, err := safeCLIJSON([]byte(`{"id":"server","secretPurposes":["http.auth.bearer"],"secretValue":"never-render"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(output), `"secretPurposes":["http.auth.bearer"]`) || strings.Contains(string(output), "never-render") {
+		t.Fatalf("public purpose metadata was hidden or secret material leaked: %s", output)
+	}
+	output, err = safeCLIJSON([]byte(`{"secretPurposes":["invalid purpose"]}`))
+	if err != nil || !strings.Contains(string(output), `"secretPurposes":"[redacted]"`) {
+		t.Fatalf("malformed purpose metadata was preserved: %s err=%v", output, err)
+	}
+}
+
 func TestSafeCLIJSONPreservesNamespacedEditorButtonKeyOnly(t *testing.T) {
 	input := []byte(`{"id":"server","key":"private-value","editorButtons":{"version":"service-editor-buttons/v1","buttons":[{"id":"server.endpoints","key":"endpoints","label":{"ru":"Редактор","en":"Editor"}}]},"nested":{"key":"private-value"}}`)
 	for range 2 {
@@ -87,6 +101,32 @@ func TestSafeCLIJSONPreservesSchemaStructureAndRedactsSecretExamples(t *testing.
 	}
 	if value["description"] != "URLs end with /ready and paths ending in /foo/bar remain literal" {
 		t.Fatalf("schema text was modified as though it were a runtime path: %s", output)
+	}
+}
+
+func TestSafeCLIJSONRecognizesObjectSchemaWithoutDraftMarker(t *testing.T) {
+	input := []byte(`{"type":"object","properties":{"apiToken":{"type":"string","writeOnly":true,"default":"never-render"}}}`)
+	output, err := safeCLIJSON(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var schema map[string]any
+	if json.Unmarshal(output, &schema) != nil {
+		t.Fatalf("redacted schema is invalid JSON: %s", output)
+	}
+	properties, ok := schema["properties"].(map[string]any)
+	if !ok {
+		t.Fatalf("schema structure was lost: %s", output)
+	}
+	token, ok := properties["apiToken"].(map[string]any)
+	if !ok || token["type"] != "string" {
+		t.Fatalf("sensitive schema was not safely preserved: %s", output)
+	}
+	if _, exists := token["default"]; exists {
+		t.Fatalf("secret-bearing default was not removed: %s", output)
+	}
+	if strings.Contains(string(output), "never-render") {
+		t.Fatalf("secret-bearing schema example reached the renderer: %s", output)
 	}
 }
 

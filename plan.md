@@ -158,8 +158,9 @@ Partial rollout никогда не показывается как успешн
 
 ## 6. Inspector / canvas / shell
 
-Resizable right panel: Settings, Links, Resources, Status; search/collapsible
-sections/errors jump. SDK generic fields или compatible extension projection.
+Canvas-scoped resizable right panel: Settings, Links, Resources, Status;
+search/collapsible sections/errors jump. SDK generic fields или compatible
+extension projection. Plugin editor tabs use the full workbench without Inspector.
 
 Graph только services/logical links. Expanded Server показывает listeners,
 endpoints/peer bindings. Route reorder меняет настоящую precedence.
@@ -210,7 +211,7 @@ Service. Server extension содержит полный typed HTTP endpoint/requ
 чтение/изменение Project draft, валидация и apply выполняются только через
 typed host API Studio. Запрещены
 прямой filesystem/Wails access, собственные Core/Service SDK HTTP clients и
-обход общего Zustand draft. Минимальный `studio-service-editor/v1` bridge уже
+обход общего Zustand draft. Текущий `studio-service-editor/v2` bridge уже
 поддерживает redacted settings read, schema-safe общий draft и сохранение
 canonical Project через host при выданных разрешениях. Это не Core apply.
 Пока полный security corpus и installed-package acceptance не пройдены,
@@ -301,18 +302,39 @@ references and Project resources. The owner contract is:
   containers never mount the secret directory. CLI removes staging after Core
   and runtime stop. Remote targets are not added to this Studio-local workflow.
 - Creation/rotation uses a new immutable reference ID. CLI stores the material
-  first and registers safe metadata second; if Core rejects registration, CLI
-  deletes the just-created vault entry. Revocation disables Core grants first;
-  CLI then removes the vault entry. If the second step fails, the orphaned
-  vault entry remains inaccessible and a typed cleanup diagnostic is reported.
+  in the local OS vault, then registers safe metadata and prepares a private
+  local Core runtime mount. If Core registration fails, the reference and vault
+  value remain staged and visible for a typed retry; retrying registration does
+  not create a second secret. Revocation disables Core grants first, then CLI
+  removes the staged file, reference index entry and vault value. A cleanup
+  failure leaves the already-revoked value inaccessible and reports which local
+  cleanup step needs attention.
+- Rotation is manual or assisted. There is no background scheduler and no
+  provider API that can rotate third-party credentials. The replacement stays
+  staged while Studio shows the affected Project paths and a safe diff, asks for
+  explicit confirmation, writes the opaque reference to the Project, and
+  submits the saved candidate through Core. Studio may offer old-reference
+  revocation only after the saved Project no longer contains it and every
+  required replica is ready and acknowledges the exact saved digest and
+  applied generation. A failed apply, timeout, partial rollout or unavailable
+  Core keeps the previous reference active and the replacement available for
+  retry; automatic expiry or revocation is never inferred.
 
-Until Core SQLite/API, CLI vault/runtime staging, Service SDK purpose metadata,
-and Studio picker ship as one contract, service-secret fields remain
-read-only/unavailable. Do not infer a catalog from filesystem paths, enumerate
+As of the 2026-10-18 implementation checkpoint, the local path now includes
+Core's metadata-only catalog and scoped grants, SDK-declared purposes, CLI OS
+vault and retryable staging, Studio's host-owned local manager, and the
+Server Editor's contextual opaque-reference picker. The value is entered in
+Studio's host view, sent only through the typed CLI secret-input channel, and
+cleared from the host input after the operation. The sandboxed plugin receives
+only its declared service/purpose-filtered reference metadata and the selected
+opaque reference. Remote targets and unattended rotation remain unavailable.
+These source-level flows are covered by owner tests; live macOS WebView,
+multi-replica Core/Server rotation recovery and hosted cross-platform checks
+remain release gates. Do not infer a catalog from filesystem paths, enumerate
 secret directories, expose grant handles through an Admin Surface, put secret
 material in Project, or pass secret bytes through the renderer. Server
-`certificateRef`, `privateKeyRef` and upstream CA references are opaque Core
-service-secret IDs, not Project certificate resources.
+`certificateRef`, `privateKeyRef`, upstream CA and HTTP-auth references are
+opaque Core service-secret IDs, not Project file resources.
 
 `environments/<target>.yaml` — только non-secret target profile: target ID,
 тип/locality, безопасные CLI-owned references и display metadata. Это не файл

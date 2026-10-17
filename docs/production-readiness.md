@@ -10,7 +10,6 @@
 | --- | --- | --- |
 | Desktop-only | Wails desktop entrypoint, web product removed | no web references; Wails package smoke |
 | Canonical Project | project files остаются CLI-owned | project/source tests; no second project format |
-| Git workspace | status, diff, history, remotes, checkout, path-level stage/unstage, staged-only commit, pull/push, confirmed merge/rebase/cherry-pick, conflict abort/state, bounded base/ours/theirs inspection, ours/theirs staging and stash recovery | native Git integration tests |
 | Schema editing | redacted read, safe patch, type/required/enum/bounds/pattern validation, composition, indexed versioned `$id` references and advanced object/array/numeric constraints | settings tests; Wails UI build |
 | Runtime graph | service instances и versioned links без Core node | project graph tests; canvas build |
 | CLI/Core | typed JSONL, cancellation, local Core commands, report-based traffic observation, report import, remote handoff | Studio CLI runner tests plus standalone CLI command/event tests; report tests |

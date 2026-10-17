@@ -5,13 +5,13 @@ import type { StudioAPI } from './api/types'
 import { selectProjectDirectory } from './api/wails'
 import { WindowMinimise, WindowToggleMaximise, Quit } from '../wailsjs/runtime/runtime'
 import { createStudioController } from './controllers/studioController'
-import { text, type Copy } from './models/copy'
+import { text } from './models/copy'
 import type { TabKind } from './models/studio'
 import { useStudioStore, type StudioPluginSurface } from './stores/studio'
-import { ActivityBar, ArtifactsView, CommandPalette, CreateProjectDialog, GitSidebar, GraphView, HomeView, Inspector, OutputView, ServiceDialog, StudioPluginSurfaceFrame, ProblemsView, ReportsView, SettingsView } from './views/StudioViews'
+import { ActivityBar, ArtifactsView, CommandPalette, CreateProjectDialog, GraphView, HomeView, Inspector, OutputView, ServiceDialog, StudioPluginSurfaceFrame, ProblemsView, ReportsView, SettingsView } from './views/StudioViews'
 import { StudioPluginsView } from './views/StudioPluginsView'
 import { BrandMark } from './ui/BrandMark'
-import { Boxes, Bug, ChevronDown, Command, GitBranch, Minus, MonitorDown, Play, RotateCw, Settings, Terminal, X } from 'lucide-react'
+import { Boxes, Bug, ChevronDown, Command, Minus, MonitorDown, Play, RotateCw, Settings, Terminal, X } from 'lucide-react'
 
 type Props = { api: StudioAPI }
 
@@ -40,6 +40,7 @@ class InspectorErrorBoundary extends Component<{ children: ReactNode; onRetry: (
 
 export default function App({ api }: Props) {
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false)
+  const [inspectorSections, setInspectorSections] = useState<Record<string, boolean>>({})
   const controller = useMemo(() => createStudioController(api), [api])
   const locale = useStudioStore((state) => state.locale)
   const theme = useStudioStore((state) => state.theme)
@@ -86,7 +87,7 @@ export default function App({ api }: Props) {
   }, [cliStreamState, controller, workspace?.project?.id, workspace?.project?.rootPath])
   useEffect(() => { applyTheme(theme) }, [theme])
   useEffect(() => api.onCLIEvent(pushCLIEvent), [api, pushCLIEvent])
-  useEffect(() => { if (workspace?.project) void controller.loadDiagnostics() }, [controller, workspace?.project?.id, workspace?.git.revision])
+  useEffect(() => { if (workspace?.project) void controller.loadDiagnostics() }, [controller, workspace?.project?.id])
   useEffect(() => { if (activeTab?.kind === 'reports') void controller.loadTraffic() }, [activeTab?.kind, controller])
   useEffect(() => { if (stateHydrated) void controller.persistWorkspace() }, [activeTabId, controller, layout, stateHydrated, tabs])
   useEffect(() => { void controller.loadStudioPluginSurfaces() }, [controller])
@@ -139,15 +140,16 @@ export default function App({ api }: Props) {
   if (!initialized) return <div className="loading-screen"><BrandMark /><span>{t.loading}</span></div>
   const hasProject = Boolean(workspace?.project)
   const showWorkspace = hasProject && view === 'workspace'
-  const sidebar = showWorkspace && workspace && activeTab?.kind === 'git'
-    ? <aside className="context-sidebar"><GitSidebar workspace={workspace} t={t} controller={controller} /></aside>
-    : null
 
   let content = null
   if (showWorkspace && workspace && activeTab) {
     switch (activeTab.kind) {
-      case 'canvas': content = <GraphView controller={controller} workspace={workspace} t={t} />; break
-      case 'git': content = <GitWorkspaceHint t={t} />; break
+      case 'canvas': content = <div className="canvas-workspace">
+        <GraphView controller={controller} workspace={workspace} t={t} />
+        <InspectorErrorBoundary key={`canvas:${selected?.kind ?? ''}:${selected?.id ?? ''}`} onRetry={() => { void controller.refreshGraph() }}>
+          <Inspector controller={controller} workspace={workspace} selected={selected} output={runtimeOutput} openSections={inspectorSections} onSectionToggle={(key, open) => { setInspectorSections((current) => current[key] === open ? current : { ...current, [key]: open }) }} />
+        </InspectorErrorBoundary>
+      </div>; break
       case 'reports': content = <ReportsView controller={controller} t={t} />; break
       case 'problems': content = <ProblemsView diagnostics={diagnostics} t={t} />; break
       case 'output': content = <OutputView cliEvents={cliEvents} runtimeOutput={runtimeOutput} streamState={cliStreamState} controller={controller} t={t} />; break
@@ -180,7 +182,6 @@ export default function App({ api }: Props) {
       </button>}
       <div className="titlebar-drag" aria-hidden="true" />
       {hasProject && <div className="topbar-status">
-        <span className={`status-pill ${workspace?.git.available ? workspace.git.dirty ? 'warning' : 'success' : 'neutral'}`}><GitBranch size={12} />{workspace?.git.available ? workspace.git.branch || 'HEAD' : t.noGit}</span>
         <span className={`status-pill ${toolchain?.cliAvailable ? 'success' : 'warning'}`}><Terminal size={12} />CLI {toolchain?.cliAvailable ? toolchain.cliVersion || 'ok' : t.cliMissing}</span>
       </div>}
       {hasProject && <div className="topbar-run-controls" aria-label={locale === 'ru' ? 'Управление проектом' : 'Project controls'}>
@@ -203,9 +204,7 @@ export default function App({ api }: Props) {
 
     {showWorkspace && <div className="shell-body">
       <ActivityBar activeId={activeTab?.id ?? null} t={t} onNavigate={openTab} surfaces={studioPluginSurfaces} onOpenSurface={openPluginSurface} />
-      {sidebar}
       <main className="workbench">{content ?? <div className="workspace-empty"><span>{locale === 'ru' ? 'Выберите раздел в боковой панели' : 'Open a workspace from the activity bar'}</span></div>}</main>
-      {workspace && (activeTab?.kind === 'canvas' || activeTab?.kind === 'studio-plugin') && <InspectorErrorBoundary key={`${activeTab.kind}:${selected?.kind ?? ''}:${selected?.id ?? ''}`} onRetry={() => { void controller.refreshGraph() }}><Inspector controller={controller} workspace={workspace} selected={activeTab.kind === 'canvas' ? selected : null} output={runtimeOutput} /></InspectorErrorBoundary>}
     </div>}
 
     {view === 'settings' && <main className="global-page"><SettingsView controller={controller} locale={locale} theme={theme} toolchain={toolchain} t={t} pluginManager={<StudioPluginsView controller={controller} surfaces={studioPluginSurfaces} onOpen={openPluginSurface} t={t} />} artifactsManager={<ArtifactsView controller={controller} t={t} />} /></main>}
@@ -221,5 +220,4 @@ export default function App({ api }: Props) {
   </div>
 }
 
-function GitWorkspaceHint({ t }: { t: Copy }) { return <div className="workspace-hint"><h1>{t.git}</h1><p>{t.gitHint}</p></div> }
 function applyTheme(theme: import('./api/types').ThemePreference) { const resolved = theme === 'system' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme; document.documentElement.dataset.theme = resolved }

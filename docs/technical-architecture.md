@@ -3,7 +3,7 @@
 ## 1. Назначение
 
 Studio — desktop development environment для developer-operator. Она владеет
-локальным Project, файловым деревом, Git workflow, configuration canvas и
+локальным Project, файловым деревом, configuration canvas и
 локальными расширениями Studio. Она не является Core client и не импортирует
 внутренние Go packages Core или CLI.
 
@@ -12,10 +12,10 @@ Studio запускается только как Wails desktop application. Web
 
 Frontend structure and state boundaries are specified in
 [frontend-architecture.md](frontend-architecture.md): models remain pure,
-Zustand stores contain only state/reducers, controllers own Wails/CLI/Git
+Zustand stores contain only state/reducers, controllers own Wails/CLI
 effects, and views remain rendering-only. Desktop shell — tabbed workspace
-(Zed-style frameless top bar), activity rail as tab openers, schema-driven
-Inspector, Home (no project) and global Settings page.
+(Zed-style frameless top bar), activity rail as tab openers, a schema-driven
+Inspector scoped to the Canvas tab, Home (no project) and global Settings page.
 
 ## 2. Runtime boundaries
 
@@ -23,7 +23,6 @@ Inspector, Home (no project) and global Settings page.
 flowchart LR
     UI["React renderer"] -->|typed Wails bindings| APP["Go application"]
     APP --> FS["Project filesystem"]
-    APP --> GIT["native git"]
     APP --> DB["Studio SQLite"]
     APP --> CLI["liapoldus subprocess"]
     CLI --> CORE["local Core / remote handoff"]
@@ -88,14 +87,12 @@ internal/domain
 
 internal/application
   project/       open, inspect, file tree, drafts
-  versioning/    status, diff, commit, branch and conflict workflows
   workspace/     canvas graph, selection, layout and reports
   cli/           typed command/event/report orchestration
   plugins/       package, manifest, trust and surface lifecycle (UI surface hosting)
 
 internal/infrastructure
   filesystem/    path-safe project file access
-  git/           native git subprocess adapter
   sqlite/        global application metadata
   projectstate/  `.studio/` project-local state
   cli/           liapoldus process adapter and toolchain probe
@@ -108,7 +105,7 @@ internal/presentation/wails
 
 Application services depend only on domain ports. Infrastructure adapters do not
 contain product policy. Wails methods are thin transport adapters and never
-contain Git, filesystem, CLI or plugin business logic.
+contain filesystem, CLI or plugin business logic.
 
 ## 4. Core ports
 
@@ -122,30 +119,6 @@ type ProjectRepository interface {
 type FileSystem interface {
     ReadFile(ctx context.Context, root, relative string) ([]byte, error)
     WriteFile(ctx context.Context, root, relative string, data []byte) error
-}
-
-type GitRepository interface {
-    Init(ctx context.Context, root string) error
-    Status(ctx context.Context, root string) (GitStatus, error)
-    Diff(ctx context.Context, root, path string) (GitDiff, error)
-    Conflict(ctx context.Context, root, path string) (GitConflict, error)
-    ResolveConflict(ctx context.Context, root, path, side string, confirmed bool) error
-    Stage(ctx context.Context, root string, paths []string, confirmed bool) error
-    Unstage(ctx context.Context, root string, paths []string, confirmed bool) error
-    CommitStaged(ctx context.Context, root, message string, confirmed bool) (Revision, error)
-    Stashes(ctx context.Context, root string, limit int) ([]GitStash, error)
-    Stash(ctx context.Context, root, message string, includeUntracked, confirmed bool) (string, error)
-    ApplyStash(ctx context.Context, root string, index int, drop, confirmed bool) error
-    Branches(ctx context.Context, root string) ([]Branch, error)
-    History(ctx context.Context, root string, limit int) ([]Commit, error)
-    Remotes(ctx context.Context, root string) ([]Remote, error)
-    Checkout(ctx context.Context, root, branch string, confirmed bool) error
-    Pull(ctx context.Context, root, remote, branch string, confirmed bool) error
-    Push(ctx context.Context, root, remote, branch string, confirmed bool) error
-    Merge(ctx context.Context, root, branch string, confirmed bool) error
-    Rebase(ctx context.Context, root, branch string, confirmed bool) error
-    CherryPick(ctx context.Context, root, commit string, confirmed bool) error
-    Abort(ctx context.Context, root, operation string, confirmed bool) error
 }
 
 type GraphRepository interface {
@@ -180,13 +153,12 @@ type ReportStore interface {
 ```
 
 Текущие инфраструктурные реализации уже включают project tree/graph reader,
-project-scoped filesystem, native Git status/init, schema-aware settings и link
+project-scoped filesystem, schema-aware settings и link
 contract boundary, atomic graph source mutations, typed CLI intent planner,
 CLI JSONL process runner, redacted report store, local plugin
 package installer, project-local `.studio/workspace.json` и external editor
-launcher. Git adapter также предоставляет bounded diff, branch catalog,
-bounded conflict snapshots и confirmation-gated history/commit/pull/push
-operations. Companion tools запускаются из
+launcher. Studio не содержит Git-адаптера и не меняет repository state.
+Companion tools запускаются из
 verified package path с platform check, output limit, redaction и manifest
 timeout. Declarative surface rendering и supervised optional plugin processes
 проходят host-controlled boundary; target catalog UI остаётся отдельным
@@ -194,9 +166,7 @@ report-based traffic observation и exact remote handoff. Установленн
 проходят host-controlled JSON schema preview; arbitrary plugin frontend не
 загружается.
 
-Wails не принимает remote URL или credential values: remote/branch identifiers
-проходят allowlist validation, а Git operations выполняются только для текущего
-Project.
+Wails не принимает remote URL или credential values.
 
 Публичные модели должны быть versioned и сериализуемыми. Нельзя отдавать
 frontend внутренние `sql.Rows`, `exec.Cmd`, absolute secret paths или raw
@@ -208,8 +178,7 @@ credentials. Вкладки персистятся в project-local `.studio/wor
 
 | Состояние | Источник истины | Хранилище Studio |
 | --- | --- | --- |
-| Project files | рабочий Git checkout | filesystem |
-| Git history | Git repository | `.git` |
+| Project files | canonical Project tree | filesystem |
 | Canvas/layout/tabs | Studio project state | `.studio/` |
 | Known projects/theme | Studio client | OS application SQLite; theme is `system`, `light` or `dark` |
 | Service settings drafts | Studio client | OS application SQLite; schema-validated safe patch only, keyed by Project/service; no full settings document or secrets |
@@ -241,4 +210,4 @@ runtime service executables.
 
 Process failures не должны завершать Studio. CLI/plugin/tool process получает
 cancel, timeout и output limit; завершение фиксируется как reportable diagnostic.
-Frontend structure and state boundaries are specified in [frontend-architecture.md](frontend-architecture.md): models remain pure, Zustand stores contain only state/reducers, controllers own Wails/CLI/Git effects, and views remain rendering-only.
+Frontend structure and state boundaries are specified in [frontend-architecture.md](frontend-architecture.md): models remain pure, Zustand stores contain only state/reducers, controllers own Wails/CLI effects, and views remain rendering-only.

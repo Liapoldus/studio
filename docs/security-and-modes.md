@@ -50,9 +50,8 @@ Desktop — основной целевой режим:
 - Studio plugin lifecycle;
 - sandboxed iframe UI-surfaces установленных Studio-плагинов;
 - CLI handoff и report import;
-- Git remotes через OS credential manager.
 
-Локальная Studio SQLite хранит project/Git metadata, client state,
+Локальная Studio SQLite хранит project metadata, client state,
 импортированные безопасные CLI reports и schema-validated settings drafts.
 Для настройки сервиса сохраняется только redacted/non-sensitive JSON patch,
 не полный settings document; новый SHA-256 digest защищает от обычной записи
@@ -82,7 +81,7 @@ draft, а на диск записывается чистое JSON-значен�
 
 Особенно важно различать:
 
-- `No project` и `Project has no Git repository`;
+- `No project`;
 - `No deploy report` и `Service degraded in last report`;
 - `No operation` и `Operation not loaded`;
 - `Plugin not installed` и `Plugin installed but stopped`;
@@ -150,7 +149,7 @@ Studio не даёт frame никакого privileged channel и не ренд�
 
 | Сбой | Что остаётся доступным |
 | --- | --- |
-| Core unavailable | Project tree, local validation, drafts и Git |
+| Core unavailable | Project tree, local validation и drafts |
 | Service degraded | Последний CLI report, canvas, inspector и evidence |
 | Studio plugin stopped | Config workspace и базовый inspector |
 | Companion tool unavailable | Plugin UI, project files и базовый inspector |

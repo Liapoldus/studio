@@ -38,7 +38,7 @@ Home — стартовый экран без активного проекта:
 
 - recent projects;
 - open/create project;
-- last revision и Git status;
+- project availability and local CLI/Core toolchain status;
 - local CLI/Core toolchain status;
 - installed local Studio plugins;
 - вход в Settings.
@@ -68,7 +68,7 @@ workspace: workspace switcher = переключатель проекта.
 ┌───────────────────────────────────────────────────────────────────────┐
 │ ● ● ●   [Home] [Settings]  │  <project> ▾   │   tabs…            [logo] │  TopBar (drag)
 ├───────────────────────────────────────────────────────────────────────┤
-│ [Canvas][Files][Git][Reports][Plugins][Artifacts][Runtime] │ [Problems] │  TabStrip
+│ [Canvas][Files][Reports][Plugins][Artifacts][Runtime] │ [Problems] │  TabStrip
 │ [Output] │ plugins…                                                    │
 ├──────┬────────────────────────────────────────────────────┬───────────┤
 │ rail │                Workbench (active tab)               │ Inspector │
@@ -80,7 +80,7 @@ workspace: workspace switcher = переключатель проекта.
   путь/действия проекта. Пункт «закрыть проект» заменён на действия проекта.
 - **TabStrip**: активная рабочая вкладка, закрытие, drag-reorder, горизонтальный
   скролл. Вкладки закрываемые; pin отсутствует.
-- **Левая rail**: кнопки-открыватели вкладок — Canvas, Git, Reports,
+- **Левая rail**: кнопки-открыватели вкладок — Canvas, Reports,
   Problems, Output. ПКМ по rail/sidebar даёт действие «Добавить плагин».
   На Canvas есть «Подключить сервис», а в верхней панели — Run/Restart/Debug.
   После разделителя — кнопки
@@ -138,7 +138,7 @@ and restored on the next open.
 3. **Link contract** — полное редактирование link-полей;
 4. **Source binding** — где в проекте определён service/link (path, module ref);
 5. **Last deploy** — последний импортированный CLI/Core report (redacted);
-6. **Context** — project, Git revision/branch;
+6. **Context** — project;
 7. **Actions** — Run / Restart / Logs / Inspect (typed CLI intents, ephemeral
    status; при недоступности CLI/Core — `unknown`).
 
@@ -191,16 +191,9 @@ Studio Plugin SDK/Studio host contract; Service SDK и Wool не загружа�
 - `Cmd/Ctrl+P` opens command palette; `↑/↓` navigates, `Enter` runs and `Esc`
   closes it;
 - `Cmd/Ctrl+Shift+F` focuses project search;
-- опасные Git/Core actions требуют confirmation dialog с точным scope;
-- conflict view renders bounded base/ours/theirs snapshots; ours/theirs staging
-  requires explicit confirmation, while manual three-way editing opens an
-  external Git tool;
-- Git changes expose explicit Stage/Unstage actions; commit operates only on
-  staged paths, and Draft stash exposes include-untracked plus apply/drop with
-  clean-tree safeguards;
+- управление версиями и историей исходников выполняется внешними инструментами;
 - dirty settings/draft state видно в top bar и заголовке вкладки; сохранение
   файлового текста Studio не выполняет — это ответственность внешнего редактора;
-- unsaved project changes block deploy handoff;
 - keyboard focus never disappears into canvas;
 - every asynchronous operation has loading, success and failure feedback.
 - CLI target registration requires a project-relative profile path and an exact

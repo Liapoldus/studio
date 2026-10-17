@@ -9,7 +9,6 @@ import (
 )
 
 var ErrInvalidCLIRequest = errors.New("invalid CLI request")
-var ErrInvalidCLIHandoff = errors.New("invalid CLI handoff")
 
 // CLIIntent is the reviewed command vocabulary exposed to the Studio UI. The
 // renderer never constructs arbitrary CLI argv; the host turns one intent into
@@ -25,6 +24,9 @@ type CLIIntent struct {
 	BinaryPath      string `json:"binaryPath,omitempty"`
 	Digest          string `json:"digest,omitempty"`
 	ServiceID       string `json:"serviceId,omitempty"`
+	Purpose         string `json:"purpose,omitempty"`
+	Label           string `json:"label,omitempty"`
+	Reference       string `json:"reference,omitempty"`
 	ResourceID      string `json:"resourceId,omitempty"`
 	PageID          string `json:"pageId,omitempty"`
 	ActionID        string `json:"actionId,omitempty"`
@@ -40,30 +42,7 @@ type CLIRequest struct {
 	ProjectRoot string
 	WorkingDir  string
 	Args        []string
-}
-
-type CLIHandoff struct {
-	SchemaVersion string   `json:"schemaVersion"`
-	ProjectID     string   `json:"projectId"`
-	Repository    string   `json:"repository"`
-	CommitSHA     string   `json:"commitSha"`
-	Target        string   `json:"target"`
-	Args          []string `json:"args"`
-}
-
-func (h CLIHandoff) Validate() error {
-	if h.SchemaVersion != "studio-cli-handoff/v1" || strings.TrimSpace(h.ProjectID) == "" || strings.TrimSpace(h.Repository) == "" || strings.TrimSpace(h.CommitSHA) == "" || strings.TrimSpace(h.Target) == "" || strings.EqualFold(h.Target, "local") || len(h.Args) < 3 {
-		return ErrInvalidCLIHandoff
-	}
-	for _, value := range append([]string{h.ProjectID, h.Repository, h.CommitSHA, h.Target}, h.Args...) {
-		if strings.ContainsRune(value, '\x00') || strings.ContainsAny(value, "\r\n") {
-			return ErrInvalidCLIHandoff
-		}
-	}
-	if h.Args[0] != "apply" || h.Args[1] != "--target" || h.Args[2] != h.Target {
-		return ErrInvalidCLIHandoff
-	}
-	return nil
+	SecretInput []byte
 }
 
 func (r CLIRequest) Validate() error {
@@ -92,6 +71,14 @@ func (r CLIRequest) Validate() error {
 			}
 		}
 	}
+	if len(r.SecretInput) > 16<<10 || strings.ContainsRune(string(r.SecretInput), '\x00') {
+		return ErrInvalidCLIRequest
+	}
+	secretCreate := len(r.Args) == 13 && r.Args[0] == "service" && r.Args[1] == "secret" && r.Args[2] == "create" && r.Args[9] == "--label" && r.Args[11] == "--secret-stdin" && r.Args[12] == "--confirm"
+	secretRotate := len(r.Args) == 15 && r.Args[0] == "service" && r.Args[1] == "secret" && r.Args[2] == "rotate" && r.Args[11] == "--label" && r.Args[13] == "--secret-stdin" && r.Args[14] == "--confirm"
+	if (secretCreate || secretRotate) != (len(r.SecretInput) > 0) {
+		return ErrInvalidCLIRequest
+	}
 	return validateCLICommand(r.Args)
 }
 
@@ -99,7 +86,7 @@ func (i CLIIntent) Validate() error {
 	if strings.TrimSpace(i.Command) == "" || strings.ContainsAny(i.Command, "\x00\r\n") {
 		return ErrInvalidCLIRequest
 	}
-	for _, value := range []string{i.Target, i.OperationID, i.ProfilePath, i.ArtifactID, i.Version, i.Platform, i.BinaryPath, i.Digest, i.ServiceID, i.ResourceID, i.PageID, i.ActionID, i.ArtifactPath, i.ContentType, i.MetadataPath, i.RequestFilePath, i.IfMatch, i.IdempotencyKey} {
+	for _, value := range []string{i.Target, i.OperationID, i.ProfilePath, i.ArtifactID, i.Version, i.Platform, i.BinaryPath, i.Digest, i.ServiceID, i.Purpose, i.Label, i.Reference, i.ResourceID, i.PageID, i.ActionID, i.ArtifactPath, i.ContentType, i.MetadataPath, i.RequestFilePath, i.IfMatch, i.IdempotencyKey} {
 		if strings.ContainsAny(value, "\x00\r\n") {
 			return ErrInvalidCLIRequest
 		}
@@ -268,6 +255,66 @@ func validateCLICommand(args []string) error {
 		}
 		return requireLocalTarget(args[5])
 	}
+	if len(args) == 7 && args[0] == "service" && args[1] == "secret" && args[2] == "list" && args[3] == "--target" && args[5] == "--service" {
+		if err := requireLocalTarget(args[4]); err != nil {
+			return err
+		}
+		return validCLIIdentifier(args[6])
+	}
+	if len(args) == 9 && args[0] == "service" && args[1] == "secret" && args[2] == "list" && args[3] == "--target" && args[5] == "--service" && args[7] == "--purpose" {
+		if err := requireLocalTarget(args[4]); err != nil {
+			return err
+		}
+		if err := validCLIIdentifier(args[6]); err != nil {
+			return err
+		}
+		if !validSecretPurpose(args[8]) {
+			return ErrInvalidCLIRequest
+		}
+		return nil
+	}
+	if len(args) == 13 && args[0] == "service" && args[1] == "secret" && args[2] == "create" && args[3] == "--target" && args[4] == "local" && args[5] == "--service" && args[7] == "--purpose" && args[9] == "--label" && args[11] == "--secret-stdin" && args[12] == "--confirm" {
+		if err := validCLIIdentifier(args[6]); err != nil {
+			return err
+		}
+		if !validSecretPurpose(args[8]) || strings.TrimSpace(args[10]) == "" || strings.TrimSpace(args[10]) != args[10] || len([]rune(args[10])) > 128 || strings.ContainsAny(args[10], "\x00\r\n") {
+			return ErrInvalidCLIRequest
+		}
+		return requireLocalTarget(args[4])
+	}
+	if len(args) == 15 && args[0] == "service" && args[1] == "secret" && args[2] == "rotate" && args[3] == "--target" && args[4] == "local" && args[5] == "--service" && args[7] == "--reference" && args[9] == "--purpose" && args[11] == "--label" && args[13] == "--secret-stdin" && args[14] == "--confirm" {
+		if err := validCLIIdentifier(args[6]); err != nil {
+			return err
+		}
+		if !validOpaqueServiceSecretReference(args[8]) || !validSecretPurpose(args[10]) || strings.TrimSpace(args[12]) == "" || strings.TrimSpace(args[12]) != args[12] || len([]rune(args[12])) > 128 || strings.ContainsAny(args[12], "\x00\r\n") {
+			return ErrInvalidCLIRequest
+		}
+		return requireLocalTarget(args[4])
+	}
+	if len(args) == 10 && args[0] == "service" && args[1] == "secret" && args[2] == "revoke" && args[3] == "--target" && args[5] == "--service" && args[7] == "--reference" && args[9] == "--confirm" {
+		if err := requireLocalTarget(args[4]); err != nil {
+			return err
+		}
+		if err := validCLIIdentifier(args[6]); err != nil {
+			return err
+		}
+		if !validOpaqueServiceSecretReference(args[8]) {
+			return ErrInvalidCLIRequest
+		}
+		return nil
+	}
+	if len(args) == 10 && args[0] == "service" && args[1] == "secret" && args[2] == "register" && args[3] == "--target" && args[5] == "--service" && args[7] == "--reference" && args[9] == "--confirm" {
+		if err := requireLocalTarget(args[4]); err != nil {
+			return err
+		}
+		if err := validCLIIdentifier(args[6]); err != nil {
+			return err
+		}
+		if !validOpaqueServiceSecretReference(args[8]) {
+			return ErrInvalidCLIRequest
+		}
+		return nil
+	}
 	if len(args) == 8 && args[0] == "service" && args[1] == "resource" && args[2] == "list" && args[4] == "--resource" && args[6] == "--target" {
 		if err := validCLIIdentifier(args[3]); err != nil {
 			return err
@@ -397,6 +444,36 @@ func isOneOf(value string, values ...string) bool {
 		}
 	}
 	return false
+}
+
+func validSecretPurpose(value string) bool {
+	if value == "" || len(value) > 192 || strings.TrimSpace(value) != value {
+		return false
+	}
+	for _, part := range strings.Split(value, ".") {
+		if part == "" || part[0] < 'a' || part[0] > 'z' {
+			return false
+		}
+		for _, character := range part {
+			if !strings.ContainsRune("abcdefghijklmnopqrstuvwxyz0123456789-", character) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func validOpaqueServiceSecretReference(value string) bool {
+	const prefix = "ssr:v1:"
+	if len(value) != len(prefix)+32 || !strings.HasPrefix(value, prefix) {
+		return false
+	}
+	for _, character := range value[len(prefix):] {
+		if !strings.ContainsRune("0123456789abcdef", character) {
+			return false
+		}
+	}
+	return true
 }
 
 type CLIEvent struct {

@@ -42,11 +42,11 @@ func TestInspectPackagedServerEditor(t *testing.T) {
 	if surface.ID != "server-editor" || surface.Kind != "page" || surface.Route != "ui/index.html" {
 		t.Fatalf("unexpected Server editor surface: %#v", surface)
 	}
-	if inspection.Manifest.Process != nil || len(inspection.Manifest.Tools) != 0 || !containsString(inspection.Manifest.Permissions, "service.settings.read") || !containsString(inspection.Manifest.Permissions, "service.settings.write") || !containsString(inspection.Manifest.Permissions, "service.configuration-ui.read") || !containsString(inspection.Manifest.Permissions, "service.resources.read") || !containsString(inspection.Manifest.Permissions, "service.resources.publish") || !containsString(inspection.Manifest.Permissions, "service.peer.catalog.read") || len(inspection.Manifest.Permissions) != 6 {
-		t.Fatalf("Server editor must request only its explicit settings, metadata, resource and peer-catalog host permissions: %#v", inspection.Manifest.Permissions)
+	if inspection.Manifest.Process != nil || len(inspection.Manifest.Tools) != 0 || !containsString(inspection.Manifest.Permissions, "service.settings.read") || !containsString(inspection.Manifest.Permissions, "service.settings.write") || !containsString(inspection.Manifest.Permissions, "service.configuration-ui.read") || !containsString(inspection.Manifest.Permissions, "service.resources.read") || !containsString(inspection.Manifest.Permissions, "service.resources.publish") || !containsString(inspection.Manifest.Permissions, "service.peer.catalog.read") || !containsString(inspection.Manifest.Permissions, "service.secrets.read") || len(inspection.Manifest.Permissions) != 7 {
+		t.Fatalf("Server editor must request only its explicit settings, metadata, resource, peer-catalog and safe-secret-reference permissions: %#v", inspection.Manifest.Permissions)
 	}
 	installer := Installer{Directory: t.TempDir()}
-	installed, err := installer.Install(context.Background(), packagePath, approvedPackageTrust(t, installer, packagePath, []string{"service.settings.read", "service.settings.write", "service.configuration-ui.read", "service.resources.read", "service.resources.publish", "service.peer.catalog.read"}))
+	installed, err := installer.Install(context.Background(), packagePath, approvedPackageTrust(t, installer, packagePath, []string{"service.settings.read", "service.settings.write", "service.configuration-ui.read", "service.resources.read", "service.resources.publish", "service.peer.catalog.read", "service.secrets.read"}))
 	if err != nil {
 		t.Fatalf("install packaged Server editor into temporary directory: %v", err)
 	}

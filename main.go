@@ -21,7 +21,6 @@ import (
 	desktopintegration "github.com/Liapoldus/studio/internal/infrastructure/desktop"
 	diagnosticstore "github.com/Liapoldus/studio/internal/infrastructure/diagnostics"
 	projectfiles "github.com/Liapoldus/studio/internal/infrastructure/filesystem"
-	gitrepo "github.com/Liapoldus/studio/internal/infrastructure/git"
 	pluginhost "github.com/Liapoldus/studio/internal/infrastructure/plugins"
 	productdata "github.com/Liapoldus/studio/internal/infrastructure/product"
 	projectsource "github.com/Liapoldus/studio/internal/infrastructure/project"
@@ -55,10 +54,9 @@ func run() (runErr error) {
 	productInfo := productdata.NewStaticReader(
 		"project",
 		"file-tree",
-		"git",
 		"cli-reports",
 	)
-	workspace := workspaceapp.New(store, projectsource.Source{Git: gitrepo.Repository{}})
+	workspace := workspaceapp.New(store, projectsource.Source{})
 	files := projectfiles.FileSystem{}
 	toolRunner, err := pluginhost.NewToolRunnerFromENV()
 	if err != nil {
@@ -75,7 +73,7 @@ func run() (runErr error) {
 	})
 	pluginHost.Sandbox = toolRunner.Sandbox
 	pluginHost.SandboxMode = toolRunner.Mode
-	app := wailspresentation.NewApp(product.NewProductInfo(productInfo), workspace, desktopintegration.EditorLauncher{}, files, projectsettings.Store{Files: files}, clirunner.Runner{}, reportstore.Store{}, diagnosticstore.Store{}, pluginHost, gitrepo.Repository{}, clirunner.ToolchainProbe{}, projectstate.Store{}, store, projectsource.Mutations{})
+	app := wailspresentation.NewApp(product.NewProductInfo(productInfo), workspace, desktopintegration.EditorLauncher{}, files, projectsettings.Store{Files: files}, clirunner.Runner{}, reportstore.Store{}, diagnosticstore.Store{}, pluginHost, clirunner.ToolchainProbe{}, projectstate.Store{}, store, projectsource.Mutations{})
 
 	err = wails.Run(&options.App{
 		Title:     "Liapoldus Studio",

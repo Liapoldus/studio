@@ -8,66 +8,6 @@ type ProjectFile struct {
 	Bytes int64  `json:"bytes"`
 }
 
-type GitChange struct {
-	Path           string `json:"path"`
-	IndexStatus    string `json:"indexStatus"`
-	WorktreeStatus string `json:"worktreeStatus"`
-}
-
-type GitStatus struct {
-	Branch    string      `json:"branch"`
-	Revision  string      `json:"revision"`
-	Changes   []GitChange `json:"changes"`
-	Dirty     bool        `json:"dirty"`
-	Available bool        `json:"available"`
-	Conflict  bool        `json:"conflict"`
-}
-
-type GitDiff struct {
-	Path      string `json:"path"`
-	Patch     string `json:"patch"`
-	Truncated bool   `json:"truncated"`
-}
-
-type GitConflictSide struct {
-	Content   string `json:"content"`
-	Available bool   `json:"available"`
-	Truncated bool   `json:"truncated"`
-}
-
-type GitConflict struct {
-	Path   string          `json:"path"`
-	Base   GitConflictSide `json:"base"`
-	Ours   GitConflictSide `json:"ours"`
-	Theirs GitConflictSide `json:"theirs"`
-}
-
-type GitStash struct {
-	Ref       string `json:"ref"`
-	Message   string `json:"message"`
-	CreatedAt string `json:"createdAt"`
-}
-
-type GitBranch struct {
-	Name    string `json:"name"`
-	Remote  string `json:"remote"`
-	Current bool   `json:"current"`
-}
-
-type GitCommit struct {
-	Hash      string `json:"hash"`
-	ShortHash string `json:"shortHash"`
-	Author    string `json:"author"`
-	Timestamp string `json:"timestamp"`
-	Subject   string `json:"subject"`
-}
-
-type GitRemote struct {
-	Name     string `json:"name"`
-	FetchURL string `json:"fetchUrl"`
-	PushURL  string `json:"pushUrl"`
-}
-
 // RuntimeService is a project-owned runtime service instance. Studio never
 // loads the service executable into the renderer.
 //
@@ -168,5 +108,4 @@ type Workspace struct {
 	Project *Project      `json:"project"`
 	Graph   ServiceGraph  `json:"graph"`
 	Files   []ProjectFile `json:"files"`
-	Git     GitStatus     `json:"git"`
 }

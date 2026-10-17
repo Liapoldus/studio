@@ -1,8 +1,10 @@
 package cli
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"io"
 	"os"
 	"os/exec"
 	"strings"
@@ -14,7 +16,7 @@ import (
 
 func TestRunnerParsesJSONLEventsAndExit(t *testing.T) {
 	request := models.CLIRequest{ProjectRoot: t.TempDir(), Args: []string{"validate"}}
-	runner := Runner{CommandFactory: func(_ context.Context, args []string) *exec.Cmd {
+	runner := Runner{CommandFactory: func(ctx context.Context, args []string) *exec.Cmd {
 		return &exec.Cmd{Path: os.Args[0], Args: append([]string{os.Args[0], "-test.run=TestCLIHelperProcess", "--"}, args...)}
 	}}
 	t.Setenv("STUDIO_CLI_HELPER", "1")
@@ -62,6 +64,37 @@ func TestRunnerRejectsInvalidRequest(t *testing.T) {
 	}
 	if _, err := (Runner{}).Run(context.Background(), models.CLIRequest{ProjectRoot: t.TempDir(), Args: []string{"apply", "--token=secret"}}); !errors.Is(err, models.ErrInvalidCLIRequest) {
 		t.Fatalf("expected credential argument rejection, got %v", err)
+	}
+}
+
+func TestRunnerSendsServiceSecretOnlyOnStdinAndClearsMemoryAfterward(t *testing.T) {
+	root := t.TempDir()
+	secret := []byte("host-owned-sensitive-value")
+	request := models.CLIRequest{
+		ProjectRoot: root,
+		Args:        []string{"service", "secret", "create", "--target", "local", "--service", "server", "--purpose", "http.auth.bearer", "--label", "edge token", "--secret-stdin", "--confirm"},
+		SecretInput: secret,
+	}
+	runner := Runner{CommandFactory: func(ctx context.Context, args []string) *exec.Cmd {
+		if strings.Contains(strings.Join(args, " "), string(secret)) {
+			t.Fatal("secret value was passed in CLI argv")
+		}
+		return exec.CommandContext(ctx, os.Args[0], append([]string{"-test.run=TestCLISecretInputHelperProcess", "--"}, args...)...) //nolint:gosec // test helper reads stdin and verifies redaction.
+	}}
+	t.Setenv("STUDIO_CLI_SECRET_INPUT_HELPER", "1")
+	events, err := runner.Run(context.Background(), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var values []models.CLIEvent
+	for event := range events {
+		values = append(values, event)
+	}
+	if len(values) != 2 || values[0].Type != "run.started" || values[1].Type != "run.completed" {
+		t.Fatalf("secret helper did not complete with safe events: %+v", values)
+	}
+	if !bytes.Equal(secret, make([]byte, len(secret))) {
+		t.Fatal("CLI runner retained the host secret buffer after process completion")
 	}
 }
 
@@ -119,6 +152,24 @@ func TestCLIFailureHelperProcess(t *testing.T) {
 		os.Exit(1)
 	}
 	os.Exit(5)
+}
+
+func TestCLISecretInputHelperProcess(t *testing.T) {
+	if os.Getenv("STUDIO_CLI_SECRET_INPUT_HELPER") != "1" {
+		return
+	}
+	input, err := io.ReadAll(os.Stdin)
+	if err != nil || string(input) != "host-owned-sensitive-value" {
+		os.Exit(1)
+	}
+	clear(input)
+	if _, err := os.Stdout.WriteString(`{"schemaVersion":"cli-events/v1","type":"run.started"}` + "\n"); err != nil {
+		os.Exit(1)
+	}
+	if _, err := os.Stdout.WriteString(`{"schemaVersion":"cli-events/v1","type":"run.completed"}` + "\n"); err != nil {
+		os.Exit(1)
+	}
+	os.Exit(0)
 }
 
 func TestCLICancelHelperProcess(t *testing.T) {

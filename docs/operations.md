@@ -2,8 +2,8 @@
 
 ## 1. Смысл operations
 
-Любое действие Studio, которое меняет project source или Git history, должно
-иметь локально наблюдаемый lifecycle. Core deploy operation принадлежит
+Любое действие Studio, которое меняет project source, должно иметь локально
+наблюдаемый lifecycle. История версий исходников находится вне Studio. Core deploy operation принадлежит
 универсальному CLI и Core, а Studio показывает только импортированный report.
 
 Studio не объявляет deploy успешным по локальному действию. Она показывает
@@ -18,8 +18,7 @@ stateDiagram-v2
     Validating --> Invalid: "schema/reference error"
     Invalid --> Draft: "Fix source"
     Validating --> ReadyToApply: "valid"
-    ReadyToApply --> Committed: "Commit"
-    Committed --> Report: "Import CLI report"
+    ReadyToApply --> Report: "Run typed CLI workflow"
     Report --> Succeeded
     Report --> Failed
     Report --> Degraded
@@ -96,21 +95,19 @@ top bar.
 
 У каждой проблемы есть severity, owner, location и suggested next step.
 
-## 7. Commit → CLI deploy flow
+## 7. Validate → CLI workflow
 
 ```mermaid
 flowchart LR
     A["Local draft"] --> B["Validate"]
     B -->|"invalid"| C["Problems panel"]
     C --> A
-    B -->|"valid"| D["Show Git diff"]
-    D --> E["Commit revision"]
-    E --> F["liapoldus plan/apply"]
-    F --> G["Generation + replica ACK report"]
-    G --> H{ "State" }
-    H -->|"succeeded"| I["Observed ready"]
-    H -->|"failed"| C
-    H -->|"degraded"| J["Evidence + reconcile guidance"]
+    B -->|"valid"| D["Run typed liapoldus command"]
+    D --> E["Generation + replica ACK report"]
+    E --> F{ "State" }
+    F -->|"succeeded"| G["Observed ready"]
+    F -->|"failed"| C
+    F -->|"degraded"| H["Evidence + reconcile guidance"]
 ```
 
 ## 8. Audit/context

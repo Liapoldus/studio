@@ -1,11 +1,13 @@
 import assert from 'node:assert/strict'
-import { test } from 'node:test'
+import { beforeEach, test } from 'node:test'
 import type { CLIEvent, RuntimeService, StudioAPI, Workspace, WorkspaceState } from '../../frontend/src/api/types.ts'
 import { createStudioController } from '../../frontend/src/controllers/studioController.ts'
 import { configurationDraftKey, mergeConfiguration } from '../../frontend/src/models/configurationDraft.ts'
 import { serviceConfigurationProvenanceDifferences } from '../../frontend/src/models/serviceConfigurationProvenance.ts'
 import { workspaceStateWithApplyRecovery } from '../../frontend/src/models/studio.ts'
 import { useStudioStore } from '../../frontend/src/stores/studio.ts'
+
+beforeEach(() => { useStudioStore.setState({ applyRecoveryStatus: 'none', applyRecoveryOperationId: null, applyReviewPaths: [] }) })
 
 const bytes = (value: unknown): Uint8Array => new TextEncoder().encode(JSON.stringify(value))
 function recoveryStateAPI(projectId: string) {
@@ -54,7 +56,7 @@ await test('missing Project schema can be imported through Studio and Core-backe
   const workspace = {
     project: { id: projectID, name: 'Schema import', rootPath },
     graph: { services: [service], links: [] },
-    files: [], git: { changes: [] },
+    files: [],
   } as unknown as Workspace
   useStudioStore.setState({ serviceSettingsDrafts: {}, workspace })
   let imported: string[] = []
@@ -83,7 +85,7 @@ await test('missing Project schema can be imported through Studio and Core-backe
 await test('service artifact binding updates the shared Studio Project workspace', async () => {
   const workspace = {
     project: { id: 'artifact-binding', name: 'Artifact binding', rootPath: '/tmp/artifact-binding' },
-    graph: { services: [service], links: [] }, files: [], git: { changes: [] },
+    graph: { services: [service], links: [] }, files: [],
   } as unknown as Workspace
   useStudioStore.setState({ workspace })
   let args: string[] = []
@@ -107,7 +109,7 @@ await test('Studio plugin can save a locally validated Project draft while Core 
   const rootPath = '/tmp/offline-plugin-save'
   const workspace = {
     project: { id: projectID, name: 'Offline plugin save', rootPath },
-    graph: { services: [service], links: [] }, files: [], git: { changes: [] },
+    graph: { services: [service], links: [] }, files: [],
   } as unknown as Workspace
   const schema = { type: 'object', properties: { config: { type: 'object', properties: { routes: { type: 'array', items: { type: 'object', properties: { id: { type: 'string' } } } } } } } }
   let written: unknown = null
@@ -140,8 +142,8 @@ await test('Studio plugin can save a locally validated Project draft while Core 
   assert.equal(useStudioStore.getState().serviceSettingsDrafts[key]?.status, 'clean')
 })
 
-await test('settings controller reuses the shared draft and writes only changed safe fields', async () => {
-  useStudioStore.setState({ serviceSettingsDrafts: {}, workspace: { project: { id: 'p', name: 'p', rootPath: '/tmp/p' }, graph: { services: [service], links: [] } } as unknown as Workspace })
+await test('public bind changes are saved to Project and wait for explicit apply review', async () => {
+  useStudioStore.setState({ serviceSettingsDrafts: {}, workspace: { project: { id: 'settings-safe-fields', name: 'p', rootPath: '/tmp/settings-safe-fields' }, graph: { services: [service], links: [] } } as unknown as Workspace })
   let schemaReads = 0
   let settingsReads = 0
   let stored: Record<string, unknown> = { address: '127.0.0.1', password: 'operator-secret' }
@@ -153,7 +155,7 @@ await test('settings controller reuses the shared draft and writes only changed 
   let deletedDraft = false
   const schema = { type: 'object', properties: { address: { type: 'string' }, password: { type: 'string', 'x-sensitive': true } } }
   const api = {
-    ...recoveryStateAPI('p'),
+    ...recoveryStateAPI('settings-safe-fields'),
     readProjectSchema: () => { schemaReads += 1; return Promise.resolve(bytes(schema)) },
     readProjectSettings: () => { settingsReads += 1; return Promise.resolve({ valuesJson: JSON.stringify({ ...stored, password: null }), digest }) },
     readServiceSettingsDraft: () => Promise.resolve(null),
@@ -169,7 +171,7 @@ await test('settings controller reuses the shared draft and writes only changed 
     readRuntimeServiceMetadata: liveMetadata(schema),
   } as unknown as StudioAPI
   const controller = createStudioController(api)
-  const key = configurationDraftKey('/tmp/p', service.id)
+  const key = configurationDraftKey('/tmp/settings-safe-fields', service.id)
 
   assert.equal(await controller.loadServiceSettingsDraft(service), key)
   assert.equal(await controller.loadServiceSettingsDraft(service), key)
@@ -180,7 +182,7 @@ await test('settings controller reuses the shared draft and writes only changed 
 
   useStudioStore.getState().updateServiceSettingsDraft(key, ['address'], '0.0.0.0')
   await controller.persistServiceSettingsDraft(key)
-  assert.equal(persistedProject, 'p')
+  assert.equal(persistedProject, 'settings-safe-fields')
   assert.deepEqual(persistedPatch, { address: '0.0.0.0' })
   await controller.saveServiceSettingsDraft(key)
   assert.deepEqual(persistedPatch, { address: '0.0.0.0' })
@@ -190,6 +192,9 @@ await test('settings controller reuses the shared draft and writes only changed 
   assert.equal(useStudioStore.getState().serviceSettingsDrafts[key]?.status, 'clean')
   assert.deepEqual(useStudioStore.getState().serviceSettingsDrafts[key]?.base, { address: '0.0.0.0', password: null })
   assert.equal(useStudioStore.getState().serviceSettingsDrafts[key]?.baseDigest, 'sha256:after-save')
+  assert.deepEqual(applyIntent, [], 'public bind changes require an explicit apply review')
+  assert.ok(useStudioStore.getState().applyReviewPaths.some((path) => path.includes('address: replaced (value-redacted)')))
+  await controller.applyServiceSettings(key)
   assert.deepEqual(applyIntent, ['dev.apply', 'local'])
   assert.equal(deletedDraft, true)
 })
@@ -274,7 +279,7 @@ await test('automatic apply coalesces edits made while Core apply is in flight',
   const projectRoot = '/tmp/coalesced-auto-apply'
   const project = { id: 'coalesced-auto-apply', name: 'coalesced', rootPath: projectRoot }
   const secondService = { ...service, id: 'echo', name: 'Echo', artifact: { id: 'echo', version: '1.0.0', platform: 'linux/arm64', digest: artifactDigest }, settingsPath: 'services/echo/settings.json', settingsSchemaPath: 'schemas/echo-settings.json' }
-  const workspace = { project, graph: { services: [service, secondService], links: [] }, files: [], git: { changes: [] } } as unknown as Workspace
+  const workspace = { project, graph: { services: [service, secondService], links: [] }, files: [] } as unknown as Workspace
   useStudioStore.setState({ serviceSettingsDrafts: {}, workspace })
   const recovery = recoveryStateAPI(project.id)
   const stored: Record<string, { enabled: boolean }> = { server: { enabled: false }, echo: { enabled: false } }
@@ -343,7 +348,7 @@ await test('automatic apply coalesces edits made while Core apply is in flight',
 await test('an apply failure pauses subsequent automatic applies until explicit retry', async () => {
   const projectRoot = '/tmp/pause-after-apply-failure'
   const project = { id: 'pause-after-apply-failure', name: 'pause', rootPath: projectRoot }
-  const workspace = { project, graph: { services: [service], links: [] }, files: [], git: { changes: [] } } as unknown as Workspace
+  const workspace = { project, graph: { services: [service], links: [] }, files: [] } as unknown as Workspace
   useStudioStore.setState({ serviceSettingsDrafts: {}, workspace })
   const recovery = recoveryStateAPI(project.id)
   let stored = { enabled: false }
@@ -383,7 +388,7 @@ await test('an apply failure pauses subsequent automatic applies until explicit 
   assert.equal(writes, 1)
   assert.equal(applyCalls, 1)
   const failedRecovery = JSON.parse(recovery.recoveryState().tabsJson) as { applyRecovery: { state: string; operationId: string; schemaVersion: string; target: string } }
-  assert.deepEqual(failedRecovery.applyRecovery, { schemaVersion: 'studio-apply-recovery/v2', state: 'confirmation-required', target: 'local', operationId: 'operation-123' })
+  assert.deepEqual(failedRecovery.applyRecovery, { schemaVersion: 'studio-apply-recovery/v3', state: 'confirmation-required', target: 'local', operationId: 'operation-123' })
   assert.equal(useStudioStore.getState().applyRecoveryOperationId, 'operation-123')
 
   useStudioStore.setState({ workspace: null, applyRecoveryStatus: 'none', serviceSettingsDrafts: {} })
@@ -408,7 +413,7 @@ await test('an apply failure pauses subsequent automatic applies until explicit 
 await test('recovery watches the persisted Core operation before clearing the ambiguous apply marker', async () => {
   const projectRoot = '/tmp/reconcile-core-operation'
   const project = { id: 'reconcile-core-operation', name: 'reconcile', rootPath: projectRoot }
-  const workspace = { project, graph: { services: [], links: [] }, files: [], git: { changes: [] } } as unknown as Workspace
+  const workspace = { project, graph: { services: [], links: [] }, files: [] } as unknown as Workspace
   useStudioStore.setState({ workspace, applyRecoveryStatus: 'confirmation-required', applyRecoveryOperationId: 'operation-42', serviceSettingsDrafts: {} })
   const recovery = recoveryStateAPI(project.id)
   await recovery.writeWorkspaceState(workspaceStateWithApplyRecovery(recovery.recoveryState(), 'confirmation-required', 'operation-42'))
@@ -437,7 +442,7 @@ await test('recovery watches the persisted Core operation before clearing the am
 await test('explicit failed-apply recovery uses the typed retry CLI intent', async () => {
   const projectRoot = '/tmp/explicit-failed-apply-retry'
   const project = { id: 'explicit-failed-apply-retry', name: 'retry', rootPath: projectRoot }
-  const workspace = { project, graph: { services: [service], links: [] }, files: [], git: { changes: [] } } as unknown as Workspace
+  const workspace = { project, graph: { services: [service], links: [] }, files: [] } as unknown as Workspace
   useStudioStore.setState({ workspace, applyRecoveryStatus: 'confirmation-required', applyRecoveryOperationId: null, serviceSettingsDrafts: {} })
   const schema = { type: 'object', properties: { enabled: { type: 'boolean' } } }
   let intent: string[] = []
@@ -618,7 +623,7 @@ await test('Studio plugin receives provenance mismatch separately from schema mi
   const schema = { type: 'object', properties: { port: { type: 'integer' } } }
   const workspace = {
     project: { id: projectID, name: 'Provenance mismatch', rootPath },
-    graph: { services: [service], links: [] }, files: [], git: { changes: [] },
+    graph: { services: [service], links: [] }, files: [],
   } as unknown as Workspace
   useStudioStore.setState({ serviceSettingsDrafts: {}, workspace })
   const api = {
@@ -656,7 +661,7 @@ await test('endpoint edits reject a provenance mismatch without implicitly start
   const schema = { type: 'object', properties: { port: { type: 'integer' } } }
   const workspace = {
     project: { id: projectID, name: 'Provenance auto update', rootPath },
-    graph: { services: [service], links: [] }, files: [], git: { changes: [] },
+    graph: { services: [service], links: [] }, files: [],
   } as unknown as Workspace
   useStudioStore.setState({ serviceSettingsDrafts: {}, workspace })
   let startCalls = 0
@@ -724,7 +729,10 @@ await test('schema preview is Core-fenced, read-only to Project values, and boun
       previewObservedLockedDraft = Boolean(useStudioStore.getState().serviceSettingsDrafts[configurationDraftKey(rootPath, service.id)]?.refreshingContract)
       return Promise.resolve({
         schemaJson: JSON.stringify(liveSchema), schemaDigest: `sha256:${'a'.repeat(64)}`,
+        previousSchemaDigest: `sha256:${'d'.repeat(64)}`,
         settingsDigest: `sha256:${'b'.repeat(64)}`, draftDigest: `sha256:${'c'.repeat(64)}`,
+        migrationRequired: false, migrationFromVersion: 0, migrationToVersion: 0,
+        migrationCandidateDigest: '', migrationChangedPaths: [], recoveryCopyPath: '', recoverySchemaCopyPath: '',
         valuesCompatible: false,
       })
     },
@@ -778,7 +786,7 @@ await test('schema refresh flushes a pending settings draft before reloading it'
   const projectRoot = '/tmp/schema-refresh-draft'
   const workspace = {
     project: { id: projectID, name: 'Schema refresh', rootPath: projectRoot },
-    graph: { services: [service], links: [] }, files: [], git: { changes: [] },
+    graph: { services: [service], links: [] }, files: [],
   } as unknown as Workspace
   const schema = { type: 'object', properties: { port: { type: 'integer', minimum: 1, maximum: 65535 } } }
   const liveSchema = { type: 'object', properties: { port: { type: 'integer', minimum: 1, maximum: 65534 } } }
@@ -822,7 +830,10 @@ await test('schema refresh flushes a pending settings draft before reloading it'
   const pendingPersist = controller.persistServiceSettingsDraft(key)
   await controller.refreshServiceSettingsSchema(service, {
     schemaJson: JSON.stringify(liveSchema), schemaDigest: `sha256:${'a'.repeat(64)}`,
-    settingsDigest: 'sha256:settings', draftDigest: `sha256:${'b'.repeat(64)}`, valuesCompatible: true,
+    previousSchemaDigest: `sha256:${'d'.repeat(64)}`,
+    settingsDigest: `sha256:${'e'.repeat(64)}`, draftDigest: `sha256:${'b'.repeat(64)}`,
+    migrationRequired: false, migrationFromVersion: 0, migrationToVersion: 0,
+    migrationCandidateDigest: '', migrationChangedPaths: [], recoveryCopyPath: '', recoverySchemaCopyPath: '', valuesCompatible: true,
   })
   await pendingPersist
 
@@ -869,7 +880,7 @@ await test('live configuration contract is fenced by authenticated replica artif
   const projectRoot = '/tmp/provenance-project'
   const workspace = {
     project: { id: projectID, name: projectID, rootPath: projectRoot },
-    graph: { services: [service], links: [] }, files: [], git: { changes: [] },
+    graph: { services: [service], links: [] }, files: [],
   } as unknown as Workspace
   const schema = { type: 'object', properties: { enabled: { type: 'boolean' } } }
   const status = (digest: string, replicaID = 'replica-1', replicaIDs = [replicaID]) => JSON.stringify({
@@ -908,7 +919,7 @@ await test('open service draft revalidates automatically when runtime artifact p
   const projectRoot = '/tmp/runtime-release-poll'
   const workspace = {
     project: { id: projectID, name: projectID, rootPath: projectRoot },
-    graph: { services: [service], links: [] }, files: [], git: { changes: [] },
+    graph: { services: [service], links: [] }, files: [],
   } as unknown as Workspace
   const schema = { type: 'object', properties: { enabled: { type: 'boolean' } } }
   let runtimeDigest = artifactDigest
@@ -1090,6 +1101,31 @@ await test('StudioPlugin peer catalog rejects malformed and oversized live manif
   await assert.rejects(controller.pluginReadServicePeerCatalog(projectID, 'server', 'echo'), /bridge.peer_response_invalid/u)
 })
 
+await test('StudioPlugin receives only active safe secret references for a manifest-declared purpose', async () => {
+  const projectID = 'secret-picker-project'
+  useStudioStore.setState({ serviceSettingsDrafts: {}, workspace: {
+    project: { id: projectID, name: projectID, rootPath: '/tmp/secret-picker-project' },
+    graph: { services: [service] },
+  } as Workspace })
+  const item = { reference: `ssr:v1:${'b'.repeat(32)}`, serviceId: 'server', purpose: 'server.http.auth.credential', label: 'API token', state: 'active', createdAt: '2026-10-17T12:00:00Z' }
+  let catalogReads = 0
+  const api = {
+    readRuntimeServiceMetadata: (_projectID: string, serviceID: string, view: string) => Promise.resolve(view === 'manifest'
+      ? JSON.stringify({ id: serviceID, secretPurposes: ['server.http.auth.credential'] })
+      : JSON.stringify({})),
+    readLocalServiceSecretReferences: (serviceID: string) => {
+      catalogReads++
+      return Promise.resolve(JSON.stringify({ schemaVersion: 'service-secret-references/v1', target: 'local', serviceId: serviceID, items: [item, { ...item, reference: `ssr:v1:${'c'.repeat(32)}`, state: 'revoked' }], pendingRotations: [], pendingRegistrations: [] }))
+    },
+  } as unknown as StudioAPI
+  const controller = createStudioController(api)
+  assert.deepEqual(await controller.pluginReadServiceSecretReferences(projectID, 'server', 'server.http.auth.credential'), {
+    items: [{ reference: item.reference, label: item.label, state: 'active' }], truncated: false,
+  })
+  await assert.rejects(controller.pluginReadServiceSecretReferences(projectID, 'server', 'server.http.other'), /bridge.secret_purpose_not_declared/u)
+  assert.equal(catalogReads, 1)
+})
+
 await test('generic peer field verifies the selected Project service contract through Core metadata', async () => {
   const projectID = 'generic-peer-project'
   const echo: RuntimeService = { ...service, id: 'echo', name: 'Echo', version: '1.2.1', artifact: { id: 'echo', version: '1.2.1', platform: 'linux/arm64', digest: artifactDigest } }
@@ -1251,12 +1287,12 @@ await test('StudioPlugin patch is rejected when the active Project changes durin
   const projectRoot = '/tmp/plugin-context-before'
   const otherWorkspace = {
     project: { id: 'plugin-context-after', name: 'after', rootPath: '/tmp/plugin-context-after' },
-    graph: { services: [], links: [] }, files: [], git: { changes: [] },
+    graph: { services: [], links: [] }, files: [],
   } as unknown as Workspace
   const initialWorkspace = {
     project: { id: projectID, name: 'before', rootPath: projectRoot },
     graph: { services: [{ ...service, settingsPath: 'services/server/settings.json' }], links: [] },
-    files: [], git: { changes: [] },
+    files: [],
   } as unknown as Workspace
   const schema = { type: 'object', properties: { enabled: { type: 'boolean' } } }
   let persisted = 0
@@ -1364,6 +1400,9 @@ await test('StudioPlugin settings bridge is project-scoped, redacted and shares 
   assert.equal(stored.address, '0.0.0.0')
   assert.deepEqual(stored.config, { routes })
   assert.equal(stored.password, 'must-not-cross-host')
+  assert.deepEqual(applyIntent, [], 'route changes are saved in Project and wait for explicit review before Core apply')
+  assert.ok(useStudioStore.getState().applyReviewPaths.includes('server.config.routes.item-1: added (value-redacted)'))
+  await controller.applyServiceSettings(draftKey)
   assert.deepEqual(applyIntent, ['dev.apply', 'local'])
   await assert.rejects(controller.pluginReadServiceSettings('another-project', 'server'), /bridge.context_changed/u)
 })

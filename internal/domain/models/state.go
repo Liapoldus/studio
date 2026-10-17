@@ -103,11 +103,19 @@ type ProjectSettingsSnapshot struct {
 // ServiceSettingsSchemaPreview binds a read-only compatibility check to the
 // exact schema, Project settings file, and safe draft reviewed by the user.
 type ServiceSettingsSchemaPreview struct {
-	SchemaJSON       string `json:"schemaJson"`
-	SchemaDigest     string `json:"schemaDigest"`
-	SettingsDigest   string `json:"settingsDigest"`
-	DraftDigest      string `json:"draftDigest"`
-	ValuesCompatible bool   `json:"valuesCompatible"`
+	SchemaJSON               string   `json:"schemaJson"`
+	SchemaDigest             string   `json:"schemaDigest"`
+	PreviousSchemaDigest     string   `json:"previousSchemaDigest"`
+	SettingsDigest           string   `json:"settingsDigest"`
+	DraftDigest              string   `json:"draftDigest"`
+	MigrationCandidateDigest string   `json:"migrationCandidateDigest"`
+	RecoveryCopyPath         string   `json:"recoveryCopyPath"`
+	RecoverySchemaCopyPath   string   `json:"recoverySchemaCopyPath"`
+	MigrationChangedPaths    []string `json:"migrationChangedPaths"`
+	MigrationFromVersion     int      `json:"migrationFromVersion"`
+	MigrationToVersion       int      `json:"migrationToVersion"`
+	MigrationRequired        bool     `json:"migrationRequired"`
+	ValuesCompatible         bool     `json:"valuesCompatible"`
 }
 
 // ServiceSettingsDraft persists only a schema-validated safe patch. It never

@@ -10,6 +10,8 @@ export function ClientPreferences():Promise<string>;
 
 export function ConfigureCLIExecutable(arg1:string):Promise<models.ToolchainStatus>;
 
+export function CreateLocalServiceSecret(arg1:string,arg2:string,arg3:string,arg4:Array<number>,arg5:boolean):Promise<string>;
+
 export function CreateProject(arg1:string,arg2:string,arg3:string):Promise<models.Workspace>;
 
 export function CreateRuntimeService(arg1:models.RuntimeServiceInput):Promise<models.Workspace>;
@@ -28,51 +30,9 @@ export function EditorAssociations():Promise<string>;
 
 export function ExportTrafficReport():Promise<string>;
 
-export function GitAbort(arg1:string,arg2:boolean):Promise<void>;
-
-export function GitApplyStash(arg1:number,arg2:boolean,arg3:boolean):Promise<void>;
-
-export function GitBranches():Promise<Array<models.GitBranch>>;
-
-export function GitCheckout(arg1:string,arg2:boolean):Promise<void>;
-
-export function GitCherryPick(arg1:string,arg2:boolean):Promise<void>;
-
-export function GitCommit(arg1:string,arg2:Array<string>,arg3:boolean):Promise<string>;
-
-export function GitCommitStaged(arg1:string,arg2:boolean):Promise<string>;
-
-export function GitConflict(arg1:string):Promise<models.GitConflict>;
-
-export function GitDiff(arg1:string):Promise<models.GitDiff>;
-
-export function GitHistory(arg1:number):Promise<Array<models.GitCommit>>;
-
-export function GitMerge(arg1:string,arg2:boolean):Promise<void>;
-
-export function GitPull(arg1:string,arg2:string,arg3:boolean):Promise<void>;
-
-export function GitPush(arg1:string,arg2:string,arg3:boolean):Promise<void>;
-
-export function GitRebase(arg1:string,arg2:boolean):Promise<void>;
-
-export function GitRemotes():Promise<Array<models.GitRemote>>;
-
-export function GitResolveConflict(arg1:string,arg2:string,arg3:boolean):Promise<void>;
-
-export function GitStage(arg1:Array<string>,arg2:boolean):Promise<void>;
-
-export function GitStash(arg1:string,arg2:boolean,arg3:boolean):Promise<string>;
-
-export function GitStashes(arg1:number):Promise<Array<models.GitStash>>;
-
-export function GitUnstage(arg1:Array<string>,arg2:boolean):Promise<void>;
-
 export function ImportRuntimeServiceProjectCertificate(arg1:string,arg2:string,arg3:string):Promise<string>;
 
 export function ImportServiceSettingsSchema(arg1:string,arg2:string):Promise<models.Workspace>;
-
-export function InitializeGit():Promise<models.Workspace>;
 
 export function InspectCoreBinary(arg1:string):Promise<string>;
 
@@ -94,8 +54,6 @@ export function OpenFileExternally(arg1:string,arg2:string):Promise<void>;
 
 export function OpenProject(arg1:string):Promise<models.Workspace>;
 
-export function PrepareRemoteHandoff(arg1:string):Promise<string>;
-
 export function PreviewServiceSettingsSchema(arg1:string,arg2:string,arg3:string):Promise<models.ServiceSettingsSchemaPreview>;
 
 export function ProductInfo():Promise<models.ProductInfo>;
@@ -103,6 +61,8 @@ export function ProductInfo():Promise<models.ProductInfo>;
 export function PublishRuntimeServiceResourceJSON(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string,arg6:string,arg7:string,arg8:string):Promise<string>;
 
 export function ReadCoreSettings():Promise<string>;
+
+export function ReadLocalServiceSecretReferences(arg1:string):Promise<string>;
 
 export function ReadProjectSchema(arg1:string,arg2:string):Promise<Array<number>>;
 
@@ -120,7 +80,9 @@ export function ReadStudioPluginSurface(arg1:string,arg2:string,arg3:string):Pro
 
 export function ReadWorkspaceState():Promise<models.WorkspaceState>;
 
-export function RefreshServiceSettingsSchema(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string,arg6:string):Promise<models.Workspace>;
+export function RefreshServiceSettingsSchema(arg1:string,arg2:string,arg3:string,arg4:string):Promise<models.Workspace>;
+
+export function RegisterLocalServiceSecret(arg1:string,arg2:string,arg3:boolean):Promise<void>;
 
 export function RegisterRuntimeArtifact(arg1:string,arg2:string,arg3:string,arg4:string):Promise<models.ArtifactReference>;
 
@@ -129,6 +91,10 @@ export function RemoveEditorAssociation(arg1:string):Promise<void>;
 export function RemoveRuntimeArtifact(arg1:string,arg2:string,arg3:string,arg4:string,arg5:boolean):Promise<void>;
 
 export function RemoveStudioPlugin(arg1:string,arg2:string):Promise<void>;
+
+export function RevokeLocalServiceSecret(arg1:string,arg2:string,arg3:boolean):Promise<void>;
+
+export function RotateLocalServiceSecret(arg1:string,arg2:string,arg3:string,arg4:string,arg5:Array<number>,arg6:boolean):Promise<string>;
 
 export function RunStudioCommand(arg1:string,arg2:string,arg3:string,arg4:string):Promise<void>;
 
@@ -158,6 +124,8 @@ export function SelectProjectDirectory():Promise<string>;
 
 export function SelectRuntimeArtifactBinary():Promise<string>;
 
+export function SelectRuntimeServiceProjectDirectory(arg1:string,arg2:string):Promise<string>;
+
 export function SelectRuntimeServiceResourceArtifact(arg1:string,arg2:string):Promise<string>;
 
 export function SelectStudioPluginPackage():Promise<string>;
@@ -185,6 +153,8 @@ export function UpdateLocalCoreBinary(arg1:string,arg2:string,arg3:boolean):Prom
 export function UpdateServiceLink(arg1:models.ServiceLinkInput):Promise<models.Workspace>;
 
 export function Workspace():Promise<models.Workspace>;
+
+export function WriteProjectCandidateSettings(arg1:string,arg2:string,arg3:string,arg4:Array<number>):Promise<void>;
 
 export function WriteProjectSettings(arg1:string,arg2:string,arg3:string,arg4:Array<number>):Promise<void>;
 

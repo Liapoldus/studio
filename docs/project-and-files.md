@@ -66,9 +66,8 @@ liapoldus-project/
 как source. `.studio/workspace.json` хранит состояние вкладок и layout по схеме
 `workspace/v5` (вкладки закрываемые, drag-reorder, без pin). `.studio/` — локальное
 desktop state, исключается из CLI bundle и не содержит Core credentials.
-Git repository является частью Project:
-Studio явно показывает branch, revision и dirty state, но не подменяет Git
-источник истории своей SQLite-базой.
+Studio не управляет Git и не показывает ветки, изменения или историю. Источник
+версий проекта настраивается внешними инструментами.
 ```
 
 ## 3. Узлы дерева
@@ -134,7 +133,6 @@ sequenceDiagram
     actor Operator
     participant Studio
     participant Files as "Project files"
-    participant Git
     participant CLI as "liapoldus CLI"
     participant CoreAPI as "Core Management API"
 
@@ -143,14 +141,13 @@ sequenceDiagram
     Studio->>Files: Запускает local validation
     Operator->>Studio: Меняет settings/module reference
     Studio->>Files: Сохраняет draft
-    Operator->>Studio: Validate → Git diff → Commit
+    Operator->>Studio: Validate → сохранить Project
     Studio->>CLI: validate/plan/apply для local target
     CLI->>Files: Читает canonical project
     CLI->>CoreAPI: Локальный Core workflow через CLI
     CoreAPI-->>CLI: operationId и deploy report
-    Operator->>Studio: Remote handoff
-    Studio->>CLI: exact revision + target metadata
-    CLI-->>Operator: CLI/CI deployment workflow
+    Operator->>CLI: Remote deployment workflow
+    CLI-->>Operator: CLI/CI deployment report
 ```
 
 Studio не подключается к Core API, не хранит target credentials и не выполняет
@@ -192,18 +189,7 @@ Inspector различает четыре действия:
 
 - `Save draft` — сохранить локальное изменение;
 - `Validate` — проверить schema и references;
-- `Diff` — показать отличие от выбранной Git revision;
-- `Commit` — создать immutable revision;
 - `Open deploy report` — открыть результат CLI/CI.
-
-`Commit` disabled при:
-
-- невалидном manifest;
-- неизвестном field type;
-- отсутствующем обязательном module/file;
-- конфликте файлов;
-- невалидном project source;
-- незаполненном commit message.
 
 Studio не имеет кнопки `Apply to Core`. Deploy запускается универсальным CLI:
 
@@ -211,22 +197,21 @@ Studio не имеет кнопки `Apply to Core`. Deploy запускаетс
 liapoldus apply --project ./project --revision <commit> --target production
 ```
 
-CLI обязан получить exact commit, собрать bundle и передать его Core API. Studio
-может открыть сохранённый report, но не является его источником.
+CLI разрешает source revision по своему контракту, собирает bundle и передаёт его
+Core API. Studio может открыть сохранённый report, но не является его источником.
 
 ## 9. Project и target report switching
 
 В верхней панели явно показываются контексты проекта и последнего deploy report:
 
 ```text
-Project: forms-platform       Revision: 0123456       Target report: production
+Project: forms-platform       Target report: production
 ```
 
-При смене project, branch или report Studio предупреждает о:
+При смене project или report Studio предупреждает о:
 
 - dirty files;
 - inspector drafts;
-- незавершённых Git operations;
 - недоступных plugin editors;
 - несоответствии target profile.
 
@@ -239,7 +224,6 @@ Project: forms-platform       Revision: 0123456       Target report: production
 - local validation;
 - draft;
 - plugin pages, не требующие Core;
-- commit, push/pull и другие Git operations.
 
 Deploy state без CLI report не считается применённым. Studio не должна выдавать
 локальный source за active Core generation.

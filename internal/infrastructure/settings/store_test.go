@@ -118,6 +118,31 @@ func TestValidateValuesAgainstCandidateSchemaIsReadOnlyAndAcceptsSafeDraftOverla
 	}
 }
 
+func TestValidateProjectSettingsDocumentAgainstCandidateSchemaIsReadOnly(t *testing.T) {
+	root := t.TempDir()
+	files := projectfiles.FileSystem{}
+	if err := files.WriteFile(context.Background(), root, "schemas/server/settings.json", []byte(`{"type":"object"}`)); err != nil {
+		t.Fatal(err)
+	}
+	if err := files.WriteFile(context.Background(), root, "services/server/settings.json", []byte(`{"schemaVersion":1,"config":{"unknown":"preserve"}}`)); err != nil {
+		t.Fatal(err)
+	}
+	store := Store{Files: files}
+	candidateSchema := []byte(`{"type":"object","required":["schemaVersion","config"],"additionalProperties":false,"properties":{"schemaVersion":{"const":2},"config":{"type":"object","additionalProperties":true}}}`)
+	compatible, err := store.ValidateSettingsDocumentAgainstSchemaDocument(context.Background(), root, "schemas/server/settings.json", candidateSchema, []byte(`{"schemaVersion":2,"config":{"unknown":"preserve"}}`))
+	if err != nil || !compatible {
+		t.Fatalf("valid candidate document rejected: compatible=%v err=%v", compatible, err)
+	}
+	incompatible, err := store.ValidateSettingsDocumentAgainstSchemaDocument(context.Background(), root, "schemas/server/settings.json", candidateSchema, []byte(`{"schemaVersion":2,"config":{},"unrecognized":"preserve"}`))
+	if err != nil || incompatible {
+		t.Fatalf("unknown top-level candidate field was not rejected: compatible=%v err=%v", incompatible, err)
+	}
+	stored, err := files.ReadFile(context.Background(), root, "services/server/settings.json")
+	if err != nil || string(stored) != `{"schemaVersion":1,"config":{"unknown":"preserve"}}` {
+		t.Fatalf("validation mutated Project bytes: %s err=%v", stored, err)
+	}
+}
+
 func TestStoreValidatesRenderedSchemaBeforeWriting(t *testing.T) {
 	root := t.TempDir()
 	files := projectfiles.FileSystem{}
@@ -308,6 +333,37 @@ func TestSnapshotDigestRejectsStaleWritesAndDraftsRemainSchemaSafe(t *testing.T)
 	}
 	if updateErr := store.UpdateIfDigest(context.Background(), root, "services/server/settings.json", "schemas/server.json", current.Digest, []byte(`{"port":19100}`)); updateErr != nil {
 		t.Fatalf("current digest should permit the write: %v", updateErr)
+	}
+}
+
+func TestOpaqueSecretReferenceIsVisibleAndWritableButPlaintextIsRejected(t *testing.T) {
+	root := t.TempDir()
+	files := projectfiles.FileSystem{}
+	write := func(path, content string) {
+		t.Helper()
+		if err := files.WriteFile(context.Background(), root, path, []byte(content)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("schema.json", `{"type":"object","additionalProperties":false,"properties":{"secretRef":{"type":"string","pattern":"^ssr:v1:[a-f0-9]{32}$","x-liapoldus-secret-reference":true,"x-studio-secret-purpose":"server.http.auth.credential"}}}`)
+	const reference = "ssr:v1:00112233445566778899aabbccddeeff"
+	write("settings.json", `{"secretRef":"`+reference+`"}`)
+	store := Store{Files: files}
+	snapshot, err := store.Snapshot(context.Background(), root, "settings.json", "schema.json")
+	if err != nil || !strings.Contains(snapshot.ValuesJSON, reference) {
+		t.Fatalf("opaque reference should remain available as safe metadata: %s err=%v", snapshot.ValuesJSON, err)
+	}
+	if err := store.ValidatePatch(context.Background(), root, "settings.json", "schema.json", []byte(`{"secretRef":"`+reference+`"}`)); err != nil {
+		t.Fatalf("declared opaque reference was rejected: %v", err)
+	}
+	if err := store.Update(context.Background(), root, "settings.json", "schema.json", []byte(`{"secretRef":"`+reference+`"}`)); err != nil {
+		t.Fatalf("declared opaque reference could not be persisted: %v", err)
+	}
+	if err := store.ValidatePatch(context.Background(), root, "settings.json", "schema.json", []byte(`{"secretRef":"plaintext-must-not-be-stored"}`)); !errors.Is(err, ErrSensitiveField) {
+		t.Fatalf("plaintext secret value was not rejected: %v", err)
+	}
+	if err := store.ValidatePatch(context.Background(), root, "settings.json", "schema.json", []byte(`{"secretRef":"ssr:v1:00112233445566778899aabbccddeefg"}`)); !errors.Is(err, ErrSensitiveField) {
+		t.Fatalf("malformed reference was not rejected: %v", err)
 	}
 }
 
@@ -868,6 +924,45 @@ func TestProtectedArrayInsertAddsSchemaValidatedServiceRoute(t *testing.T) {
 		if readErr != nil || string(after) != string(before) {
 			t.Fatalf("rejected insert changed canonical settings: before=%s after=%s err=%v", before, after, readErr)
 		}
+	}
+}
+
+func TestUpdateProjectCandidateIfDigestPersistsSafeIncompleteRoute(t *testing.T) {
+	root := t.TempDir()
+	files := projectfiles.FileSystem{}
+	write := func(path, content string) {
+		t.Helper()
+		if err := files.WriteFile(context.Background(), root, path, []byte(content)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("schemas/server.json", `{"type":"object","properties":{"config":{"type":"object","additionalProperties":false,"properties":{"routes":{"type":"array","items":{"type":"object","additionalProperties":false,"required":["id","listenerId","handler"],"properties":{"id":{"type":"string","minLength":1},"listenerId":{"type":"string","minLength":1},"handler":{"type":"object","additionalProperties":false,"required":["type","instanceId","capability"],"properties":{"type":{"const":"service"},"instanceId":{"type":"string","minLength":1},"capability":{"type":"string","minLength":1}}}}}}}}}}`)
+	write("services/server/settings.json", `{"config":{"routes":[]}}`)
+	store := Store{Files: files}
+	snapshot, err := store.Snapshot(context.Background(), root, "services/server/settings.json", "schemas/server.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	patch := []byte(`{"config":{"routes":{"$studioArrayOps/v1":[{"op":"insert","index":0,"value":{"id":"route-home","listenerId":"web","handler":{"type":"service","instanceId":"","capability":""}}}]}}}`)
+	strictErr := store.UpdateIfDigest(context.Background(), root, "services/server/settings.json", "schemas/server.json", snapshot.Digest, patch)
+	if strictErr == nil {
+		t.Fatal("strict project settings write unexpectedly accepted an incomplete route")
+	}
+	candidateErr := store.UpdateProjectCandidateIfDigest(context.Background(), root, "services/server/settings.json", "schemas/server.json", snapshot.Digest, patch)
+	if candidateErr != nil {
+		t.Fatalf("safe incomplete candidate could not be saved to Project: %v", candidateErr)
+	}
+	saved, err := files.ReadFile(context.Background(), root, "services/server/settings.json")
+	if err != nil || !json.Valid(saved) || !strings.Contains(string(saved), `"instanceId": ""`) {
+		t.Fatalf("incomplete candidate was not retained as valid JSON: %s, err=%v", saved, err)
+	}
+	snapshot, err = store.Snapshot(context.Background(), root, "services/server/settings.json", "schemas/server.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	invalidPatch := []byte(`{"config":{"routes":{"$studioArrayOps/v1":[{"op":"insert","index":1,"value":{"id":"secret-route","listenerId":"web","handler":{"type":"service","instanceId":"","capability":""},"privateKey":"secret"}}]}}}`)
+	if err := store.UpdateProjectCandidateIfDigest(context.Background(), root, "services/server/settings.json", "schemas/server.json", snapshot.Digest, invalidPatch); err == nil {
+		t.Fatalf("undeclared candidate field was accepted: %v", err)
 	}
 }
 

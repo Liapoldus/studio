@@ -1,7 +1,7 @@
 # Инструкции проекта Liapoldus Studio
 
 Studio — отдельная desktop-среда разработки экосистемы Liapoldus: TypeScript/React
-UI и Go backend на Wails. Studio — workspace для файлов, Git и отчётов CLI, не
+UI и Go backend на Wails. Studio — workspace для файлов, сервисного графа и отчётов CLI, не
 Core-клиент.
 
 ## Архитектура
@@ -73,7 +73,7 @@ Core-клиент.
 - Bootstrap задаётся только ENV: без runtime JSON loaders и config flags.
   Desktop использует `STUDIO_DESKTOP_DB_PATH` (абсолютный путь, default
   `os.UserConfigDir()/Liapoldus/Studio/client.sqlite`).
-- SQLite Studio хранит project/Git metadata, локальные drafts, imported CLI/CI
+- SQLite Studio хранит project metadata, локальные drafts, imported CLI/CI
   reports и client state. Не копировать Core/service settings или credentials.
 - Service readiness на canvas разрешено показывать только по typed CLI-команде
   `service status`, возвращающей Core-backed ответ. Это ephemeral status текущей
@@ -101,7 +101,7 @@ executables.
 product contracts. Замороженные local snapshots `services/captcha/` и
 `services/identity/` (вне `services/go.work`, без remotes) не изменять. Server
 extension не обращается к Wails, Core или Service SDK напрямую. Host уже
-предоставляет ограниченный typed `studio-service-editor/v1` bridge: redacted
+предоставляет ограниченный typed `studio-service-editor/v2` bridge: redacted
 settings read, Core-backed `service.configuration-ui.read` и
 `service.peer.catalog.read`, общий draft и сохранение canonical Project через
 host. Peer catalog выдаёт только сервисы открытого Project либо ограниченные

@@ -21,7 +21,7 @@ models/ ◄────────────── views/
 `frontend/src/models/` содержит frontend-owned типы и чистые функции:
 
 - tabbed-модель (`Tab`, `TabKind`, `WorkspaceSnapshot`) и canvas state;
-- workspace snapshot `workspace/v5` (v3/v4 recovery-aware migration removes retired file/runtime/artifact tabs);
+- workspace snapshot `workspace/v5` (v3/v4 recovery-aware migration removes retired file/runtime/artifact and Git tabs);
 - безопасная merge/patch-модель настроек: nested path edits, ограничение JSON,
   prototype-key rejection и удаление patch-пути при возврате к baseline;
 - `view: 'workspace' | 'home' | 'settings'` вместо навигационного
@@ -34,7 +34,7 @@ Document-модель (`DocumentState`, `documents`, `activeDocument`) удал�
 
 ```ts
 type TabKind =
-  | 'canvas' | 'files' | 'git' | 'reports' | 'studio-plugins'
+  | 'canvas' | 'files' | 'reports' | 'studio-plugins'
   | 'artifacts' | 'runtime' | 'problems' | 'output'
   | 'studio-plugin';
 
@@ -71,7 +71,7 @@ Wails.
 - pure setters и reducers. Нижний dock в state отсутствует: `problems`, `output`
   и `reports` — обычные вкладки.
 
-Store не знает о Wails, filesystem, Git, CLI и Core. Async operations не живут
+Store не знает о Wails, filesystem, CLI и Core. Async operations не живут
 в store: это предотвращает скрытые race conditions и делает state transitions
 тестируемыми.
 
@@ -91,7 +91,7 @@ Wails API instance. Controller:
 - передаёт canvas mutations в Graph API и `UpdateServiceLink` для link contract;
 - не содержит JSX и не зависит от конкретного view.
 
-Все file, Git, CLI, graph, settings и link actions проходят через controller.
+Все file, CLI, graph, settings и link actions проходят через controller.
 `openFile`, `Cmd/Ctrl+S` и document-модель в controller отсутствуют.
 
 ### Views

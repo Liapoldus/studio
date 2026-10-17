@@ -1,13 +1,4 @@
 import type {
-  GitChange as GitChangeData,
-  GitBranch as GitBranchData,
-  GitCommit as GitCommitData,
-  GitConflict as GitConflictData,
-  GitConflictSide as GitConflictSideData,
-  GitDiff as GitDiffData,
-  GitRemote as GitRemoteData,
-  GitStash as GitStashData,
-  GitStatus as GitStatusData,
   Diagnostic as DiagnosticData,
   InstalledStudioPluginState as InstalledStudioPluginStateData,
   ProjectFile as ProjectFileData,
@@ -140,135 +131,6 @@ export class ProjectFile implements ProjectFileData {
   }
 }
 
-export class GitChange implements GitChangeData {
-  path: string
-  indexStatus: string
-  worktreeStatus: string
-
-  constructor(source: unknown = {}) {
-    const value = object(source, 'git change')
-    this.path = stringField(value, 'path', 'git change')
-    this.indexStatus = stringField(value, 'indexStatus', 'git change')
-    this.worktreeStatus = stringField(value, 'worktreeStatus', 'git change')
-  }
-}
-
-export class GitBranch implements GitBranchData {
-  name: string
-  remote: string
-  current: boolean
-
-  constructor(source: unknown = {}) {
-    const value = object(source, 'git branch')
-    this.name = stringField(value, 'name', 'git branch')
-    this.remote = stringField(value, 'remote', 'git branch')
-    this.current = booleanField(value, 'current', 'git branch')
-  }
-}
-
-export class GitDiff implements GitDiffData {
-  path: string
-  patch: string
-  truncated: boolean
-
-  constructor(source: unknown = {}) {
-    const value = object(source, 'git diff')
-    this.path = stringField(value, 'path', 'git diff')
-    this.patch = stringField(value, 'patch', 'git diff')
-    this.truncated = booleanField(value, 'truncated', 'git diff')
-  }
-}
-
-export class GitConflictSide implements GitConflictSideData {
-  available: boolean
-  content: string
-  truncated: boolean
-
-  constructor(source: unknown = {}) {
-    const value = object(source, 'git conflict side')
-    this.available = booleanField(value, 'available', 'git conflict side')
-    this.content = stringField(value, 'content', 'git conflict side')
-    this.truncated = booleanField(value, 'truncated', 'git conflict side')
-  }
-}
-
-export class GitConflict implements GitConflictData {
-  path: string
-  base: GitConflictSide
-  ours: GitConflictSide
-  theirs: GitConflictSide
-
-  constructor(source: unknown = {}) {
-    const value = object(source, 'git conflict')
-    this.path = stringField(value, 'path', 'git conflict')
-    this.base = new GitConflictSide(value.base)
-    this.ours = new GitConflictSide(value.ours)
-    this.theirs = new GitConflictSide(value.theirs)
-  }
-}
-
-export class GitCommit implements GitCommitData {
-  hash: string
-  shortHash: string
-  author: string
-  timestamp: string
-  subject: string
-
-  constructor(source: unknown = {}) {
-    const value = object(source, 'git commit')
-    this.hash = stringField(value, 'hash', 'git commit')
-    this.shortHash = stringField(value, 'shortHash', 'git commit')
-    this.author = stringField(value, 'author', 'git commit')
-    this.timestamp = stringField(value, 'timestamp', 'git commit')
-    this.subject = stringField(value, 'subject', 'git commit')
-  }
-}
-
-export class GitRemote implements GitRemoteData {
-  name: string
-  fetchUrl: string
-  pushUrl: string
-
-  constructor(source: unknown = {}) {
-    const value = object(source, 'git remote')
-    this.name = stringField(value, 'name', 'git remote')
-    this.fetchUrl = stringField(value, 'fetchUrl', 'git remote')
-    this.pushUrl = stringField(value, 'pushUrl', 'git remote')
-  }
-}
-
-export class GitStash implements GitStashData {
-  ref: string
-  message: string
-  createdAt: string
-
-  constructor(source: unknown = {}) {
-    const value = object(source, 'git stash')
-    this.ref = stringField(value, 'ref', 'git stash')
-    this.message = stringField(value, 'message', 'git stash')
-    this.createdAt = stringField(value, 'createdAt', 'git stash')
-  }
-}
-
-export class GitStatus implements GitStatusData {
-  branch: string
-  revision: string
-  changes: GitChange[]
-  dirty: boolean
-  available: boolean
-  conflict: boolean
-
-  constructor(source: unknown = {}) {
-    const value = object(source, 'git status')
-    this.branch = stringField(value, 'branch', 'git status')
-    this.revision = stringField(value, 'revision', 'git status')
-    this.changes = arrayField(value, 'changes', GitChange, 'git status')
-    this.dirty = booleanField(value, 'dirty', 'git status')
-    this.available = booleanField(value, 'available', 'git status')
-    this.conflict = booleanField(value, 'conflict', 'git status')
-  }
-}
-
 export class InstalledStudioPluginState implements InstalledStudioPluginStateData {
   id: string
   version: string
@@ -391,13 +253,11 @@ export class ServiceGraph implements ServiceGraphData {
 export class Workspace implements WorkspaceData {
   project: Project | null
   files: ProjectFile[]
-  git: GitStatus
 
   constructor(source: unknown = {}) {
     const value = object(source, 'workspace')
     this.project = value.project === null || value.project === undefined ? null : new Project(value.project)
     this.files = arrayField(value, 'files', ProjectFile, 'workspace')
-    this.git = new GitStatus(value.git)
     this.graph = new ServiceGraph(value.graph)
   }
 
@@ -427,23 +287,43 @@ export class ServiceLinkInput {
 }
 
 export class ServiceSettingsSchemaPreview implements ServiceSettingsSchemaPreviewData {
+  migrationChangedPaths: string[]
   schemaJson: string
   schemaDigest: string
+  previousSchemaDigest: string
   settingsDigest: string
   draftDigest: string
+  migrationCandidateDigest: string
+  recoveryCopyPath: string
+  recoverySchemaCopyPath: string
+  migrationFromVersion: number
+  migrationToVersion: number
+  migrationRequired: boolean
   valuesCompatible: boolean
 
   constructor(source: unknown = {}) {
     const value = object(source, 'service settings schema preview')
+    this.migrationChangedPaths = stringArrayField(value, 'migrationChangedPaths', 'service settings schema preview')
     this.schemaJson = stringField(value, 'schemaJson', 'service settings schema preview')
     this.schemaDigest = stringField(value, 'schemaDigest', 'service settings schema preview')
+    this.previousSchemaDigest = stringField(value, 'previousSchemaDigest', 'service settings schema preview')
     this.settingsDigest = stringField(value, 'settingsDigest', 'service settings schema preview')
     this.draftDigest = stringField(value, 'draftDigest', 'service settings schema preview')
+    this.migrationCandidateDigest = stringField(value, 'migrationCandidateDigest', 'service settings schema preview')
+    this.recoveryCopyPath = stringField(value, 'recoveryCopyPath', 'service settings schema preview')
+    this.recoverySchemaCopyPath = stringField(value, 'recoverySchemaCopyPath', 'service settings schema preview')
+    this.migrationFromVersion = numberField(value, 'migrationFromVersion', 'service settings schema preview')
+    this.migrationToVersion = numberField(value, 'migrationToVersion', 'service settings schema preview')
+    this.migrationRequired = booleanField(value, 'migrationRequired', 'service settings schema preview')
     this.valuesCompatible = booleanField(value, 'valuesCompatible', 'service settings schema preview')
     if (this.schemaJson.length > 1_048_576 ||
       !/^sha256:[a-f0-9]{64}$/u.test(this.schemaDigest) ||
+      !/^sha256:[a-f0-9]{64}$/u.test(this.previousSchemaDigest) ||
       !/^sha256:[a-f0-9]{64}$/u.test(this.settingsDigest) ||
-      !/^sha256:[a-f0-9]{64}$/u.test(this.draftDigest)) {
+      !/^sha256:[a-f0-9]{64}$/u.test(this.draftDigest) ||
+      this.migrationChangedPaths.length > 16 || this.migrationChangedPaths.some((path) => !/^\/(?:[A-Za-z0-9_.~-]+\/?)*$/u.test(path)) ||
+      (this.migrationRequired && (!Number.isSafeInteger(this.migrationFromVersion) || !Number.isSafeInteger(this.migrationToVersion) || this.migrationFromVersion <= 0 || this.migrationToVersion <= 0 || this.migrationFromVersion === this.migrationToVersion || !/^sha256:[a-f0-9]{64}$/u.test(this.migrationCandidateDigest) || this.migrationChangedPaths.length === 0 || this.recoveryCopyPath.startsWith('/') || !this.recoveryCopyPath.endsWith('.bak') || this.recoveryCopyPath.split('/').includes('..') || this.recoverySchemaCopyPath.startsWith('/') || !this.recoverySchemaCopyPath.endsWith('.bak') || this.recoverySchemaCopyPath.split('/').includes('..'))) ||
+      (!this.migrationRequired && (this.migrationFromVersion !== 0 || this.migrationToVersion !== 0 || this.migrationCandidateDigest !== '' || this.migrationChangedPaths.length !== 0 || this.recoveryCopyPath !== '' || this.recoverySchemaCopyPath !== ''))) {
       throw new Error('Invalid Studio service settings schema preview')
     }
   }
@@ -553,4 +433,4 @@ export class WorkspaceState implements WorkspaceStateData {
 }
 
 
-export const models = { ArtifactReference, ProductInfo, Project, ProjectFile, ToolchainStatus, GitBranch, GitChange, GitDiff, GitConflictSide, GitConflict, GitStash, GitStatus, InstalledStudioPluginState, RuntimeService, ServiceLink, ServiceGraph, TrafficRecordView, Workspace, WorkspaceState }
+export const models = { ArtifactReference, ProductInfo, Project, ProjectFile, ToolchainStatus, InstalledStudioPluginState, RuntimeService, ServiceLink, ServiceGraph, TrafficRecordView, Workspace, WorkspaceState }

@@ -51,6 +51,57 @@ func TestImportProjectResourceArtifactCopiesWithoutOverwriting(t *testing.T) {
 	}
 }
 
+func TestPackageProjectDirectoryIsDeterministicAndRejectsSensitiveFiles(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "assets", "images"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "index.html"), []byte("<h1>hello</h1>"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "assets", "images", "logo.svg"), []byte("<svg/>"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	first, err := packageProjectDirectory(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if cleanupErr := os.Remove(first); cleanupErr != nil && !errors.Is(cleanupErr, os.ErrNotExist) {
+			t.Errorf("remove first test archive: %v", cleanupErr)
+		}
+	})
+	second, err := packageProjectDirectory(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if cleanupErr := os.Remove(second); cleanupErr != nil && !errors.Is(cleanupErr, os.ErrNotExist) {
+			t.Errorf("remove second test archive: %v", cleanupErr)
+		}
+	})
+	firstBytes, err := os.ReadFile(first) //nolint:gosec // The fixture path is created inside t.TempDir by packageProjectDirectory.
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondBytes, err := os.ReadFile(second) //nolint:gosec // The fixture path is created inside t.TempDir by packageProjectDirectory.
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(firstBytes, secondBytes) {
+		t.Fatal("directory archive differs between identical runs")
+	}
+	if err := os.WriteFile(filepath.Join(root, "private.key"), []byte("not for web"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if archive, err := packageProjectDirectory(root); err == nil {
+		if removeErr := os.Remove(archive); removeErr != nil {
+			t.Fatalf("remove unexpected archive: %v", removeErr)
+		}
+		t.Fatal("directory containing a private key was packaged")
+	}
+}
+
 func TestImportProjectCertificateCopiesOnlyPublicCertificate(t *testing.T) {
 	root := t.TempDir()
 	sourceDir := t.TempDir()

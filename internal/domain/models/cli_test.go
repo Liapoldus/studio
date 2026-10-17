@@ -5,25 +5,6 @@ import (
 	"testing"
 )
 
-func TestCLIHandoffValidationPinsRevisionAndRejectsLocal(t *testing.T) {
-	handoff := CLIHandoff{
-		SchemaVersion: "studio-cli-handoff/v1",
-		ProjectID:     "project-1",
-		Repository:    "/workspace/project",
-		CommitSHA:     "abc123",
-		Target:        "production",
-		Args:          []string{"apply", "--target", "production", "--revision", "abc123"},
-	}
-	if err := handoff.Validate(); err != nil {
-		t.Fatal(err)
-	}
-	handoff.Target = "local"
-	handoff.Args[2] = "local"
-	if err := handoff.Validate(); err == nil {
-		t.Fatal("accepted local deployment handoff")
-	}
-}
-
 func TestCLIEventPreservesOperationAndTargetMetadata(t *testing.T) {
 	var event CLIEvent
 	if err := json.Unmarshal([]byte(`{"schemaVersion":"cli-events/v1","type":"operation.updated","operationId":"op-1","target":"local","state":"running","kind":"apply","timestamp":"2026-10-10T00:00:00Z"}`), &event); err != nil {
@@ -53,6 +34,11 @@ func TestCLIRequestAllowsOnlyReviewedStudioCommandShapes(t *testing.T) {
 		{name: "service status", args: []string{"service", "status", "echo", "--target", "local"}, want: true},
 		{name: "service admin surface from Core", args: []string{"service", "admin-surface", "inspect", "server", "--target", "local"}, want: true},
 		{name: "service admin surface remote target rejected", args: []string{"service", "admin-surface", "inspect", "server", "--target", "production"}},
+		{name: "service secret list", args: []string{"service", "secret", "list", "--target", "local", "--service", "server"}, want: true},
+		{name: "service secret create requires trusted stdin", args: []string{"service", "secret", "create", "--target", "local", "--service", "server", "--purpose", "http.auth.bearer", "--label", "edge token", "--secret-stdin", "--confirm"}},
+		{name: "service secret rotate requires trusted stdin", args: []string{"service", "secret", "rotate", "--target", "local", "--service", "server", "--reference", "ssr:v1:00112233445566778899aabbccddeeff", "--purpose", "http.auth.bearer", "--label", "edge token v2", "--secret-stdin", "--confirm"}},
+		{name: "service secret register uses only staged reference", args: []string{"service", "secret", "register", "--target", "local", "--service", "server", "--reference", "ssr:v1:00112233445566778899aabbccddeeff", "--confirm"}, want: true},
+		{name: "service secret revoke", args: []string{"service", "secret", "revoke", "--target", "local", "--service", "server", "--reference", "ssr:v1:00112233445566778899aabbccddeeff", "--confirm"}, want: true},
 		{name: "development apply waits for Core", args: []string{"dev", "apply", "--project", root, "--target", "local", "--confirm", "--wait"}, want: true},
 		{name: "development apply without observation rejected", args: []string{"dev", "apply", "--project", root, "--target", "local", "--confirm"}},
 		{name: "old plugin status rejected", args: []string{"plugin", "status", "echo", "--target", "local"}},
@@ -68,5 +54,27 @@ func TestCLIRequestAllowsOnlyReviewedStudioCommandShapes(t *testing.T) {
 				t.Fatal("expected command to be rejected")
 			}
 		})
+	}
+}
+
+func TestCLISecretInputIsAllowedOnlyForServiceSecretCreateOrRotate(t *testing.T) {
+	root := t.TempDir()
+	args := []string{"service", "secret", "create", "--target", "local", "--service", "server", "--purpose", "http.auth.bearer", "--label", "edge token", "--secret-stdin", "--confirm"}
+	if err := (CLIRequest{ProjectRoot: root, Args: args, SecretInput: []byte("host-owned-value")}).Validate(); err != nil {
+		t.Fatalf("typed secure secret input was rejected: %v", err)
+	}
+	rotateArgs := []string{"service", "secret", "rotate", "--target", "local", "--service", "server", "--reference", "ssr:v1:00112233445566778899aabbccddeeff", "--purpose", "http.auth.bearer", "--label", "edge token v2", "--secret-stdin", "--confirm"}
+	if err := (CLIRequest{ProjectRoot: root, Args: rotateArgs, SecretInput: []byte("host-owned-value")}).Validate(); err != nil {
+		t.Fatalf("typed secure rotation input was rejected: %v", err)
+	}
+	for _, request := range []CLIRequest{
+		{ProjectRoot: root, Args: []string{"validate"}, SecretInput: []byte("secret")},
+		{ProjectRoot: root, Args: args},
+		{ProjectRoot: root, Args: args, SecretInput: []byte("\x00")},
+		{ProjectRoot: root, Args: args, SecretInput: make([]byte, (16<<10)+1)},
+	} {
+		if err := request.Validate(); err == nil {
+			t.Fatalf("unsafe secret input request was accepted: %+v", request.Args)
+		}
 	}
 }

@@ -37,7 +37,6 @@ type App struct {
 	plugins       interfaces.StudioPluginHost
 	ctx           context.Context
 	graph         interfaces.GraphRepository
-	git           interfaces.GitRepository
 	diagnostics   interfaces.DiagnosticStore
 	productInfo   *product.ProductInfo
 	cliCancel     context.CancelFunc
@@ -56,7 +55,7 @@ const cliCancelRunIDPrefix = "\x00cancel-requested:"
 
 var ErrSchemaPreviewStale = errors.New("settings schema preview is stale; review the latest schema and settings again")
 
-func NewApp(productInfo *product.ProductInfo, workspace *workspaceapp.Service, editor interfaces.ExternalEditorLauncher, files interfaces.FileSystem, settings interfaces.SettingsStore, cli interfaces.CLIRunner, reports interfaces.ReportStore, diagnostics interfaces.DiagnosticStore, plugins interfaces.StudioPluginHost, git interfaces.GitRepository, toolchain interfaces.ToolchainProbe, state interfaces.ProjectStateStore, desktop interfaces.DesktopStore, dependencies ...any) *App {
+func NewApp(productInfo *product.ProductInfo, workspace *workspaceapp.Service, editor interfaces.ExternalEditorLauncher, files interfaces.FileSystem, settings interfaces.SettingsStore, cli interfaces.CLIRunner, reports interfaces.ReportStore, diagnostics interfaces.DiagnosticStore, plugins interfaces.StudioPluginHost, toolchain interfaces.ToolchainProbe, state interfaces.ProjectStateStore, desktop interfaces.DesktopStore, dependencies ...any) *App {
 	var graphRepository interfaces.GraphRepository
 	for _, dependency := range dependencies {
 		if value, ok := dependency.(interfaces.GraphRepository); ok {
@@ -67,7 +66,7 @@ func NewApp(productInfo *product.ProductInfo, workspace *workspaceapp.Service, e
 	if value, ok := toolchain.(interfaces.CLIExecutableInspector); ok {
 		inspector = value
 	}
-	return &App{productInfo: productInfo, workspace: workspace, editor: editor, files: files, settings: settings, cli: cli, diagnostics: diagnostics, reports: reports, plugins: plugins, git: git, graph: graphRepository, toolchain: toolchain, cliInspector: inspector, state: state, desktop: desktop, pluginDiag: make(map[string]string)}
+	return &App{productInfo: productInfo, workspace: workspace, editor: editor, files: files, settings: settings, cli: cli, diagnostics: diagnostics, reports: reports, plugins: plugins, graph: graphRepository, toolchain: toolchain, cliInspector: inspector, state: state, desktop: desktop, pluginDiag: make(map[string]string)}
 }
 
 func (a *App) Startup(ctx context.Context) {
@@ -425,35 +424,75 @@ func (a *App) PreviewServiceSettingsSchema(projectID, serviceID, patchJSON strin
 		return models.ServiceSettingsSchemaPreview{}, err
 	}
 	patch := []byte(patchJSON)
-	compatible, err := a.settings.ValidateValuesAgainstSchemaDocument(a.context(), workspace.Project.RootPath, service.SettingsPath, service.SettingsSchemaPath, schema, patch)
-	if err != nil {
-		return models.ServiceSettingsSchemaPreview{}, err
-	}
 	snapshot, err := a.settings.Snapshot(a.context(), workspace.Project.RootPath, service.SettingsPath, service.SettingsSchemaPath)
 	if err != nil {
 		return models.ServiceSettingsSchemaPreview{}, err
+	}
+	previousSchema, err := a.files.ReadFile(a.context(), workspace.Project.RootPath, service.SettingsSchemaPath)
+	if err != nil {
+		return models.ServiceSettingsSchemaPreview{}, err
+	}
+	settingsDocument, readErr := a.files.ReadFile(a.context(), workspace.Project.RootPath, service.SettingsPath)
+	if readErr != nil && !errors.Is(readErr, os.ErrNotExist) {
+		return models.ServiceSettingsSchemaPreview{}, readErr
+	}
+	if errors.Is(readErr, os.ErrNotExist) {
+		settingsDocument = []byte(`{}`)
+	}
+	previousSchemaDigest := fmt.Sprintf("sha256:%x", sha256.Sum256(previousSchema))
+	var compatible bool
+	migration, migrationFound, migrationErr := previewProjectSettingsVersionMigration(settingsDocument, schema)
+	if migrationErr != nil {
+		return models.ServiceSettingsSchemaPreview{}, migrationErr
+	}
+	preview := models.ServiceSettingsSchemaPreview{
+		PreviousSchemaDigest: previousSchemaDigest,
+		SettingsDigest:       snapshot.Digest,
+		DraftDigest:          fmt.Sprintf("sha256:%x", sha256.Sum256(patch)),
+	}
+	if migrationFound {
+		var draft map[string]json.RawMessage
+		if json.Unmarshal(patch, &draft) != nil || len(draft) != 0 {
+			return models.ServiceSettingsSchemaPreview{}, errors.New("save or discard the current settings draft before migrating its schema version")
+		}
+		compatible, err = a.settings.ValidateSettingsDocumentAgainstSchemaDocument(a.context(), workspace.Project.RootPath, service.SettingsSchemaPath, schema, migration.Candidate)
+		if err != nil {
+			return models.ServiceSettingsSchemaPreview{}, err
+		}
+		preview.MigrationRequired = true
+		preview.MigrationFromVersion = migration.FromVersion
+		preview.MigrationToVersion = migration.ToVersion
+		preview.MigrationCandidateDigest = migration.CandidateDigest
+		preview.MigrationChangedPaths = []string{"/schemaVersion"}
+		preview.RecoveryCopyPath = settingsMigrationRecoveryPath(service, snapshot.Digest)
+		preview.RecoverySchemaCopyPath = settingsMigrationSchemaRecoveryPath(service, snapshot.Digest)
+	} else {
+		compatible, err = a.settings.ValidateValuesAgainstSchemaDocument(a.context(), workspace.Project.RootPath, service.SettingsPath, service.SettingsSchemaPath, schema, patch)
+		if err != nil {
+			return models.ServiceSettingsSchemaPreview{}, err
+		}
 	}
 	redactedSchema, err := a.settings.RedactSchemaDocument(a.context(), workspace.Project.RootPath, service.SettingsSchemaPath, schema)
 	if err != nil {
 		return models.ServiceSettingsSchemaPreview{}, err
 	}
-	return models.ServiceSettingsSchemaPreview{
-		SchemaJSON:       string(redactedSchema),
-		SchemaDigest:     fmt.Sprintf("sha256:%x", sha256.Sum256(schema)),
-		SettingsDigest:   snapshot.Digest,
-		DraftDigest:      fmt.Sprintf("sha256:%x", sha256.Sum256(patch)),
-		ValuesCompatible: compatible,
-	}, nil
+	preview.SchemaJSON = string(redactedSchema)
+	preview.SchemaDigest = fmt.Sprintf("sha256:%x", sha256.Sum256(schema))
+	preview.ValuesCompatible = compatible
+	return preview, nil
 }
 
 // RefreshServiceSettingsSchema replaces only the derived Project schema after
 // rechecking the exact schema, settings snapshot, and draft reviewed in preview.
-func (a *App) RefreshServiceSettingsSchema(projectID, serviceID, expectedSchemaDigest, expectedSettingsDigest, expectedDraftDigest, patchJSON string) (models.Workspace, error) {
+func (a *App) RefreshServiceSettingsSchema(projectID, serviceID, previewJSON, patchJSON string) (models.Workspace, error) {
 	workspace, service, err := a.settingsService(projectID, serviceID)
 	if err != nil || a.cli == nil || a.files == nil || a.settings == nil {
 		return models.Workspace{}, models.ErrInvalidProject
 	}
-	if !validSettingsDigest(expectedSchemaDigest) || !validSettingsDigest(expectedSettingsDigest) || !validSettingsDigest(expectedDraftDigest) {
+	var preview models.ServiceSettingsSchemaPreview
+	if len(previewJSON) > 2<<20 || decodeBoundedJSON([]byte(previewJSON), &preview) != nil ||
+		!validSettingsDigest(preview.SchemaDigest) || !validSettingsDigest(preview.PreviousSchemaDigest) ||
+		!validSettingsDigest(preview.SettingsDigest) || !validSettingsDigest(preview.DraftDigest) {
 		return models.Workspace{}, ErrSchemaPreviewStale
 	}
 	a.settingsMu.Lock()
@@ -468,21 +507,77 @@ func (a *App) RefreshServiceSettingsSchema(projectID, serviceID, expectedSchemaD
 		return models.Workspace{}, err
 	}
 	schemaDigest := fmt.Sprintf("sha256:%x", sha256.Sum256(schema))
-	if schemaDigest != expectedSchemaDigest {
+	if schemaDigest != preview.SchemaDigest {
+		return models.Workspace{}, ErrSchemaPreviewStale
+	}
+	previousSchema, err := a.files.ReadFile(a.context(), workspace.Project.RootPath, service.SettingsSchemaPath)
+	if err != nil || fmt.Sprintf("sha256:%x", sha256.Sum256(previousSchema)) != preview.PreviousSchemaDigest {
 		return models.Workspace{}, ErrSchemaPreviewStale
 	}
 	snapshot, err := a.settings.Snapshot(a.context(), workspace.Project.RootPath, service.SettingsPath, service.SettingsSchemaPath)
 	if err != nil {
 		return models.Workspace{}, err
 	}
-	if snapshot.Digest != expectedSettingsDigest || fmt.Sprintf("sha256:%x", sha256.Sum256([]byte(patchJSON))) != expectedDraftDigest {
+	if snapshot.Digest != preview.SettingsDigest || fmt.Sprintf("sha256:%x", sha256.Sum256([]byte(patchJSON))) != preview.DraftDigest {
 		return models.Workspace{}, ErrSchemaPreviewStale
 	}
-	if _, err := a.settings.ValidateValuesAgainstSchemaDocument(a.context(), workspace.Project.RootPath, service.SettingsPath, service.SettingsSchemaPath, schema, []byte(patchJSON)); err != nil {
-		return models.Workspace{}, err
+	settingsDocument, settingsReadErr := a.files.ReadFile(a.context(), workspace.Project.RootPath, service.SettingsPath)
+	if settingsReadErr != nil && !errors.Is(settingsReadErr, os.ErrNotExist) {
+		return models.Workspace{}, settingsReadErr
 	}
-	if err := a.files.WriteFile(a.context(), workspace.Project.RootPath, service.SettingsSchemaPath, schema); err != nil {
-		return models.Workspace{}, err
+	if errors.Is(settingsReadErr, os.ErrNotExist) {
+		settingsDocument = []byte(`{}`)
+	}
+	migration, migrationFound, migrationErr := previewProjectSettingsVersionMigration(settingsDocument, schema)
+	if migrationErr != nil || migrationFound != preview.MigrationRequired {
+		return models.Workspace{}, ErrSchemaPreviewStale
+	}
+	if preview.MigrationRequired {
+		if preview.MigrationFromVersion <= 0 || preview.MigrationToVersion <= 0 ||
+			preview.MigrationChangedPaths == nil || len(preview.MigrationChangedPaths) != 1 || preview.MigrationChangedPaths[0] != "/schemaVersion" ||
+			!validSettingsDigest(preview.MigrationCandidateDigest) || preview.RecoveryCopyPath != settingsMigrationRecoveryPath(service, preview.SettingsDigest) ||
+			preview.RecoverySchemaCopyPath != settingsMigrationSchemaRecoveryPath(service, preview.SettingsDigest) || patchJSON != `{}` {
+			return models.Workspace{}, ErrSchemaPreviewStale
+		}
+		if migration.FromVersion != preview.MigrationFromVersion || migration.ToVersion != preview.MigrationToVersion || migration.CandidateDigest != preview.MigrationCandidateDigest {
+			return models.Workspace{}, ErrSchemaPreviewStale
+		}
+		if err := writeSettingsMigrationRecoveryCopies(a, workspace.Project.RootPath, service, preview.SettingsDigest, settingsDocument, previousSchema); err != nil {
+			return models.Workspace{}, err
+		}
+		if _, err := a.settings.ValidateValuesAgainstSchemaDocument(a.context(), workspace.Project.RootPath, service.SettingsPath, service.SettingsSchemaPath, schema, []byte(patchJSON)); err != nil {
+			return models.Workspace{}, err
+		}
+		schemaWritten, schemaErr := a.files.WriteFileIfDigest(a.context(), workspace.Project.RootPath, service.SettingsSchemaPath, preview.PreviousSchemaDigest, schema)
+		if schemaErr != nil || !schemaWritten {
+			return models.Workspace{}, ErrSchemaPreviewStale
+		}
+		settingsWritten, settingsErr := a.files.WriteFileIfDigest(a.context(), workspace.Project.RootPath, service.SettingsPath, preview.SettingsDigest, migration.Candidate)
+		if settingsErr != nil || !settingsWritten {
+			rolledBack, rollbackErr := a.files.WriteFileIfDigest(a.context(), workspace.Project.RootPath, service.SettingsSchemaPath, preview.SchemaDigest, previousSchema)
+			if settingsErr != nil {
+				return models.Workspace{}, fmt.Errorf("schema migration failed; recovery copies are available in the Project: %w", settingsErr)
+			}
+			if !rolledBack || rollbackErr != nil {
+				return models.Workspace{}, errors.New("schema migration did not complete; recovery copies are available in the Project")
+			}
+			return models.Workspace{}, ErrSchemaPreviewStale
+		}
+	} else {
+		if preview.MigrationFromVersion != 0 || preview.MigrationToVersion != 0 || preview.MigrationCandidateDigest != "" ||
+			len(preview.MigrationChangedPaths) != 0 || preview.RecoveryCopyPath != "" || preview.RecoverySchemaCopyPath != "" {
+			return models.Workspace{}, ErrSchemaPreviewStale
+		}
+		if _, err := a.settings.ValidateValuesAgainstSchemaDocument(a.context(), workspace.Project.RootPath, service.SettingsPath, service.SettingsSchemaPath, schema, []byte(patchJSON)); err != nil {
+			return models.Workspace{}, err
+		}
+		written, writeErr := a.files.WriteFileIfDigest(a.context(), workspace.Project.RootPath, service.SettingsSchemaPath, preview.PreviousSchemaDigest, schema)
+		if writeErr != nil {
+			return models.Workspace{}, writeErr
+		}
+		if !written {
+			return models.Workspace{}, ErrSchemaPreviewStale
+		}
 	}
 	return a.workspace.OpenByID(a.context(), projectID)
 }
@@ -499,6 +594,50 @@ func validSettingsDigest(value string) bool {
 	return true
 }
 
+func settingsMigrationRecoveryPath(service models.RuntimeService, settingsDigest string) string {
+	if !validSecretServiceID(service.ID) || !validSettingsDigest(settingsDigest) || service.SettingsPath == "" {
+		return ""
+	}
+	return filepath.ToSlash(filepath.Join(filepath.Dir(service.SettingsPath), "."+service.ID+"-settings-recovery-"+strings.TrimPrefix(settingsDigest, "sha256:")+".bak"))
+}
+
+func settingsMigrationSchemaRecoveryPath(service models.RuntimeService, settingsDigest string) string {
+	if !validSecretServiceID(service.ID) || !validSettingsDigest(settingsDigest) || service.SettingsSchemaPath == "" {
+		return ""
+	}
+	return filepath.ToSlash(filepath.Join(filepath.Dir(service.SettingsSchemaPath), "."+service.ID+"-schema-recovery-"+strings.TrimPrefix(settingsDigest, "sha256:")+".bak"))
+}
+
+func writeSettingsMigrationRecoveryCopies(a *App, root string, service models.RuntimeService, settingsDigest string, settingsDocument, schemaDocument []byte) error {
+	settingsPath := settingsMigrationRecoveryPath(service, settingsDigest)
+	schemaPath := settingsMigrationSchemaRecoveryPath(service, settingsDigest)
+	if a == nil || a.files == nil || settingsPath == "" || schemaPath == "" {
+		return errors.New("project recovery copy could not be prepared")
+	}
+	if err := createRecoveryCopy(a, root, settingsPath, settingsDocument); err != nil {
+		return errors.New("project settings recovery copy could not be created")
+	}
+	if err := createRecoveryCopy(a, root, schemaPath, schemaDocument); err != nil {
+		return errors.New("project schema recovery copy could not be created")
+	}
+	return nil
+}
+
+func createRecoveryCopy(a *App, root, path string, contents []byte) error {
+	err := a.files.CreateFile(a.context(), root, path, contents)
+	if err == nil {
+		return nil
+	}
+	if !errors.Is(err, os.ErrExist) {
+		return err
+	}
+	existing, readErr := a.files.ReadFile(a.context(), root, path)
+	if readErr != nil || string(existing) != string(contents) {
+		return errors.New("project recovery path is occupied by different content")
+	}
+	return nil
+}
+
 func (a *App) WriteProjectSettings(projectID, serviceID, expectedDigest string, patch []byte) error {
 	workspace, service, err := a.settingsService(projectID, serviceID)
 	if err != nil {
@@ -510,6 +649,25 @@ func (a *App) WriteProjectSettings(projectID, serviceID, expectedDigest string, 
 		return models.ErrInvalidProject
 	}
 	if err = a.settings.UpdateIfDigest(a.context(), workspace.Project.RootPath, service.SettingsPath, service.SettingsSchemaPath, expectedDigest, patch); err != nil {
+		return err
+	}
+	return a.desktop.DeleteServiceSettingsDraft(a.context(), workspace.Project.ID, service.ID)
+}
+
+// WriteProjectCandidateSettings stores a safely schema-scoped Project
+// candidate even when required fields are incomplete. The service/Core remains
+// responsible for rejecting it at apply time; this method never applies it.
+func (a *App) WriteProjectCandidateSettings(projectID, serviceID, expectedDigest string, patch []byte) error {
+	workspace, service, err := a.settingsService(projectID, serviceID)
+	if err != nil {
+		return err
+	}
+	a.settingsMu.Lock()
+	defer a.settingsMu.Unlock()
+	if a.desktop == nil {
+		return models.ErrInvalidProject
+	}
+	if err = a.settings.UpdateProjectCandidateIfDigest(a.context(), workspace.Project.RootPath, service.SettingsPath, service.SettingsSchemaPath, expectedDigest, patch); err != nil {
 		return err
 	}
 	return a.desktop.DeleteServiceSettingsDraft(a.context(), workspace.Project.ID, service.ID)
@@ -1064,6 +1222,41 @@ func (a *App) SelectRuntimeServiceResourceArtifact(projectID, serviceID string) 
 	return importProjectResourceArtifact(a.context(), a.files, workspace.Project.RootPath, selected)
 }
 
+// SelectRuntimeServiceProjectDirectory packages a directory under the
+// Project root using the generic Studio artifact pipeline. The plugin only
+// receives the resulting Project-relative archive path.
+func (a *App) SelectRuntimeServiceProjectDirectory(projectID, serviceID string) (artifactPath string, returnErr error) {
+	if a.ctx == nil || a.workspace == nil || a.files == nil {
+		return "", models.ErrInvalidProject
+	}
+	workspace, err := a.workspace.OpenByID(a.context(), projectID)
+	if err != nil || workspace.Project == nil || workspace.Project.ID != projectID || !workspaceHasService(workspace, serviceID) {
+		return "", models.ErrInvalidProject
+	}
+	selected, err := runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{Title: "Choose a Project directory to package"})
+	if err != nil || selected == "" {
+		return "", err
+	}
+	selected, err = filepath.Abs(filepath.Clean(selected))
+	if err != nil {
+		return "", errInvalidProjectResource
+	}
+	relative, err := filepath.Rel(workspace.Project.RootPath, selected)
+	if err != nil || !filepath.IsLocal(relative) || relative == "." {
+		return "", errInvalidProjectResource
+	}
+	temporaryArchive, err := packageProjectDirectory(selected)
+	if err != nil {
+		return "", err
+	}
+	defer func() {
+		if cleanupErr := os.Remove(temporaryArchive); cleanupErr != nil && !errors.Is(cleanupErr, os.ErrNotExist) {
+			returnErr = errors.Join(returnErr, fmt.Errorf("%w: temporary archive cleanup failed", errInvalidProjectResource), cleanupErr)
+		}
+	}()
+	return importProjectResourceArtifact(a.context(), a.files, workspace.Project.RootPath, temporaryArchive)
+}
+
 // ImportRuntimeServiceProjectCertificate imports a public certificate only
 // when the live service manifest declares the matching Project certificate
 // catalog. The renderer receives a Project-relative reference, never the
@@ -1474,17 +1667,6 @@ func cliEventErrorWithDiagnostic(failure, diagnostic models.CLIEvent) error {
 	return fmt.Errorf("liapoldus: %s", message)
 }
 
-func (a *App) InitializeGit() (models.Workspace, error) {
-	workspace, err := a.workspace.Current(a.context())
-	if err != nil || workspace.Project == nil || a.git == nil {
-		return models.Workspace{}, models.ErrInvalidProject
-	}
-	if err := a.git.Init(a.context(), workspace.Project.RootPath); err != nil {
-		return models.Workspace{}, err
-	}
-	return a.workspace.Open(a.context(), workspace.Project.RootPath)
-}
-
 func (a *App) CreateRuntimeService(input models.RuntimeServiceInput) (models.Workspace, error) {
 	workspace, err := a.workspace.Current(a.context())
 	if err != nil || workspace.Project == nil || a.graph == nil {
@@ -1584,34 +1766,6 @@ func (a *App) CancelCLI() {
 		Message:       "Stopping the CLI process. Any Core operation already accepted may continue; check its status before retrying.",
 		Timestamp:     time.Now().UTC().Format(time.RFC3339Nano),
 	})
-}
-
-// PrepareRemoteHandoff returns a credential-free, revision-pinned CLI handoff.
-// Studio never executes this remote command; CLI/CI owns the actual deployment.
-func (a *App) PrepareRemoteHandoff(target string) (string, error) {
-	workspace, err := a.workspace.Current(a.context())
-	if err != nil || workspace.Project == nil || a.git == nil {
-		return "", models.ErrInvalidCLIHandoff
-	}
-	if strings.TrimSpace(target) == "" || strings.EqualFold(strings.TrimSpace(target), "local") || !workspace.Git.Available || workspace.Git.Dirty || workspace.Git.Conflict {
-		return "", models.ErrInvalidCLIHandoff
-	}
-	handoff := models.CLIHandoff{
-		SchemaVersion: "studio-cli-handoff/v1",
-		ProjectID:     workspace.Project.ID,
-		Repository:    workspace.Project.RootPath,
-		CommitSHA:     workspace.Git.Revision,
-		Target:        target,
-		Args:          []string{"apply", "--target", target, "--revision", workspace.Git.Revision},
-	}
-	if validateErr := handoff.Validate(); validateErr != nil {
-		return "", validateErr
-	}
-	data, err := json.MarshalIndent(handoff, "", "  ")
-	if err != nil {
-		return "", models.ErrInvalidCLIHandoff
-	}
-	return string(data), nil
 }
 
 func (a *App) clearCLICancel(generation uint64) {
@@ -1919,166 +2073,6 @@ func (a *App) clearStudioPluginProcessDiagnostic(id, version string) {
 }
 
 func processDiagnosticKey(id, version string) string { return id + "@" + version }
-
-func (a *App) GitDiff(path string) (models.GitDiff, error) {
-	root, err := a.currentProjectRoot()
-	if err != nil || a.git == nil {
-		return models.GitDiff{}, models.ErrInvalidProject
-	}
-	return a.git.Diff(a.context(), root, path)
-}
-
-func (a *App) GitConflict(path string) (models.GitConflict, error) {
-	root, err := a.currentProjectRoot()
-	if err != nil || a.git == nil {
-		return models.GitConflict{}, models.ErrInvalidProject
-	}
-	return a.git.Conflict(a.context(), root, path)
-}
-
-func (a *App) GitResolveConflict(path, side string, confirmed bool) error {
-	root, err := a.currentProjectRoot()
-	if err != nil || a.git == nil {
-		return models.ErrInvalidProject
-	}
-	return a.git.ResolveConflict(a.context(), root, path, side, confirmed)
-}
-
-func (a *App) GitStage(paths []string, confirmed bool) error {
-	root, err := a.currentProjectRoot()
-	if err != nil || a.git == nil {
-		return models.ErrInvalidProject
-	}
-	return a.git.Stage(a.context(), root, paths, confirmed)
-}
-
-func (a *App) GitUnstage(paths []string, confirmed bool) error {
-	root, err := a.currentProjectRoot()
-	if err != nil || a.git == nil {
-		return models.ErrInvalidProject
-	}
-	return a.git.Unstage(a.context(), root, paths, confirmed)
-}
-
-func (a *App) GitCommitStaged(message string, confirmed bool) (string, error) {
-	root, err := a.currentProjectRoot()
-	if err != nil || a.git == nil {
-		return "", models.ErrInvalidProject
-	}
-	return a.git.CommitStaged(a.context(), root, message, confirmed)
-}
-
-func (a *App) GitStashes(limit int) ([]models.GitStash, error) {
-	root, err := a.currentProjectRoot()
-	if err != nil || a.git == nil {
-		return nil, models.ErrInvalidProject
-	}
-	return a.git.Stashes(a.context(), root, limit)
-}
-
-func (a *App) GitStash(message string, includeUntracked, confirmed bool) (string, error) {
-	root, err := a.currentProjectRoot()
-	if err != nil || a.git == nil {
-		return "", models.ErrInvalidProject
-	}
-	return a.git.Stash(a.context(), root, message, includeUntracked, confirmed)
-}
-
-func (a *App) GitApplyStash(index int, drop, confirmed bool) error {
-	root, err := a.currentProjectRoot()
-	if err != nil || a.git == nil {
-		return models.ErrInvalidProject
-	}
-	return a.git.ApplyStash(a.context(), root, index, drop, confirmed)
-}
-
-func (a *App) GitBranches() ([]models.GitBranch, error) {
-	root, err := a.currentProjectRoot()
-	if err != nil || a.git == nil {
-		return nil, models.ErrInvalidProject
-	}
-	return a.git.Branches(a.context(), root)
-}
-
-func (a *App) GitHistory(limit int) ([]models.GitCommit, error) {
-	root, err := a.currentProjectRoot()
-	if err != nil || a.git == nil {
-		return nil, models.ErrInvalidProject
-	}
-	return a.git.History(a.context(), root, limit)
-}
-
-func (a *App) GitRemotes() ([]models.GitRemote, error) {
-	root, err := a.currentProjectRoot()
-	if err != nil || a.git == nil {
-		return nil, models.ErrInvalidProject
-	}
-	return a.git.Remotes(a.context(), root)
-}
-
-func (a *App) GitCheckout(branch string, confirmed bool) error {
-	root, err := a.currentProjectRoot()
-	if err != nil || a.git == nil {
-		return models.ErrInvalidProject
-	}
-	return a.git.Checkout(a.context(), root, branch, confirmed)
-}
-
-func (a *App) GitCommit(message string, paths []string, confirmed bool) (string, error) {
-	root, err := a.currentProjectRoot()
-	if err != nil || a.git == nil {
-		return "", models.ErrInvalidProject
-	}
-	return a.git.Commit(a.context(), root, message, paths, confirmed)
-}
-
-func (a *App) GitPull(remote, branch string, confirmed bool) error {
-	root, err := a.currentProjectRoot()
-	if err != nil || a.git == nil {
-		return models.ErrInvalidProject
-	}
-	return a.git.Pull(a.context(), root, remote, branch, confirmed)
-}
-
-func (a *App) GitPush(remote, branch string, confirmed bool) error {
-	root, err := a.currentProjectRoot()
-	if err != nil || a.git == nil {
-		return models.ErrInvalidProject
-	}
-	return a.git.Push(a.context(), root, remote, branch, confirmed)
-}
-
-func (a *App) GitMerge(branch string, confirmed bool) error {
-	root, err := a.currentProjectRoot()
-	if err != nil || a.git == nil {
-		return models.ErrInvalidProject
-	}
-	return a.git.Merge(a.context(), root, branch, confirmed)
-}
-
-func (a *App) GitRebase(branch string, confirmed bool) error {
-	root, err := a.currentProjectRoot()
-	if err != nil || a.git == nil {
-		return models.ErrInvalidProject
-	}
-	return a.git.Rebase(a.context(), root, branch, confirmed)
-}
-
-func (a *App) GitCherryPick(commit string, confirmed bool) error {
-	root, err := a.currentProjectRoot()
-	if err != nil || a.git == nil {
-		return models.ErrInvalidProject
-	}
-	return a.git.CherryPick(a.context(), root, commit, confirmed)
-}
-
-func (a *App) GitAbort(operation string, confirmed bool) error {
-	root, err := a.currentProjectRoot()
-	if err != nil || a.git == nil {
-		return models.ErrInvalidProject
-	}
-	return a.git.Abort(a.context(), root, operation, confirmed)
-}
 
 func (a *App) currentProjectRoot() (string, error) {
 	workspace, err := a.workspace.Current(a.context())

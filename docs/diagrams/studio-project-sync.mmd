@@ -1,15 +1,12 @@
 sequenceDiagram
     actor Operator
     participant Studio
-    participant Git as "Git repository"
     participant CLI as "liapoldus CLI"
     participant Core as "Core runtime"
     Operator->>Studio: "Open project"
-    Studio->>Git: "Index and validate"
+    Studio->>Studio: "Index and validate"
     Operator->>Studio: "Edit draft"
-    Studio->>Git: "Save source and create commit"
-    Operator->>CLI: "Plan/apply commit for target"
-    CLI->>Git: "Read immutable revision"
+    Operator->>CLI: "Plan/apply project for target"
     CLI->>Core: "Submit canonical bundle through API"
     Core-->>CLI: "operationId and generation"
     CLI-->>Studio: "Import deploy report"

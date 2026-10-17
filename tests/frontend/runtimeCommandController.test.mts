@@ -15,8 +15,8 @@ function workspace(): Workspace {
   return {
     project: { id: 'runtime-project', name: 'Runtime project', rootPath: '/tmp/runtime-project' },
     graph: { services: [service], links: [] },
-    files: [], git: { changes: [] },
-  } as unknown as Workspace
+    files: [],
+  }
 }
 
 await test('global runtime lifecycle waits for the CLI terminal event before refreshing Core metadata', async () => {

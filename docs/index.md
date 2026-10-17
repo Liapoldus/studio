@@ -6,7 +6,7 @@
 > являются готовыми API.
 
 Studio — desktop-first среда разработки для разработчика-оператора. Она работает
-с проектом, деревом файлов и Git, формирует schema-driven editors и готовит
+с проектом и деревом файлов, формирует schema-driven editors и готовит
 версионируемые конфигурации для универсального `liapoldus` CLI.
 
 Studio работает с локальным Core и runtime через typed-команды `liapoldus` CLI.
@@ -30,8 +30,8 @@ Studio:
 
 - управляет локальным project source и file tree;
 - валидирует локальные изменения;
-- предоставляет полноценную Git-интеграцию;
-- создаёт только commit-backed project revisions;
+- не содержит встроенного управления версиями; исходники и их история
+  управляются внешними инструментами;
 - вызывает предусмотренные typed CLI workflows для локального Core/runtime;
 - показывает Core-backed service metadata, status, operations и reports,
   полученные от CLI;
@@ -51,7 +51,6 @@ Studio не:
 | --- | --- |
 | [Продуктовая модель](product-model) | Термины, контексты, ownership и source of truth |
 | [Проект и файлы](project-and-files) | Manifest, file tree, modules и local validation |
-| [Git и версии](version-control) | Repository, branches, commits, remotes и version page |
 | [Техническая архитектура](technical-architecture) | Go/React/Wails layers, ports, state и failure boundaries |
 | [UI system](ui-system) | Shell, canvas, inspector, panels, tokens и interaction rules |
 | [Service workspace](core-workspace) | Runtime service graph, full links и schema-driven inspector |
@@ -82,27 +81,25 @@ Studio не:
 В интерфейсе одновременно видны четыре независимых контекста:
 
 1. активный project;
-2. активный Git revision/branch;
-3. выбранный runtime service или link в project config graph;
-4. открытые workbench tabs и Studio plugin panels.
+2. выбранный runtime service или link в project config graph;
+3. открытые workbench tabs и Studio plugin panels.
 
 Изменения сначала являются локальным draft, затем сохраняются в canonical
 Project. Для локальной отладки Studio запускает typed CLI workflow выбранного
-target; Git commit фиксирует source revision, но не является обязательным
-условием локальной проверки. Production/remote deployment остаётся за CLI/CI.
+target. Production/remote deployment остаётся за CLI/CI.
 
 ## Целевой пользовательский путь
 
 ```text
 Открыть Project → изменить service configuration → Validate → сохранить Project
 → проверить локальный target через Studio/typed CLI → проверить endpoint и logs.
-Для remote release: просмотреть Git diff → commit/push в approved remote →
-выполнить deployment через CLI/CI → открыть report в Studio.
+Для remote release: подготовить source внешними инструментами → выполнить
+deployment через CLI/CI → открыть report в Studio.
 ```
 
 ## Статус
 
-Studio уже содержит desktop shell, работу с Project и Git, typed CLI boundary,
+Studio уже содержит desktop shell, работу с Project, typed CLI boundary,
 Core-backed service workspace и runtime UI, общий configuration draft и host
 для локальных Studio plugins. Это не означает завершённую production readiness:
 сквозные recovery, resource publication, полная проверка сервисных контрактов,

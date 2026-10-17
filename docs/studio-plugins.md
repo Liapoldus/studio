@@ -12,7 +12,7 @@ Server editor принадлежит `plugins/studio-server/` и собирае�
 
 Пакет `plugins/studio-server/` не является самостоятельным источником
 конфигурационной схемы. Он потребляет Server-owned schema/UI metadata через
-версионированный host API Studio. Текущий `studio-service-editor/v1` bridge
+версионированный host API Studio. Текущий `studio-service-editor/v2` bridge
 предоставляет redacted settings read, безопасный Core-backed
 `service.configuration-ui.read` и `service.peer.catalog.read`, разрешённые
 resource catalogs, safe shared draft и Project save через host; это не

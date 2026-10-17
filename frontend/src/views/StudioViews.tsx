@@ -3,13 +3,14 @@ import type { ReactNode } from 'react'
 import { applyEdgeChanges, applyNodeChanges, Background, Controls, Handle, MiniMap, Position, ReactFlow } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import type { EdgeChange, NodeChange } from '@xyflow/react'
-import { Activity, Boxes, Check, ChevronDown, ChevronUp, CircleAlert, CircleDot, Copy as CopyIcon, Download, File, FolderOpen, GitBranch, GitCompareArrows, GripVertical, Moon, MoreHorizontal, Play, Plus, Plug, Puzzle, RefreshCw, Server, Sun, Terminal, Trash2, X, PackageCheck, ExternalLink, AlertTriangle, Undo2, Redo2 } from 'lucide-react'
-import type { ArtifactReference, CLIEvent, CoreSettingsView, Diagnostic, GitChange, ServiceLink, ServiceLinkInput, ReportSummary, RuntimeService, ServiceSettingsSchemaPreview, ThemePreference, ToolchainStatus, Workspace } from '../api/types'
+import { Activity, Boxes, Check, ChevronDown, ChevronUp, CircleAlert, CircleDot, Copy as CopyIcon, Download, FolderOpen, GripVertical, Moon, MoreHorizontal, Play, Plus, Plug, Puzzle, RefreshCw, Server, Sun, Terminal, Trash2, X, PackageCheck, ExternalLink, AlertTriangle, Undo2, Redo2 } from 'lucide-react'
+import type { ArtifactReference, CLIEvent, CoreSettingsView, Diagnostic, ServiceLink, ServiceLinkInput, ReportSummary, RuntimeService, ServiceSettingsSchemaPreview, ThemePreference, ToolchainStatus, Workspace } from '../api/types'
 import type { StudioController } from '../controllers/studioController'
 import { text, type Copy } from '../models/copy'
 import { graphEdgeHandles } from '../models/graph'
 import { groupDiagnostics } from '../models/diagnostics'
 import { configurationDraftKey, isSensitiveConfigurationFieldName, mergeConfiguration, parseConfigurationJSONDocument, parseConfigurationNumber } from '../models/configurationDraft'
+import { configurationApplyReviewPaths } from '../models/configurationApplyReview'
 import { configurationSchemaArrayItem, configurationSchemaCanCreateProtectedArrayItem, configurationSchemaProtected, configurationSchemaRenderable, configurationSchemaVariants, configurationVariantValue, createConfigurationSchemaValue, effectiveConfigurationSchema, selectedConfigurationVariant } from '../models/configurationSchema'
 import { configurationArrayOperationRequest, createConfigurationArrayItem, duplicateConfigurationArrayItem, moveConfigurationArrayItem, removeConfigurationArrayItem, reorderConfigurationArrayItem } from '../models/configurationArray'
 import { configurationMapOperationRequest, configurationMapOperations, isConfigurationMapOperationRequest, removeConfigurationMapKey, safeConfigurationMapKey } from '../models/configurationMap'
@@ -17,14 +18,15 @@ import { configurationSchemaDifferencePaths, configurationUIFieldKey, matchServi
 import { messageOf, operationReplicaOutcomes, summarizeCLIEvent, type CLIStreamState, type Locale, type TabKind, type WorkspaceTab } from '../models/studio'
 import { useStudioStore } from '../stores/studio'
 import type { StudioPluginSurface } from '../stores/studio'
-import { createStudioBridgeSessionID, isStudioPluginSurfaceReadyMessage, parseStudioPluginBridgeRequest, studioPluginBridgeFailureCode, studioPluginPermissionGranted, studioPluginSurfaceAssetURL, studioServiceEditorBridgeVersion, withPeerCatalogDeadline } from '../models/pluginSurface'
+import { createStudioBridgeSessionID, isStudioPluginSurfaceReadyMessage, parseStudioPluginBridgeRequest, startStudioPluginHandshake, studioPluginBridgeFailureCode, studioPluginPermissionGranted, studioPluginSurfaceAssetURL, studioServiceEditorBridgeVersion, withPeerCatalogDeadline } from '../models/pluginSurface'
 import { latestStudioPluginSurfaces, workspacePluginNavigationSurfaces } from '../models/studioPluginPackage'
 import { resolveServiceEditorButtons, serviceInspectorHiddenSettingsPaths, serviceInspectorPathIsHidden } from '../models/serviceEditorButtons'
 import { groupRuntimeArtifacts, projectSettingsApplied, runtimeReplicasForService, runtimeServiceActionConfirmationText } from '../models/runtime'
 import { BrandMark } from '../ui/BrandMark'
+import { LocalServiceSecretsSettings } from './LocalServiceSecretsSettings'
 
 export function ActivityBar({ activeId, t, onNavigate, surfaces, onOpenSurface }: { activeId: string | null; t: Copy; onNavigate: (item: TabKind) => void; surfaces: StudioPluginSurface[]; onOpenSurface: (surface: StudioPluginSurface) => void }) {
-  const entries: Array<[TabKind, typeof Boxes, string]> = [['canvas', Boxes, t.graph], ['git', GitCompareArrows, t.git], ['reports', Activity, t.reports], ['problems', CircleAlert, t.problems], ['output', Terminal, 'Output']]
+  const entries: Array<[TabKind, typeof Boxes, string]> = [['canvas', Boxes, t.graph], ['reports', Activity, t.reports], ['problems', CircleAlert, t.problems], ['output', Terminal, 'Output']]
   const currentSurfaces = workspacePluginNavigationSurfaces(surfaces)
   return <nav className="activity-bar" aria-label={t.home}>{entries.map(([id, Icon, label]) => <button type="button" key={id} className={`activity-button ${activeId === id ? 'active' : ''}`} title={label} aria-label={label} aria-current={activeId === id ? 'page' : undefined} onClick={() => { onNavigate(id); }}><Icon size={18} /></button>)}{currentSurfaces.length > 0 && <span className="activity-divider" />}{currentSurfaces.map((surface) => { const id = `studio-plugin:${surface.studioPluginId}:${surface.version}:${surface.id}`; return <button type="button" key={id} className={`activity-button ${activeId === id ? 'active' : ''}`} title={`${surface.studioPluginId} · ${surface.title}`} aria-label={`${surface.studioPluginId} · ${surface.title}`} aria-current={activeId === id ? 'page' : undefined} onClick={() => { onOpenSurface(surface); }}><Puzzle size={16} /></button> })}</nav>
 }
@@ -178,7 +180,16 @@ function ServiceFlowNode({ data, selected }: { data: { service: RuntimeService }
   </div>
 }
 
-export function Inspector({ controller, workspace, selected, output }: { controller: StudioController; workspace: Workspace; selected: { kind: 'service' | 'link' | 'plugin'; id: string } | null; output: string }) {
+type InspectorSectionState = {
+  scope: string
+  openSections: Record<string, boolean>
+  onToggle: (key: string, open: boolean) => void
+}
+
+const defaultInspectorSectionState: InspectorSectionState = { scope: '', openSections: {}, onToggle: () => undefined }
+const InspectorSectionStateContext = createContext(defaultInspectorSectionState)
+
+export function Inspector({ controller, workspace, selected, output, openSections, onSectionToggle }: { controller: StudioController; workspace: Workspace; selected: { kind: 'service' | 'link' | 'plugin'; id: string } | null; output: string; openSections: Record<string, boolean>; onSectionToggle: (key: string, open: boolean) => void }) {
   const service = selected?.kind === 'service' ? workspace.graph.services.find((item) => item.id === selected.id) : undefined
   const link = selected?.kind === 'link' ? workspace.graph.links.find((item) => item.id === selected.id) : undefined
   const readiness = useStudioStore((state) => service ? state.runtimeStatuses[service.id] ?? 'unknown' : 'unknown')
@@ -189,6 +200,7 @@ export function Inspector({ controller, workspace, selected, output }: { control
   const [editorButtons, setEditorButtons] = useState<Array<{ id: string; key: string; label: { ru: string; en: string }; description: { ru: string; en: string } }>>([])
   const [editorButtonsStatus, setEditorButtonsStatus] = useState<'loading' | 'ready' | 'unavailable'>('loading')
   const pluginSurfaces = useStudioStore((state) => state.studioPluginSurfaces)
+  const sectionState = { scope: `${workspace.project?.id ?? 'project'}:${selected?.kind ?? 'empty'}:${selected?.id ?? 'none'}`, openSections, onToggle: onSectionToggle }
   useEffect(() => {
     let active = true
     if (!service || !workspace.project?.id) { setEditorButtons([]); setEditorButtonsStatus('unavailable'); return () => { active = false } }
@@ -197,8 +209,8 @@ export function Inspector({ controller, workspace, selected, output }: { control
     void controller.readServiceEditorButtons(workspace.project.id, service.id).then((buttons) => { if (active) { setEditorButtons(buttons); setEditorButtonsStatus('ready') } }).catch(() => { if (active) { setEditorButtons([]); setEditorButtonsStatus('unavailable') } })
     return () => { active = false }
   }, [controller, service?.id, service?.version, workspace.project?.id, readiness])
-  if (!service && !link) return <aside className="inspector"><div className="inspector-empty"><CircleDot size={18} /><span>{locale === 'ru' ? 'Выберите узел или связь' : 'Select a node or link'}</span></div></aside>
-  return <><aside className="inspector"><div className="inspector-panel">
+  if (!service && !link) return <InspectorSectionStateContext.Provider value={sectionState}><aside className="inspector"><div className="inspector-empty"><CircleDot size={18} /><span>{locale === 'ru' ? 'Выберите узел или связь' : 'Select a node or link'}</span></div></aside></InspectorSectionStateContext.Provider>
+  return <InspectorSectionStateContext.Provider value={sectionState}><><aside className="inspector"><div className="inspector-panel">
     <div className="inspector-heading"><span>{service ? (locale === 'ru' ? 'Свойства сервиса' : 'Service properties') : (locale === 'ru' ? 'Контракт связи' : 'Link contract')}</span><button className="icon-button small" title={locale === 'ru' ? 'Удалить' : 'Delete'} onClick={() => { if (service) void controller.deleteNodes([service.id]); if (link) void controller.deleteEdges([link.id]) }}><Trash2 size={15} /></button></div>
     {service && <>
       <InspectorSection title={locale === 'ru' ? 'Идентификация' : 'Identity'}><h2>{service.name}</h2><code>{service.id}</code><InspectorField label="Version" value={service.version} /><InspectorField label="Manifest" value={service.manifestVersion} /><InspectorField label="Readiness" value={readiness} /></InspectorSection>
@@ -211,12 +223,12 @@ export function Inspector({ controller, workspace, selected, output }: { control
         </div>)}
       </InspectorSection>
       <InspectorSection title={locale === 'ru' ? 'Источник' : 'Source binding'}><InspectorField label="Service" value={service.servicePath} /><InspectorField label="Settings" value={service.settingsPath} /><InspectorField label="Schema" value={service.settingsSchemaPath} /></InspectorSection>
-      <InspectorSection title={locale === 'ru' ? 'Контекст проекта' : 'Project context'}><InspectorField label="Project" value={workspace.project?.name ?? '—'} /><InspectorField label="Branch" value={workspace.git.branch} /><InspectorField label="Revision" value={workspace.git.revision} /></InspectorSection>
+      <InspectorSection title={locale === 'ru' ? 'Контекст проекта' : 'Project context'}><InspectorField label="Project" value={workspace.project?.name ?? '—'} /></InspectorSection>
       <InspectorSection title={locale === 'ru' ? 'Действия' : 'Actions'}><div className="inspector-actions"><button className="secondary-button compact" title={locale === 'ru' ? 'Запустить остановленный сервис; если Project pin отличается, заменить только этот контейнер и откатить его при ошибке.' : 'Start a stopped service; if its Project pin differs, replace only this container and roll back on failure.'} onClick={() => void controller.runtimeCommand('runtime.start', service.id)}>Start</button><button className="secondary-button compact" onClick={() => { setPendingServiceAction('stop') }}>Stop</button><button className="secondary-button compact" onClick={() => { setPendingServiceAction('restart') }}>Restart</button><button className="secondary-button compact" onClick={() => void controller.runtimeCommand('runtime.logs', service.id)}>Logs</button><button className="secondary-button compact" onClick={() => void controller.runtimeCommand('runtime.inspect', service.id)}>Inspect</button></div>{output && <pre className="runtime-output">{output}</pre>}</InspectorSection>
       <InspectorSection title={locale === 'ru' ? 'Последний отчёт проекта' : 'Latest project report'}><LatestProjectReport controller={controller} projectID={workspace.project?.id ?? ''} locale={locale} /></InspectorSection>
     </>}
     {link && <LinkContractInspector controller={controller} link={link} locale={locale} />}
-  </div></aside>{service && pendingServiceAction && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setPendingServiceAction(null) }}><section className="dialog" role="alertdialog" aria-modal="true" aria-labelledby="service-runtime-action-heading" aria-describedby="service-runtime-action-description"><div className="dialog-heading"><div><span className="eyebrow">{locale === 'ru' ? `Локальный target · ${target}` : `Local target · ${target}`}</span><h2 id="service-runtime-action-heading">{locale === 'ru' ? `${pendingServiceAction === 'stop' ? 'Остановить' : 'Перезапустить'} ${service.name}?` : `${pendingServiceAction === 'stop' ? 'Stop' : 'Restart'} ${service.name}?`}</h2></div><button type="button" className="icon-button" aria-label={locale === 'ru' ? 'Отмена' : 'Cancel'} onClick={() => { setPendingServiceAction(null) }}><X size={16} /></button></div><p id="service-runtime-action-description" className="dialog-hint">{runtimeServiceActionConfirmationText(pendingServiceAction, service.id, service.name, target, locale)}</p><div className="dialog-actions"><button type="button" className="secondary-button" autoFocus onClick={() => { setPendingServiceAction(null) }}>{locale === 'ru' ? 'Отмена' : 'Cancel'}</button><button type="button" className="primary-button" onClick={() => { const action = pendingServiceAction; setPendingServiceAction(null); void controller.runtimeCommand(action === 'stop' ? 'runtime.stop' : 'runtime.restart', service.id) }}>{locale === 'ru' ? `${pendingServiceAction === 'stop' ? 'Остановить' : 'Перезапустить'} ${service.id}` : `${pendingServiceAction === 'stop' ? 'Stop' : 'Restart'} ${service.id}`}</button></div></section></div>}</>
+  </div></aside>{service && pendingServiceAction && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setPendingServiceAction(null) }}><section className="dialog" role="alertdialog" aria-modal="true" aria-labelledby="service-runtime-action-heading" aria-describedby="service-runtime-action-description"><div className="dialog-heading"><div><span className="eyebrow">{locale === 'ru' ? `Локальный target · ${target}` : `Local target · ${target}`}</span><h2 id="service-runtime-action-heading">{locale === 'ru' ? `${pendingServiceAction === 'stop' ? 'Остановить' : 'Перезапустить'} ${service.name}?` : `${pendingServiceAction === 'stop' ? 'Stop' : 'Restart'} ${service.name}?`}</h2></div><button type="button" className="icon-button" aria-label={locale === 'ru' ? 'Отмена' : 'Cancel'} onClick={() => { setPendingServiceAction(null) }}><X size={16} /></button></div><p id="service-runtime-action-description" className="dialog-hint">{runtimeServiceActionConfirmationText(pendingServiceAction, service.id, service.name, target, locale)}</p><div className="dialog-actions"><button type="button" className="secondary-button" autoFocus onClick={() => { setPendingServiceAction(null) }}>{locale === 'ru' ? 'Отмена' : 'Cancel'}</button><button type="button" className="primary-button" onClick={() => { const action = pendingServiceAction; setPendingServiceAction(null); void controller.runtimeCommand(action === 'stop' ? 'runtime.stop' : 'runtime.restart', service.id) }}>{locale === 'ru' ? `${pendingServiceAction === 'stop' ? 'Остановить' : 'Перезапустить'} ${service.id}` : `${pendingServiceAction === 'stop' ? 'Stop' : 'Restart'} ${service.id}`}</button></div></section></div>}</></InspectorSectionStateContext.Provider>
 }
 
 function ServiceEditorButtons({ controller, service, projectID, locale, buttons, status, surfaces }: { controller: StudioController; service: RuntimeService; projectID: string; locale: Locale; buttons: Array<{ id: string; key: string; label: { ru: string; en: string }; description: { ru: string; en: string } }>; status: 'loading' | 'ready' | 'unavailable'; surfaces: StudioPluginSurface[] }) {
@@ -248,7 +260,12 @@ function configurationStateLabel(state: import('../api/types').RuntimeReplicaSta
   return ({ unconfigured: 'не настроено', unobserved: 'нет подтверждения', pending: 'ожидает', acknowledged: 'применено', stale: 'устарело', failed: 'ошибка', unreachable: 'недоступна' } as const)[state]
 }
 
-function InspectorSection({ title, children }: { title: string; children: ReactNode }) { return <details className="inspector-section" open><summary>{title}</summary><div className="inspector-section-body">{children}</div></details> }
+function InspectorSection({ title, children }: { title: string; children: ReactNode }) {
+  const state = useContext(InspectorSectionStateContext)
+  const key = `${state.scope}:${title}`
+  const open = state.openSections[key] ?? true
+  return <details className="inspector-section" open={open} onToggle={(event) => { const nextOpen = event.currentTarget.open; if (nextOpen !== open) state.onToggle(key, nextOpen) }}><summary>{title}</summary><div className="inspector-section-body">{children}</div></details>
+}
 function InspectorField({ label, value }: { label: string; value: string }) { return <div className="inspector-field"><span>{label}</span><code>{value || '—'}</code></div> }
 
 function LatestProjectReport({ controller, projectID, locale }: { controller: StudioController; projectID: string; locale: Locale }) {
@@ -309,6 +326,7 @@ function ServiceSettingsInspector({ controller, service, locale }: { controller:
   const projectFiles = useStudioStore((state) => state.workspace?.files ?? [])
   const applyRecoveryStatus = useStudioStore((state) => state.applyRecoveryStatus)
   const applyRecoveryOperationId = useStudioStore((state) => state.applyRecoveryOperationId)
+  const applyReviewPaths = useStudioStore((state) => state.applyReviewPaths)
   const cliStreamState = useStudioStore((state) => state.cliStreamState)
   const draftKey = configurationDraftKey(projectRoot, service.id)
   const draft = useStudioStore((state) => state.serviceSettingsDrafts[draftKey])
@@ -324,6 +342,7 @@ function ServiceSettingsInspector({ controller, service, locale }: { controller:
   const [schemaPreviewLoading, setSchemaPreviewLoading] = useState(false)
   const [schemaMigrationPreview, setSchemaMigrationPreview] = useState<ServiceSettingsSchemaPreview | null>(null)
   const values = useMemo(() => draft ? mergeConfiguration(draft.base, draft.patch) : {}, [draft])
+  const draftReviewPaths = draft ? configurationApplyReviewPaths(draft.patch) : []
   const loadResource = useCallback((resourceID: string) => controller.readServiceResourceCatalog(projectID, service.id, resourceID), [controller, projectID, service.id])
   const importCertificate = useCallback((resourceID: string) => controller.importProjectCertificateResource(projectID, service.id, resourceID), [controller, projectID, service.id])
   const openResource = useCallback((relativePath: string) => {
@@ -394,10 +413,21 @@ function ServiceSettingsInspector({ controller, service, locale }: { controller:
       }}>{schemaPreviewLoading ? (locale === 'ru' ? 'Проверяю значения…' : 'Checking values…') : (locale === 'ru' ? 'Просмотреть обновление схемы…' : 'Review schema update…')}</button>}
       {draft.configurationContractMismatchKind === 'schema' && schemaRefreshReviewOpen && schemaMigrationPreview && <section className="schema-migration-preview" aria-label={locale === 'ru' ? 'Предпросмотр обновления схемы' : 'Schema update preview'}>
         <strong>{locale === 'ru' ? 'Предпросмотр обновления' : 'Update preview'}</strong>
-        <p>{locale === 'ru' ? 'Будет заменена только JSON Schema в Project актуальным контрактом через CLI → Core. Значения настроек и текущие изменения не переписываются.' : 'Only the Project JSON Schema will be replaced with the current CLI → Core contract. Settings values and current edits are not rewritten.'}</p>
+        {schemaMigrationPreview.migrationRequired
+          ? <>
+            <p>{locale === 'ru'
+              ? `Детерминированная миграция настроек ${String(schemaMigrationPreview.migrationFromVersion)} → ${String(schemaMigrationPreview.migrationToVersion)}: изменится только /schemaVersion. Неизвестные и несовместимые поля сохраняются и продолжат блокировать применение до исправления.`
+              : `Deterministic settings migration ${String(schemaMigrationPreview.migrationFromVersion)} → ${String(schemaMigrationPreview.migrationToVersion)}: only /schemaVersion changes. Unknown or incompatible fields are retained and will keep blocking apply until fixed.`}</p>
+            <p>{locale === 'ru' ? 'Точные исходные байты настроек и прежней схемы сохраняются в Project для восстановления:' : 'Exact source bytes for settings and the previous schema are saved in the Project for recovery:'} <code>{schemaMigrationPreview.recoveryCopyPath}</code> · <code>{schemaMigrationPreview.recoverySchemaCopyPath}</code></p>
+          </>
+          : <p>{locale === 'ru' ? 'Будет заменена только JSON Schema в Project актуальным контрактом через CLI → Core. Значения настроек и текущие изменения не переписываются.' : 'Only the Project JSON Schema will be replaced with the current CLI → Core contract. Settings values and current edits are not rewritten.'}</p>}
         <p className={schemaMigrationPreview.valuesCompatible ? 'schema-preview-compatible' : 'schema-preview-incompatible'} role="status">{schemaMigrationPreview.valuesCompatible
-          ? (locale === 'ru' ? 'Текущие настройки проходят новую схему.' : 'Current settings satisfy the new schema.')
-          : (locale === 'ru' ? 'Текущие настройки не проходят новую схему. После обновления исправьте ошибки до применения.' : 'Current settings do not satisfy the new schema. Fix validation errors after updating before applying.')}</p>
+          ? (schemaMigrationPreview.migrationRequired
+            ? (locale === 'ru' ? 'Настройки после миграции проходят новую схему.' : 'The migrated settings satisfy the new schema.')
+            : (locale === 'ru' ? 'Текущие настройки проходят новую схему.' : 'Current settings satisfy the new schema.'))
+          : (schemaMigrationPreview.migrationRequired
+            ? (locale === 'ru' ? 'Настройки после миграции не проходят новую схему. Значения останутся в Project; исправьте ошибки до применения.' : 'The migrated settings do not satisfy the new schema. Values remain in the Project; fix validation errors before applying.')
+            : (locale === 'ru' ? 'Текущие настройки не проходят новую схему. После обновления исправьте ошибки до применения.' : 'Current settings do not satisfy the new schema. Fix validation errors after updating before applying.'))}</p>
         <small>{locale === 'ru' ? 'Контракт: ' : 'Contract: '}<code>{schemaMigrationPreview.schemaDigest.slice(0, 23)}…</code></small>
         {configurationSchemaDifferencePaths(schema, schemaMigrationPreview.schemaJson).length > 0 && <ul>{configurationSchemaDifferencePaths(schema, schemaMigrationPreview.schemaJson).slice(0, 12).map((path) => <li key={path}><code>{path}</code></li>)}</ul>}
         {schemaRefreshError && <span className="inline-error" role="alert">{schemaRefreshError}</span>}
@@ -433,15 +463,24 @@ function ServiceSettingsInspector({ controller, service, locale }: { controller:
       />)}
     </fieldset>)}
     <SchemaProperties rootSchema={schema} objectSchema={schema} properties={properties} values={values} path={[]} configurationUIPath={[]} configurationUI={draft.configurationUI} required={required} onChange={change} locale={locale} disabled={!editable} excludedPaths={explicitPaths} fieldHints={fieldHints} />
-    {draft.status === 'dirty' && <p className="muted" role="status">{schemaMatched ? (locale === 'ru' ? 'После 800 мс без изменений настройки сохранятся в файл проекта и отправятся в Core.' : 'After 800 ms without changes, settings are saved to the project file and sent to Core.') : (locale === 'ru' ? 'Настройки ожидают проверки live-схемы.' : 'Settings are waiting for live schema verification.')}</p>}
+    {draft.status === 'dirty' && <p className="muted" role="status">{schemaMatched ? (draftReviewPaths.length > 0
+      ? (locale === 'ru' ? 'После сохранения изменения маршрутов, слушателей или безопасности останутся в Project до вашего подтверждения.' : 'After saving, route, listener, or security changes stay in the Project until you confirm them.')
+      : (locale === 'ru' ? 'После 800 мс без изменений настройки сохранятся в файл проекта и отправятся в Core.' : 'After 800 ms without changes, settings are saved to the project file and sent to Core.')) : (locale === 'ru' ? 'Настройки ожидают проверки live-схемы.' : 'Settings are waiting for live schema verification.')}</p>}
+    {applyReviewPaths.length > 0 && <section className="apply-review" role="alert">
+      <strong>{locale === 'ru' ? 'Подтвердите изменения перед применением' : 'Review changes before applying'}</strong>
+      <p>{locale === 'ru' ? 'Project уже сохранён. Эти публичные или чувствительные параметры ещё не отправлены в Core:' : 'The Project is saved. These public or security-sensitive settings have not been sent to Core:'}</p>
+      <ul>{applyReviewPaths.slice(0, 24).map((path) => <li key={path}><code>{path}</code></li>)}</ul>
+      {applyReviewPaths.length > 24 && <small>{locale === 'ru' ? `И ещё ${String(applyReviewPaths.length - 24)} изменений` : `And ${String(applyReviewPaths.length - 24)} more changes`}</small>}
+      {draft.status === 'clean' && schemaMatched && !applyRecoveryOperationId && <button type="button" className="secondary-button compact" disabled={cliStreamState !== 'idle'} onClick={() => { void controller.applyServiceSettings(draftKey) }}>{locale === 'ru' ? 'Подтвердить и применить' : 'Confirm & apply'}</button>}
+    </section>}
     {draft.status === 'clean' && <p className="muted" role="status">{applyRecoveryStatus === 'applying' ? (locale === 'ru' ? 'Применяется… Файл проекта сохранён.' : 'Applying… Project file saved.') : projectSettingsApplied(draft.configurationDigest ?? '', replicas) ? (locale === 'ru' ? 'Применено. Конфигурация в файле совпадает с активной.' : 'Applied. The project file matches the active configuration.') : (locale === 'ru' ? 'Не применено. Файл проекта сохранён; активная конфигурация пока отличается или не подтверждена.' : 'Not applied. Project file saved; the active configuration differs or has not been confirmed.')}</p>}
     {draft.status === 'conflict' && <p className="inline-error" role="alert">{locale === 'ru' ? 'Файл настроек изменился во внешнем редакторе. Текущие изменения сохранены; загрузите файл заново, чтобы продолжить с его версией.' : 'The settings file changed in an external editor. Current edits are retained; reload the file to continue with its version.'}</p>}
     {error && <p className="inline-error" role="alert">{error}</p>}
     <div className="inspector-actions">
       <button type="button" className="icon-button small" title={locale === 'ru' ? 'Отменить изменение' : 'Undo change'} aria-label={locale === 'ru' ? 'Отменить изменение' : 'Undo change'} disabled={!editable || undoStack === 0} onClick={() => { void controller.undoServiceSettingsDraft(draftKey) }}><Undo2 size={15} /></button>
       <button type="button" className="icon-button small" title={locale === 'ru' ? 'Повторить изменение' : 'Redo change'} aria-label={locale === 'ru' ? 'Повторить изменение' : 'Redo change'} disabled={!editable || redoStack === 0} onClick={() => { void controller.redoServiceSettingsDraft(draftKey) }}><Redo2 size={15} /></button>
-      <button type="button" className="primary-button compact" disabled={!hasChanges || saving || draft.refreshingContract || draft.status === 'conflict' || schemaMismatch} onClick={() => { void controller.saveServiceSettingsDraft(draftKey) }}>{saving ? (locale === 'ru' ? 'Сохранение…' : 'Saving…') : draft.refreshingContract ? (locale === 'ru' ? 'Проверка…' : 'Checking…') : (schemaMatched ? (locale === 'ru' ? 'Сохранить и применить сейчас' : 'Save & apply now') : (locale === 'ru' ? 'Сохранить в Project' : 'Save to Project'))}</button>
-      {draft.status === 'clean' && schemaMatched && !applyRecoveryOperationId && <>
+      <button type="button" className="primary-button compact" disabled={!hasChanges || saving || draft.refreshingContract || draft.status === 'conflict' || schemaMismatch} onClick={() => { void controller.saveServiceSettingsDraft(draftKey) }}>{saving ? (locale === 'ru' ? 'Сохранение…' : 'Saving…') : draft.refreshingContract ? (locale === 'ru' ? 'Проверка…' : 'Checking…') : (schemaMatched && draftReviewPaths.length > 0 ? (locale === 'ru' ? 'Сохранить для проверки' : 'Save for review') : (schemaMatched ? (locale === 'ru' ? 'Сохранить и применить сейчас' : 'Save & apply now') : (locale === 'ru' ? 'Сохранить в Project' : 'Save to Project')))}</button>
+      {draft.status === 'clean' && schemaMatched && !applyRecoveryOperationId && applyReviewPaths.length === 0 && <>
         <button type="button" className="secondary-button compact" onClick={() => { void controller.applyServiceSettings(draftKey) }}>{applyRecoveryStatus !== 'none' ? (locale === 'ru' ? 'Подтвердить и применить' : 'Confirm & apply') : (locale === 'ru' ? 'Повторить применение' : 'Retry apply')}</button>
         {applyRecoveryStatus === 'confirmation-required' && <button type="button" className="secondary-button compact" disabled={cliStreamState !== 'idle'} onClick={() => { void controller.retryFailedServiceSettings(draftKey) }}>{locale === 'ru' ? 'Повторить неудавшееся применение' : 'Retry failed apply'}</button>}
       </>}
@@ -914,7 +953,6 @@ function LinkContractInspector({ controller, link, locale }: { controller: Studi
 
 function linkInput(link: ServiceLink): ServiceLinkInput { return { id: link.id, caller: link.caller, target: link.target, contractVersion: link.contractVersion, methods: [...link.methods], transport: link.transport, requestSchemaPath: link.requestSchemaPath, responseSchemaPath: link.responseSchemaPath, contractSchemaPath: link.contractSchemaPath, securityProfile: link.securityProfile, timeoutMillis: link.timeoutMillis, retryLimit: link.retryLimit, requestLimitBytes: link.requestLimitBytes, responseLimitBytes: link.responseLimitBytes, disabledMethods: [...link.disabledMethods], compatibility: link.compatibility, redactionPolicy: link.redactionPolicy } }
 
-export function GitSidebar({ workspace, t, controller }: { workspace: Workspace; t: Copy; controller: StudioController }) { return <><div className="sidebar-heading"><span>{t.git}</span><GitBranch size={15} /></div>{!workspace.git.available ? <div className="sidebar-callout"><CircleAlert size={17} /><strong>{t.noGit}</strong><span>Workspace files are safe. Initialize a repository to track changes.</span><button className="primary-button compact" onClick={() => void controller.initializeGit()}>{t.initGit}</button></div> : <><div className="git-summary"><span className="status-dot" /><strong>{workspace.git.branch || 'HEAD'}</strong><code>{workspace.git.revision || 'uncommitted'}</code></div><div className="sidebar-heading sub"><span>{workspace.git.changes.length} changes</span><button className="icon-button small" title="Refresh" onClick={() => void controller.run('project.inspect')}><RefreshCw size={14} /></button></div><div className="change-list">{workspace.git.changes.map((change: GitChange) => <div className="change-row" key={change.path}><File size={14} /><span>{change.path}</span><code>{change.worktreeStatus || change.indexStatus}</code></div>)}</div><button className="secondary-button full" onClick={() => void controller.run('validate')}><Check size={15} />Validate</button></>}</> }
 
 export function ProblemsView({ diagnostics, t }: { diagnostics: Diagnostic[]; t: Copy }) {
   const groups = groupDiagnostics(diagnostics)
@@ -946,7 +984,8 @@ export function StudioPluginSurfaceFrame({ tab, controller, surface, project, se
     setFrameState('loading')
     setFailureCode('surface.handshake_timeout')
     const target = frame.current?.contentWindow
-    const timeout = window.setTimeout(() => { setFailureCode('surface.handshake_timeout'); setFrameState('failed') }, 8000)
+    let stopHandshake = () => {}
+    const timeout = window.setTimeout(() => { stopHandshake(); setFailureCode('surface.handshake_timeout'); setFrameState('failed') }, 8000)
     let connected = false
     let pending = 0
     const requestTimes: number[] = []
@@ -957,6 +996,11 @@ export function StudioPluginSurfaceFrame({ tab, controller, surface, project, se
       project: project ? { id: project.id, name: project.name } : null,
       service: service ? { id: service.id, name: service.name, version: service.version } : null,
       locale,
+      theme: useStudioStore.getState().theme,
+    }
+    function sendHostReady() {
+      if (!target) return
+      target.postMessage({ type: 'studio.host.ready', schemaVersion: studioServiceEditorBridgeVersion, sessionId: sessionID, context }, '*')
     }
     function reply(requestId: string, result?: unknown, errorCode?: string) {
       if (!target) return
@@ -973,7 +1017,7 @@ export function StudioPluginSurfaceFrame({ tab, controller, surface, project, se
     }
     async function dispatch(request: NonNullable<ReturnType<typeof parseStudioPluginBridgeRequest>>) {
       if (request.method === 'context.get') {
-        reply(request.requestId, { ...context, capabilities: { settingsRead: hasPermission('service.settings.read'), settingsWrite: hasPermission('service.settings.write'), configurationUIRead: hasPermission('service.configuration-ui.read'), resourceRead: hasPermission('service.resources.read'), adminSurfaceRead: hasPermission('service.resources.read'), resourcePublish: hasPermission('service.resources.publish'), peerCatalogRead: hasPermission('service.peer.catalog.read'), apply: false } })
+        reply(request.requestId, { ...context, capabilities: { settingsRead: hasPermission('service.settings.read'), settingsWrite: hasPermission('service.settings.write'), configurationUIRead: hasPermission('service.configuration-ui.read'), resourceRead: hasPermission('service.resources.read'), adminSurfaceRead: hasPermission('service.resources.read'), resourcePublish: hasPermission('service.resources.publish'), peerCatalogRead: hasPermission('service.peer.catalog.read'), secretReferencesRead: hasPermission('service.secrets.read'), apply: false } })
         return
       }
       if (!project || !service) { reply(request.requestId, undefined, 'bridge.service_not_selected'); return }
@@ -1014,8 +1058,10 @@ export function StudioPluginSurfaceFrame({ tab, controller, surface, project, se
       }
       if (request.method === 'service.resource.artifact.select') {
         if (!hasPermission('service.resources.publish')) { reply(request.requestId, undefined, 'bridge.permission_denied'); return }
+        const selection = objectValue(request.payload)
+        if (selection && (Object.keys(selection).length !== 1 || selection.source !== 'project-directory')) { reply(request.requestId, undefined, 'bridge.invalid_resource_selection'); return }
         try {
-          const path = await controller.pluginSelectServiceResourceArtifact(project.id, service.id)
+          const path = await controller.pluginSelectServiceResourceArtifact(project.id, service.id, selection?.source === 'project-directory' ? 'project-directory' : 'archive')
           reply(request.requestId, path)
         } catch (error: unknown) {
           const code = error instanceof Error && error.message.startsWith('bridge.') ? error.message : 'bridge.resource_artifact_unavailable'
@@ -1068,6 +1114,33 @@ export function StudioPluginSurfaceFrame({ tab, controller, surface, project, se
         }
         return
       }
+      if (request.method === 'service.secret.references.read') {
+        if (!hasPermission('service.secrets.read')) { reply(request.requestId, undefined, 'bridge.permission_denied'); return }
+        const payload = objectValue(request.payload)
+        if (!payload || typeof payload.purpose !== 'string') { reply(request.requestId, undefined, 'bridge.invalid_secret_purpose'); return }
+        try { reply(request.requestId, await controller.pluginReadServiceSecretReferences(project.id, service.id, payload.purpose)) }
+        catch (error: unknown) {
+          const code = studioPluginBridgeFailureCode(error, 'bridge.secret_catalog_unavailable')
+          reply(request.requestId, undefined, code)
+        }
+        return
+      }
+      if (request.method === 'service.settings.secret-reference.select') {
+        if (!hasPermission('service.secrets.read') || !hasPermission('service.settings.write')) { reply(request.requestId, undefined, 'bridge.permission_denied'); return }
+        const payload = objectValue(request.payload)
+        if (!payload || !Array.isArray(payload.path) || typeof payload.purpose !== 'string' || typeof payload.reference !== 'string') {
+          reply(request.requestId, undefined, 'bridge.secret_selection_invalid')
+          return
+        }
+        try {
+          const result = await controller.pluginSelectServiceSecretReference(project.id, service.id, payload.path as string[], payload.purpose, payload.reference)
+          reply(request.requestId, { status: result.status, baseDigest: result.baseDigest, errorCode: result.errorCode })
+        } catch (error: unknown) {
+          const code = studioPluginBridgeFailureCode(error, 'bridge.secret_selection_failed')
+          reply(request.requestId, undefined, code)
+        }
+        return
+      }
       if (request.method === 'service.settings.patch') {
         if (!hasPermission('service.settings.write')) { reply(request.requestId, undefined, 'bridge.permission_denied'); return }
         const payload = objectValue(request.payload)
@@ -1087,7 +1160,9 @@ export function StudioPluginSurfaceFrame({ tab, controller, surface, project, se
       }
       if (!hasPermission('service.settings.write')) { reply(request.requestId, undefined, 'bridge.permission_denied'); return }
       try {
-        const result = await controller.pluginSaveServiceSettings(project.id, service.id)
+        const payload = objectValue(request.payload)
+        if (payload && (Object.keys(payload).length !== 1 || payload.allowIncomplete !== true)) { reply(request.requestId, undefined, 'bridge.invalid_save_options'); return }
+        const result = await controller.pluginSaveServiceSettings(project.id, service.id, payload?.allowIncomplete === true)
         reply(request.requestId, { status: result.status, baseDigest: result.baseDigest, errorCode: result.errorCode })
       } catch {
         reply(request.requestId, undefined, 'bridge.save_failed')
@@ -1097,6 +1172,7 @@ export function StudioPluginSurfaceFrame({ tab, controller, surface, project, se
       if (!target || event.source !== target || event.origin !== 'null') return
       if (isStudioPluginSurfaceReadyMessage(event.data, sessionID)) {
         connected = true
+        stopHandshake()
         window.clearTimeout(timeout)
         setFrameState('ready')
         return
@@ -1112,10 +1188,10 @@ export function StudioPluginSurfaceFrame({ tab, controller, surface, project, se
       void dispatch(request).finally(() => { pending-- })
     }
     window.addEventListener('message', onMessage)
-    // Re-handshake if the active project/service changes while this iframe
-    // stays mounted. The load callback handles initial navigation.
-    notifyReady()
-    return () => { window.clearTimeout(timeout); window.removeEventListener('message', onMessage) }
+    // The iframe can finish its load before the plugin's module listeners are
+    // ready. Repeat the same session-bound hello until the plugin acknowledges.
+    stopHandshake = startStudioPluginHandshake(sendHostReady, (callback, delay) => { return window.setInterval(callback, delay) }, (handle) => { window.clearInterval(handle as number) })
+    return () => { stopHandshake(); window.clearTimeout(timeout); window.removeEventListener('message', onMessage) }
   }, [controller, locale, project?.id, project?.name, retryCount, service?.id, service?.name, service?.version, sessionID, surface, tab.id])
   function notifyReady() {
     const target = frame.current?.contentWindow
@@ -1124,7 +1200,7 @@ export function StudioPluginSurfaceFrame({ tab, controller, surface, project, se
       type: 'studio.host.ready',
       schemaVersion: studioServiceEditorBridgeVersion,
       sessionId: sessionID,
-      context: { project: project ? { id: project.id, name: project.name } : null, service: service ? { id: service.id, name: service.name, version: service.version } : null, locale },
+      context: { project: project ? { id: project.id, name: project.name } : null, service: service ? { id: service.id, name: service.name, version: service.version } : null, locale, theme: useStudioStore.getState().theme },
     }, '*')
   }
   const copy = locale === 'ru'
@@ -1257,7 +1333,8 @@ export function ArtifactsView({ controller, t }: { controller: StudioController;
 }
 
 export function SettingsView({ controller, locale, theme, toolchain, t, pluginManager, artifactsManager }: { controller: StudioController; locale: Locale; theme: ThemePreference; toolchain: ToolchainStatus | null; t: Copy; pluginManager: ReactNode; artifactsManager: ReactNode }) {
-  const [category, setCategory] = useState<'editor' | 'appearance' | 'language' | 'toolchain' | 'core' | 'plugins' | 'services' | 'docker'>('plugins')
+  const [category, setCategory] = useState<'editor' | 'appearance' | 'language' | 'toolchain' | 'core' | 'plugins' | 'services' | 'docker' | 'secrets'>('plugins')
+  const workspace = useStudioStore((state) => state.workspace)
   const target = useStudioStore((state) => state.target)
   const profile = useStudioStore((state) => state.profile)
   const setField = useStudioStore((state) => state.setField)
@@ -1415,10 +1492,11 @@ export function SettingsView({ controller, locale, theme, toolchain, t, pluginMa
 
   return (
     <section className="settings-view settings-center">
-      <div className="settings-sidebar"><div className="settings-header"><span className="eyebrow">Studio</span><h1>{t.settingsTitle}</h1></div>{([['plugins', locale === 'ru' ? 'Плагины' : 'Plugins'], ['services', locale === 'ru' ? 'Сервисы и версии' : 'Services & versions'], ['docker', 'Docker'], ['editor', locale === 'ru' ? 'Редактор' : 'Editor'], ['appearance', locale === 'ru' ? 'Внешний вид' : 'Appearance'], ['language', t.language], ['toolchain', locale === 'ru' ? 'Инструменты и CLI' : 'Toolchain & CLI'], ['core', 'Local Core']] as const).map(([id, label]) => <button type="button" key={id} className={`settings-nav-item ${category === id ? 'active' : ''}`} onClick={() => { setCategory(id); }}>{label}</button>)}</div>
+      <div className="settings-sidebar"><div className="settings-header"><span className="eyebrow">Studio</span><h1>{t.settingsTitle}</h1></div>{([['plugins', locale === 'ru' ? 'Плагины' : 'Plugins'], ['services', locale === 'ru' ? 'Сервисы и версии' : 'Services & versions'], ['secrets', locale === 'ru' ? 'Секреты' : 'Secrets'], ['docker', 'Docker'], ['editor', locale === 'ru' ? 'Редактор' : 'Editor'], ['appearance', locale === 'ru' ? 'Внешний вид' : 'Appearance'], ['language', t.language], ['toolchain', locale === 'ru' ? 'Инструменты и CLI' : 'Toolchain & CLI'], ['core', 'Local Core']] as const).map(([id, label]) => <button type="button" key={id} className={`settings-nav-item ${category === id ? 'active' : ''}`} onClick={() => { setCategory(id); }}>{label}</button>)}</div>
       <div className="settings-content">
         {category === 'plugins' && <div className="settings-section"><h3>{locale === 'ru' ? 'Каталог и установленные плагины Studio' : 'Studio plugin catalog and installed versions'}</h3>{pluginManager}</div>}
         {category === 'services' && <div className="settings-section"><h3>{locale === 'ru' ? 'Локальный каталог сервисов' : 'Local service package catalog'}</h3><p className="muted">{locale === 'ru' ? 'Здесь хранятся проверенные локальные бинарники и их версии. Каталог не загружает пакеты из сети.' : 'Trusted local binaries and their versions live here. Packages are not downloaded from a remote catalog.'}</p>{artifactsManager}</div>}
+        {category === 'secrets' && <LocalServiceSecretsSettings controller={controller} workspace={workspace} locale={locale} />}
         {category === 'docker' && <div className="settings-section"><h3>{locale === 'ru' ? 'Docker Engine и контейнеры' : 'Docker Engine and containers'}</h3><p className="muted">{locale === 'ru' ? 'CLI управляет Docker для активного target и запускает все подключённые сервисы проекта.' : 'The CLI manages Docker for the active target and runs all connected project services.'}</p><div className="setup-row"><button className="secondary-button compact" onClick={() => void controller.run('runtime.status')}><RefreshCw size={14} />{locale === 'ru' ? 'Состояние' : 'Status'}</button><button className="primary-button compact" onClick={() => void controller.run('runtime.start')}><Play size={14} />{locale === 'ru' ? 'Запустить проект' : 'Run project'}</button><button className="secondary-button compact" onClick={() => void controller.run('runtime.restart')}><RefreshCw size={14} />{locale === 'ru' ? 'Перезапустить проект' : 'Restart project'}</button></div></div>}
         {category === 'editor' && <div className="settings-section editor-settings"><h3>{locale === 'ru' ? 'Внешний редактор' : 'External editor'}</h3><p className="muted">{locale === 'ru' ? 'Файлы открываются вне Studio. Без глобального правила используется приложение по умолчанию в системе.' : 'Files open outside Studio. With no global rule, Studio uses the operating system default.'}</p><div className="setup-row"><input readOnly value={editorApplication} placeholder={locale === 'ru' ? 'Выберите приложение…' : 'Choose an application…'} aria-label="Editor application" /><button className="secondary-button compact" onClick={() => void chooseEditor()}><FolderOpen size={14} />Browse</button><button className="primary-button compact" disabled={!editorApplication.trim()} onClick={() => void saveEditor('*')}>Set global</button><button className="secondary-button compact" onClick={() => void removeEditor('*')}>Use OS default</button></div><div className="setup-row"><input value={editorPattern} onChange={(event) => { setEditorPattern(event.target.value); }} placeholder="*.yaml" aria-label="File mask" /><button className="primary-button compact" disabled={!editorApplication.trim() || !editorPattern.trim()} onClick={() => void saveEditor(editorPattern.trim())}>Add association</button></div>{editorError && <p className="inline-error" role="alert">{editorError}</p>}{editorAssociations.length > 0 && <div className="editor-association-list">{editorAssociations.map((association) => <div className="editor-association" key={association.pattern}><code>{association.pattern}</code><span title={association.application}>{association.application}</span><button type="button" className="icon-button small" title="Remove association" aria-label={`Remove ${association.pattern}`} onClick={() => void removeEditor(association.pattern)}><Trash2 size={14} /></button></div>)}</div>}</div>}
         {category === 'appearance' && <div className="settings-section"><h3>{t.theme}</h3><p className="muted">{locale === 'ru' ? 'Интерфейс использует только чёрный, белый и нейтральные оттенки. Цвет логотипа не меняется.' : 'The interface uses black, white and neutral grays. The logo color is preserved.'}</p><div className="segmented"><button className={theme === 'system' ? 'active' : ''} onClick={() => void controller.setTheme('system')}>System</button><button className={theme === 'light' ? 'active' : ''} onClick={() => void controller.setTheme('light')}><Sun size={14} />{t.light}</button><button className={theme === 'dark' ? 'active' : ''} onClick={() => void controller.setTheme('dark')}><Moon size={14} />{t.dark}</button></div></div>}
@@ -1456,7 +1534,6 @@ export function CommandPalette({ controller, t, onSettings }: { controller: Stud
   const navigate = useStudioStore((state) => state.navigate)
   const commands: Array<[string, string, () => void]> = [
     [t.graph, 'Open service graph', () => { navigate('canvas'); }],
-    [t.git, 'Open version control', () => { navigate('git'); }],
     [t.problems, 'Open diagnostics', () => { navigate('problems'); }],
     ['Validate', 'Run liapoldus validate', () => void controller.run('validate')],
     ['Local Core', 'Show local Core status', () => void controller.run('core.status')],
@@ -1467,7 +1544,7 @@ export function CommandPalette({ controller, t, onSettings }: { controller: Stud
   return <div className="modal-backdrop" onMouseDown={(event) => { if (event.currentTarget === event.target) close(false) }}><div className="command-modal"><div className="command-search"><span>⌕</span><input autoFocus value={query} onChange={(event) => { setField('commandQuery', event.target.value) }} placeholder={t.command} /><kbd>Esc</kbd></div><div className="command-results">{filtered.map(([label, detail, action]) => <button key={label} onClick={() => { action(); close(false) }}><span><strong>{label}</strong><small>{detail}</small></span><span>›</span></button>)}</div></div></div>
 }
 
-export function CreateProjectDialog({ controller, t }: { controller: StudioController; t: Copy }) { const close = useStudioStore((state) => state.setCreateOpen); const id = useStudioStore((state) => state.projectID); const name = useStudioStore((state) => state.projectName); const setField = useStudioStore((state) => state.setField); return <div className="modal-backdrop"><form className="dialog" onSubmit={(event) => { event.preventDefault(); void controller.createProject() }}><div className="dialog-heading"><div><span className="eyebrow">Project</span><h2>{t.create}</h2></div><button type="button" className="icon-button" onClick={() => { close(false); }}><X size={17} /></button></div><label>Project id<input autoFocus value={id} onChange={(event) => { setField('projectID', event.target.value); }} placeholder="my-project" /></label><label>Name<input value={name} onChange={(event) => { setField('projectName', event.target.value); }} placeholder="My Project" /></label><p className="dialog-hint">A new folder and Git repository will be created in the selected parent directory.</p><div className="dialog-actions"><button type="button" className="secondary-button" onClick={() => { close(false); }}>{t.close}</button><button className="primary-button" type="submit"><Plus size={15} />{t.create}</button></div></form></div> }
+export function CreateProjectDialog({ controller, t }: { controller: StudioController; t: Copy }) { const close = useStudioStore((state) => state.setCreateOpen); const id = useStudioStore((state) => state.projectID); const name = useStudioStore((state) => state.projectName); const setField = useStudioStore((state) => state.setField); return <div className="modal-backdrop"><form className="dialog" onSubmit={(event) => { event.preventDefault(); void controller.createProject() }}><div className="dialog-heading"><div><span className="eyebrow">Project</span><h2>{t.create}</h2></div><button type="button" className="icon-button" onClick={() => { close(false); }}><X size={17} /></button></div><label>Project id<input autoFocus value={id} onChange={(event) => { setField('projectID', event.target.value); }} placeholder="my-project" /></label><label>Name<input value={name} onChange={(event) => { setField('projectName', event.target.value); }} placeholder="My Project" /></label><p className="dialog-hint">A new project folder will be created in the selected parent directory.</p><div className="dialog-actions"><button type="button" className="secondary-button" onClick={() => { close(false); }}>{t.close}</button><button className="primary-button" type="submit"><Plus size={15} />{t.create}</button></div></form></div> }
 export function ServiceDialog({ controller, t }: { controller: StudioController; t: Copy }) {
   const close = useStudioStore((state) => state.setServiceOpen)
   const name = useStudioStore((state) => state.serviceName)

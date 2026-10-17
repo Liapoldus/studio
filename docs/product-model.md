@@ -45,17 +45,11 @@ Tool Registry, но остаётся локальным developer tool, а не 
 Project не является копией Core SQLite и не заменяет Core как runtime source of
 truth.
 
-### Git revision
-
-Immutable commit, из которого CLI может собрать deployable bundle. Незакоммиченный
-working tree не может быть передан в `apply`.
-
-## 3. Четыре независимых контекста
+## 3. Три независимых контекста
 
 ```mermaid
 flowchart TD
     S["Studio"] --> P["Active project"]
-    S --> C["Active branch / commit"]
     S --> O["Selected service or link"]
     S --> T["Workbench tabs and panels"]
     O --> N["Runtime service instance"]
@@ -66,8 +60,7 @@ flowchart TD
 
 Правила разделения:
 
-- смена project или branch не теряет drafts и незакоммиченные Git changes;
-- изменение файла не считается deployable без commit;
+- изменения исходников и их история управляются внешними инструментами;
 - CLI report не переписывает source files;
 - Studio plugin не получает Core credentials;
 - удаление локального файла не удаляет Core generation.
@@ -92,8 +85,7 @@ Studio должна визуально различать эти состоян�
 - выбранный CLI target;
 - валидный manifest;
 - валидные schemas и references;
-- решённые Git-конфликты;
-- immutable commit;
+- revision, требуемая CLI для выбранного target;
 - remote approval, если target policy этого требует.
 
 ## 6. Ownership

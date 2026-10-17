@@ -15,66 +15,6 @@ const generated = `export namespace models {
     target: string;
     constructor(source: any = {}) {}
   }
-  export class GitBranch {
-    name: string;
-    remote: string;
-    current: boolean;
-    constructor(source: any = {}) {}
-  }
-  export class GitChange {
-    path: string;
-    indexStatus: string;
-    worktreeStatus: string;
-    constructor(source: any = {}) {}
-  }
-  export class GitCommit {
-    hash: string;
-    shortHash: string;
-    author: string;
-    timestamp: string;
-    subject: string;
-    constructor(source: any = {}) {}
-  }
-  export class GitConflictSide {
-    content: string;
-    available: boolean;
-    truncated: boolean;
-    constructor(source: any = {}) {}
-  }
-  export class GitConflict {
-    path: string;
-    base: GitConflictSide;
-    ours: GitConflictSide;
-    theirs: GitConflictSide;
-    constructor(source: any = {}) {}
-  }
-  export class GitDiff {
-    path: string;
-    patch: string;
-    truncated: boolean;
-    constructor(source: any = {}) {}
-  }
-  export class GitRemote {
-    name: string;
-    fetchUrl: string;
-    pushUrl: string;
-    constructor(source: any = {}) {}
-  }
-  export class GitStash {
-    ref: string;
-    message: string;
-    createdAt: string;
-    constructor(source: any = {}) {}
-  }
-  export class GitStatus {
-    branch: string;
-    revision: string;
-    changes: GitChange[];
-    dirty: boolean;
-    available: boolean;
-    conflict: boolean;
-    constructor(source: any = {}) {}
-  }
   export class InstalledStudioPluginState {
     ID: string;
     Version: string;
@@ -173,8 +113,16 @@ const generated = `export namespace models {
   export class ServiceSettingsSchemaPreview {
     schemaJson: string;
     schemaDigest: string;
+    previousSchemaDigest: string;
     settingsDigest: string;
     draftDigest: string;
+    migrationCandidateDigest: string;
+    recoveryCopyPath: string;
+    recoverySchemaCopyPath: string;
+    migrationChangedPaths: string[];
+    migrationFromVersion: number;
+    migrationToVersion: number;
+    migrationRequired: boolean;
     valuesCompatible: boolean;
     constructor(source: any = {}) {}
   }
@@ -208,7 +156,6 @@ const generated = `export namespace models {
     project?: Project;
     graph: ServiceGraph;
     files: ProjectFile[];
-    git: GitStatus;
     constructor(source: any = {}) {}
   }
   export class WorkspaceState {

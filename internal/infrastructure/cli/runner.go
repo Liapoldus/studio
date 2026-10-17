@@ -3,6 +3,7 @@ package cli
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -51,24 +52,31 @@ func (r Runner) Run(ctx context.Context, request models.CLIRequest) (<-chan mode
 	if command.Dir == "" {
 		command.Dir = filepath.Clean(request.ProjectRoot)
 	}
+	if len(request.SecretInput) > 0 {
+		command.Stdin = bytes.NewReader(request.SecretInput)
+	}
 	stdout, err := command.StdoutPipe()
 	if err != nil {
+		clear(request.SecretInput)
 		return nil, err
 	}
 	stderr, err := command.StderrPipe()
 	if err != nil {
+		clear(request.SecretInput)
 		return nil, err
 	}
 	if err := command.Start(); err != nil {
+		clear(request.SecretInput)
 		return nil, fmt.Errorf("start liapoldus: %w", err)
 	}
 	events := make(chan models.CLIEvent)
-	go stream(ctx, command, stdout, stderr, events)
+	go stream(ctx, command, stdout, stderr, events, request.SecretInput)
 	return events, nil
 }
 
-func stream(ctx context.Context, command *exec.Cmd, stdout io.ReadCloser, stderr io.ReadCloser, events chan<- models.CLIEvent) {
+func stream(ctx context.Context, command *exec.Cmd, stdout io.ReadCloser, stderr io.ReadCloser, events chan<- models.CLIEvent, secretInput []byte) {
 	defer close(events)
+	defer clear(secretInput)
 	cancelDone := make(chan struct{})
 	go func() {
 		select {

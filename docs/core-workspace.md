@@ -11,22 +11,23 @@ Config workspace — это вкладка `Canvas` внутри tabbed shell (�
 ```mermaid
 flowchart LR
     A["Top bar: project + branch + revision + Run / Restart / Debug"] --> B["Left rail openers"]
-    B --> C["TabStrip: Canvas / Git / Reports / …"]
-    C --> D["Central service canvas (active tab)"]
+    B --> C["TabStrip: Canvas / Reports / …"]
+    C --> D["Canvas tab: service graph"]
     D --> E["Selected service or link"]
-    E --> F["Right schema-driven inspector"]
+    E --> F["Canvas-owned right inspector"]
     C --> G["Problems / Output / Reports tabs"]
+    C --> H["Plugin editor tabs use the full workbench"]
 ```
 
 Зоны:
 
 - top bar — project, branch, commit/revision и Run/Restart/Debug для всех сервисов проекта;
-- left rail — Canvas, Git, Reports, Plugins, Problems, Output; ПКМ даёт действие добавления плагина;
+- left rail — Canvas, Reports, Plugins, Problems, Output; ПКМ даёт действие добавления плагина;
 - Settings — локальный каталог версий Studio-плагинов и сервисных бинарников, Docker Engine и Core;
 - отдельного File Manager и Core-backed runtime страницы нет;
-- TabStrip — активная вкладка canvas и остальные workbench-вкладки;
-- canvas — service nodes и links;
-- inspector — выбранный node/link;
+- TabStrip — активная вкладка Canvas и остальные workbench-вкладки;
+- Canvas — service nodes и links; его Inspector показывается справа только внутри Canvas;
+- вкладки редакторов плагинов занимают всю рабочую область без Inspector;
 - `problems`, `output`, `reports` — обычные вкладки; нижнего dock нет.
 
 По умолчанию активна вкладка Canvas. Inspector открывается при выборе объекта.
@@ -144,7 +145,7 @@ Inspector — schema-driven property editor с collapsible-секциями:
 3. **Link contract** — полное редактирование link-полей (см. §5);
 4. **Source binding** — project file/module references;
 5. **Last deploy** — commit, bundle digest, report state (redacted);
-6. **Context** — project, Git revision/branch и безопасные actor/timestamps;
+6. **Context** — project и безопасные actor/timestamps;
 7. **Actions** — Run / Restart / Logs / Inspect (typed CLI intents, ephemeral
    status; при недоступности CLI/Core — `unknown`).
 

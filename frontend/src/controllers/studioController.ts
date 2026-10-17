@@ -3,12 +3,14 @@ import type { ArtifactReference, RuntimeService, ServiceLinkInput, ProjectFile, 
 import { initialWorkspaceTabs, isSafeApplyOperationID, messageOf, restoreWorkspaceState, workspaceSnapshot, workspaceStateUpdate, workspaceStateWithApplyRecovery, type LayoutPoint, type Locale, type WorkspaceApplyRecoveryOperationId, type WorkspaceApplyRecoveryStatus } from '../models/studio'
 import { parseCoreServiceReadiness, parseServiceRuntimeStatus } from '../models/runtime'
 import { applyConfigurationArrayOperations, configurationArrayOperations } from '../models/configurationArray'
-import { asConfigurationObject, configurationDraftKey, isConfigurationPatchEmpty, mergeConfiguration, configurationValuesEqual, type ConfigurationObject } from '../models/configurationDraft'
-import { configurationSchemaDifferencePaths, configurationSchemasMatch, parseCompatiblePeerService, parseServiceConfigurationUI } from '../models/serviceConfigurationUI'
+import { configurationApplyReviewDiff } from '../models/configurationApplyReview'
+import { asConfigurationObject, configurationDraftKey, configurationSecretReferencePathEditable, isConfigurationPatchEmpty, mergeConfiguration, configurationValuesEqual, type ConfigurationObject } from '../models/configurationDraft'
+import { configurationSchemaDifferencePaths, configurationSchemasMatch, matchServiceConfigurationUIField, parseCompatiblePeerService, parseServiceConfigurationUI } from '../models/serviceConfigurationUI'
 import { serviceConfigurationProvenanceDifferences } from '../models/serviceConfigurationProvenance'
 import { studioPluginBridgeFailureCode } from '../models/pluginSurface'
 import { latestStudioPluginSurfaces, parseInstalledStudioPluginInspections, parseStudioPluginInspection, type StudioPluginPackageInfo } from '../models/studioPluginPackage'
 import { assignSingleServiceEditorPages, parseServiceEditorButtons, type ServiceEditorButtonCandidate } from '../models/serviceEditorButtons'
+import { parseDeclaredSecretPurposes, parseServiceSecretCatalog } from '../models/serviceSecrets'
 import { useStudioStore, type StudioPluginSurface } from '../stores/studio'
 
 export type StudioController = ReturnType<typeof createStudioController>
@@ -23,6 +25,7 @@ export function createStudioController(api: StudioAPI) {
   const settingsDraftLoads = new Map<string, Promise<void>>()
   const configurationUILoads = new Map<string, Promise<void>>()
   const resourceCatalogLoads = new Map<string, Promise<{ items: Array<{ value: string; label: string }> }>>()
+  const serviceSecretCatalogLoads = new Map<string, Promise<{ items: Array<{ reference: string; label: string; state: 'active' | 'revoked' }>; truncated: boolean }>>()
   const peerCatalogLoads = new Map<string, Promise<{ methods: Array<{ id: string; version: string }> }>>()
   const peerContractChecks = new Map<string, Promise<{ id: string; version: string; contractVersion: string }>>()
   const serviceResourceOperations = new Map<string, string>()
@@ -90,8 +93,12 @@ export function createStudioController(api: StudioAPI) {
           if (savedDraft?.status !== 'clean' || !isConfigurationPatchEmpty(savedDraft.patch)) allDraftsSaved = false
         }
 
-        if (hasDirtyDraft && allDraftsSaved && allContractsMatched && shouldApply) {
+        const reviewPaths = store().applyReviewPaths
+        if (hasDirtyDraft && allDraftsSaved && allContractsMatched && shouldApply && reviewPaths.length === 0) {
           await runDevApply(request.projectId, request.projectRoot, true)
+        } else if (hasDirtyDraft && allDraftsSaved && allContractsMatched && reviewPaths.length > 0) {
+          setPausedSettingsApplyScope(request.projectId, request.projectRoot, true)
+          await persistApplyRecovery(request.projectId, request.projectRoot, 'confirmation-required', null, reviewPaths)
         }
       }
     })
@@ -118,7 +125,7 @@ export function createStudioController(api: StudioAPI) {
       if (!workspace.project) { store().setView('home'); store().setTabs(initialWorkspaceTabs(), 'canvas'); store().setStateHydrated(false); store().setApplyRecovery('none', null); return }
       const restored = await restoreWorkspaceState(api)
       if (!isCurrent(serial)) return
-      store().setApplyRecovery(restored.applyRecoveryStatus, restored.applyRecoveryOperationId)
+      store().setApplyRecovery(restored.applyRecoveryStatus, restored.applyRecoveryOperationId, restored.applyReviewPaths)
       setPausedSettingsApplyScope(workspace.project.id, workspace.project.rootPath, restored.applyRecoveryStatus !== 'none')
       store().setTabs(restored.tabs, restored.activeTabId); store().setLayout(restored.layout); store().setView('workspace'); store().setStateHydrated(restored.writable)
       if (!restored.writable) fail('Состояние workspace не поддерживается: автосохранение отключено. Восстановите исходный файл .studio/workspace.json.', '')
@@ -189,7 +196,7 @@ export function createStudioController(api: StudioAPI) {
       const workspace = await api.openProject(root); const restored = await restoreWorkspaceState(api)
       if (!isCurrent(serial)) return
       if (workspace.project) {
-        store().setApplyRecovery(restored.applyRecoveryStatus, restored.applyRecoveryOperationId)
+        store().setApplyRecovery(restored.applyRecoveryStatus, restored.applyRecoveryOperationId, restored.applyReviewPaths)
         setPausedSettingsApplyScope(workspace.project.id, workspace.project.rootPath, restored.applyRecoveryStatus !== 'none')
       }
       store().setRuntimeStatuses({}); store().setWorkspace(workspace); store().setTabs(restored.tabs, restored.activeTabId); store().setLayout(restored.layout); store().setView('workspace'); store().setStateHydrated(restored.writable)
@@ -231,7 +238,6 @@ export function createStudioController(api: StudioAPI) {
     } catch (reason: unknown) { fail(reason, `Не удалось выполнить CLI-команду: ${command}`) }
   }
   async function cancelCLI(): Promise<void> { try { await api.cancelCLI() } catch (reason: unknown) { fail(reason, 'Не удалось остановить процесс CLI') } }
-  async function initializeGit() { try { store().setWorkspace(await api.initializeGit()); store().setError(null) } catch (reason: unknown) { fail(reason, 'Не удалось инициализировать Git') } }
 
   async function loadServiceSettingsDraft(service: RuntimeService): Promise<string | null> {
     const project = store().workspace?.project
@@ -297,7 +303,10 @@ export function createStudioController(api: StudioAPI) {
       const parsedSchema = asConfigurationObject(JSON.parse(preview.schemaJson) as unknown)
       const digest = /^sha256:[a-f0-9]{64}$/u
       if (!parsedSchema || preview.schemaJson.length > 1_048_576 || !digest.test(preview.schemaDigest) ||
-          !digest.test(preview.settingsDigest) || !digest.test(preview.draftDigest) || typeof preview.valuesCompatible !== 'boolean') {
+          !digest.test(preview.previousSchemaDigest) || !digest.test(preview.settingsDigest) || !digest.test(preview.draftDigest) ||
+          typeof preview.valuesCompatible !== 'boolean' || typeof preview.migrationRequired !== 'boolean' ||
+          !Array.isArray(preview.migrationChangedPaths) || preview.migrationChangedPaths.length > 16 ||
+          (preview.migrationRequired && (!digest.test(preview.migrationCandidateDigest) || !Number.isSafeInteger(preview.migrationFromVersion) || !Number.isSafeInteger(preview.migrationToVersion) || preview.migrationFromVersion <= 0 || preview.migrationToVersion <= 0 || preview.recoveryCopyPath.startsWith('/') || !preview.recoveryCopyPath.endsWith('.bak') || preview.recoveryCopyPath.split('/').includes('..') || preview.recoverySchemaCopyPath.startsWith('/') || !preview.recoverySchemaCopyPath.endsWith('.bak') || preview.recoverySchemaCopyPath.split('/').includes('..')))) {
         throw new Error('service.schema_preview_invalid')
       }
       const currentProject = store().workspace?.project
@@ -514,6 +523,58 @@ export function createStudioController(api: StudioAPI) {
     return readServiceResourceCatalog(projectID, serviceID, resourceID)
   }
 
+  async function pluginReadServiceSecretReferences(projectID: string, serviceID: string, purpose: string) {
+    const { key } = pluginServiceContext(projectID, serviceID)
+    if (!/^[a-z][a-z0-9-]*(?:\.[a-z][a-z0-9-]*)*$/u.test(purpose) || purpose.length > 192 || !api.readLocalServiceSecretReferences) {
+      throw new Error('bridge.secret_catalog_unavailable')
+    }
+    const requestKey = `${key}\0${purpose}`
+    const existing = serviceSecretCatalogLoads.get(requestKey)
+    if (existing) return existing
+    const request = (async () => {
+      const manifestJSON = await queueCoreMetadataRead(() => api.readRuntimeServiceMetadata(projectID, serviceID, 'manifest'))
+      const declaredPurposes = parseDeclaredSecretPurposes(manifestJSON, serviceID)
+      if (!declaredPurposes.includes(purpose)) throw new Error('bridge.secret_purpose_not_declared')
+      if (pluginServiceContext(projectID, serviceID).key !== key) throw new Error('bridge.context_changed')
+      const rawCatalog = await api.readLocalServiceSecretReferences?.(serviceID)
+      if (typeof rawCatalog !== 'string') throw new Error('bridge.secret_catalog_unavailable')
+      const catalog = parseServiceSecretCatalog(rawCatalog, serviceID)
+      const allItems = catalog.filter((item) => item.purpose === purpose && item.state === 'active')
+      const current = pluginServiceContext(projectID, serviceID)
+      if (current.key !== key) throw new Error('bridge.context_changed')
+      return { items: allItems.slice(0, 512).map(({ reference, label, state }) => ({ reference, label, state })), truncated: allItems.length > 512 }
+    })()
+    serviceSecretCatalogLoads.set(requestKey, request)
+    try { return await request }
+    finally { if (serviceSecretCatalogLoads.get(requestKey) === request) serviceSecretCatalogLoads.delete(requestKey) }
+  }
+
+  async function pluginSelectServiceSecretReference(projectID: string, serviceID: string, path: string[], purpose: string, reference: string) {
+    const { key, service } = pluginServiceContext(projectID, serviceID)
+    await loadServiceSettingsDraft(service)
+    assertPluginContext(projectID, serviceID, key)
+    requireMatchedConfigurationContract(key)
+    if (!Array.isArray(path) || path.length === 0 || path.length > 64 ||
+        path.some((segment) => typeof segment !== 'string' || !segment || ['__proto__', 'prototype', 'constructor'].includes(segment))) {
+      throw new Error('bridge.secret_path_invalid')
+    }
+    const draft = store().serviceSettingsDrafts[key]
+    const field = matchServiceConfigurationUIField(draft?.configurationUI, path)
+    if (!field || field.widget !== 'secret' || field.secretPurpose !== purpose ||
+        !draft?.schema || !configurationSecretReferencePathEditable(draft.schema, path, purpose, reference)) {
+      throw new Error('bridge.secret_path_not_declared')
+    }
+    const catalog = await pluginReadServiceSecretReferences(projectID, serviceID, purpose)
+    if (!catalog.items.some((item) => item.reference === reference && item.state === 'active')) {
+      throw new Error('bridge.secret_reference_unavailable')
+    }
+    assertPluginContext(projectID, serviceID, key)
+    store().updateServiceSettingsSecretReference(key, path, purpose, reference)
+    await persistServiceSettingsDraft(key, () => pluginContextIsCurrent(projectID, serviceID, key), false)
+    assertPluginContext(projectID, serviceID, key)
+    return pluginSettingsSnapshot(key)
+  }
+
   async function pluginReadServiceAdminSurface(projectID: string, serviceID: string) {
     const { key } = pluginServiceContext(projectID, serviceID)
     if (!api.readRuntimeServiceAdminSurface) throw new Error('bridge.admin_surface_api_unavailable')
@@ -531,10 +592,16 @@ export function createStudioController(api: StudioAPI) {
     return parsed
   }
 
-  async function pluginSelectServiceResourceArtifact(projectID: string, serviceID: string) {
+  async function pluginSelectServiceResourceArtifact(projectID: string, serviceID: string, source: 'archive' | 'project-directory' = 'archive') {
     pluginServiceContext(projectID, serviceID)
-    if (!api.selectRuntimeServiceResourceArtifact) throw new Error('bridge.resource_publish_unavailable')
-    const selected = await api.selectRuntimeServiceResourceArtifact(projectID, serviceID)
+    let selected: string | null
+    if (source === 'project-directory') {
+      if (!api.selectRuntimeServiceProjectDirectory) throw new Error('bridge.resource_publish_unavailable')
+      selected = await api.selectRuntimeServiceProjectDirectory(projectID, serviceID)
+    } else {
+      if (!api.selectRuntimeServiceResourceArtifact) throw new Error('bridge.resource_publish_unavailable')
+      selected = await api.selectRuntimeServiceResourceArtifact(projectID, serviceID)
+    }
     if (!selected) return null
     const refreshedWorkspace = await api.workspace()
     if (refreshedWorkspace.project?.id !== projectID) throw new Error('bridge.context_changed')
@@ -772,12 +839,12 @@ export function createStudioController(api: StudioAPI) {
       if (expectedArray === null || actualArray === null) throw new Error('bridge.patch_projection_unavailable')
       if (!configurationValuesEqual(expectedArray, actualArray)) throw new Error('bridge.patch_projection_mismatch')
     }
-    await persistServiceSettingsDraft(key, () => pluginContextIsCurrent(projectID, serviceID, key))
+    await persistServiceSettingsDraft(key, () => pluginContextIsCurrent(projectID, serviceID, key), false)
     assertPluginContext(projectID, serviceID, key)
     return pluginSettingsSnapshot(key)
   }
 
-  async function pluginSaveServiceSettings(projectID: string, serviceID: string) {
+  async function pluginSaveServiceSettings(projectID: string, serviceID: string, allowIncomplete = false) {
     const { key, service } = pluginServiceContext(projectID, serviceID)
     await loadServiceSettingsDraft(service)
     assertPluginContext(projectID, serviceID, key)
@@ -785,18 +852,23 @@ export function createStudioController(api: StudioAPI) {
     // contract even when Core is temporarily unavailable or its live schema
     // differs. Persisting a validated draft is safe; saveServiceSettingsDraft
     // only auto-applies after a live contract has been verified.
-    await saveServiceSettingsDraft(key, () => pluginContextIsCurrent(projectID, serviceID, key))
+    await queueSettingsOperation(() => saveServiceSettingsDraftNow(key, true, () => pluginContextIsCurrent(projectID, serviceID, key), allowIncomplete))
     assertPluginContext(projectID, serviceID, key)
     return pluginSettingsSnapshot(key)
   }
 
-  function persistServiceSettingsDraft(key: string, contextIsCurrent?: () => boolean): Promise<void> {
+  function persistServiceSettingsDraft(key: string, contextIsCurrent?: () => boolean, autoApply = true): Promise<void> {
     const activeTimer = settingsPersistTimers.get(key)
     if (activeTimer) {
       clearTimeout(activeTimer.timer)
       activeTimer.resolve()
     }
-    scheduleServiceAutoApply(key)
+    if (autoApply) scheduleServiceAutoApply(key)
+    else {
+      const pendingApply = settingsApplyTimers.get(key)
+      if (pendingApply) clearTimeout(pendingApply)
+      settingsApplyTimers.delete(key)
+    }
     return new Promise((resolve) => {
       const pending = { timer: setTimeout(() => {
         settingsPersistTimers.delete(key)
@@ -870,29 +942,40 @@ export function createStudioController(api: StudioAPI) {
     return queueSettingsOperation(() => saveServiceSettingsDraftNow(key, true, contextIsCurrent))
   }
 
-  async function saveServiceSettingsDraftNow(key: string, applyAfterSave: boolean, contextIsCurrent?: () => boolean): Promise<void> {
-    await persistServiceSettingsDraft(key, contextIsCurrent)
+  async function saveServiceSettingsDraftNow(key: string, applyAfterSave: boolean, contextIsCurrent?: () => boolean, allowIncomplete = false): Promise<void> {
+    await persistServiceSettingsDraft(key, contextIsCurrent, applyAfterSave)
     if (contextIsCurrent && !contextIsCurrent()) throw new Error('bridge.context_changed')
     const pendingApply = settingsApplyTimers.get(key)
     if (pendingApply) clearTimeout(pendingApply)
     settingsApplyTimers.delete(key)
     const draft = store().serviceSettingsDrafts[key]
     if (!draft) return
+    const newlySensitivePaths = configurationApplyReviewDiff(draft.base, draft.patch).map((path) => `${draft.serviceId}.${path}`)
+    const pendingReviewPaths = [...new Set([
+      ...(store().applyRecoveryStatus === 'confirmation-required' ? store().applyReviewPaths : []),
+      ...newlySensitivePaths,
+    ])].slice(0, 64)
     const revision = store().beginServiceSettingsDraftSave(key)
     if (revision === null) return
     const scope = settingsApplyScope(draft.projectId, draft.projectRoot)
-    const canApply = applyAfterSave && !pausedSettingsApplyScopes.has(scope) && draft.configurationContractState === 'matched'
+    const canApply = applyAfterSave && !pausedSettingsApplyScopes.has(scope) && draft.configurationContractState === 'matched' && pendingReviewPaths.length === 0
     let savedToProject = false
     try {
       if (contextIsCurrent && !contextIsCurrent()) throw new Error('bridge.context_changed')
-      if (!await persistApplyRecovery(draft.projectId, draft.projectRoot, canApply ? 'applying' : 'confirmation-required')) {
+      if (!await persistApplyRecovery(draft.projectId, draft.projectRoot, canApply ? 'applying' : 'confirmation-required', null, pendingReviewPaths)) {
         throw new Error('Could not persist the apply recovery state; settings were not written. Reopen the Project and retry explicitly.')
       }
       if (contextIsCurrent && !contextIsCurrent()) {
-        await persistApplyRecovery(draft.projectId, draft.projectRoot, 'confirmation-required')
+        await persistApplyRecovery(draft.projectId, draft.projectRoot, 'confirmation-required', null, pendingReviewPaths)
         throw new Error('bridge.context_changed')
       }
-      await api.writeProjectSettings(draft.projectId, draft.serviceId, draft.baseDigest, new TextEncoder().encode(JSON.stringify(draft.patch)))
+      const encodedPatch = new TextEncoder().encode(JSON.stringify(draft.patch))
+      if (allowIncomplete) {
+        if (!api.writeProjectCandidateSettings) throw new Error('Project candidate save is unavailable')
+        await api.writeProjectCandidateSettings(draft.projectId, draft.serviceId, draft.baseDigest, encodedPatch)
+      } else {
+        await api.writeProjectSettings(draft.projectId, draft.serviceId, draft.baseDigest, encodedPatch)
+      }
       const snapshot = await api.readProjectSettings(draft.projectId, draft.serviceId)
       const base = asConfigurationObject(JSON.parse(snapshot.valuesJson) as unknown)
       if (!base || !snapshot.digest) throw new Error('Saved settings could not be reloaded as a safe snapshot')
@@ -905,7 +988,7 @@ export function createStudioController(api: StudioAPI) {
       const conflict = /changed since|conflict/i.test(message)
       store().failServiceSettingsDraftSave(key, revision, message, conflict)
       setPausedSettingsApplyScope(draft.projectId, draft.projectRoot, true)
-      await persistApplyRecovery(draft.projectId, draft.projectRoot, 'confirmation-required')
+      await persistApplyRecovery(draft.projectId, draft.projectRoot, 'confirmation-required', null, pendingReviewPaths)
       if (conflict) {
         try {
           const snapshot = await api.readProjectSettings(draft.projectId, draft.serviceId)
@@ -918,7 +1001,7 @@ export function createStudioController(api: StudioAPI) {
       await runDevApply(draft.projectId, draft.projectRoot, false, true)
     } else if (savedToProject) {
       setPausedSettingsApplyScope(draft.projectId, draft.projectRoot, true)
-      await persistApplyRecovery(draft.projectId, draft.projectRoot, 'confirmation-required')
+      await persistApplyRecovery(draft.projectId, draft.projectRoot, 'confirmation-required', null, pendingReviewPaths)
     }
   }
 
@@ -971,7 +1054,7 @@ export function createStudioController(api: StudioAPI) {
         fail(reason, 'Live service contract or artifact provenance changed; Core apply was not started.')
         return
       }
-      if (!recoveryPrepared && !await persistApplyRecovery(projectID, projectRoot, 'applying')) {
+      if (!recoveryPrepared && !await persistApplyRecovery(projectID, projectRoot, 'applying', null, [])) {
         throw new Error('Could not persist the apply recovery state; the Core apply was not started.')
       }
       unsubscribe = api.onCLIEvent((event) => {
@@ -1054,7 +1137,7 @@ export function createStudioController(api: StudioAPI) {
     else pausedSettingsApplyScopes.delete(scope)
   }
 
-  function persistApplyRecovery(projectID: string, projectRoot: string, status: WorkspaceApplyRecoveryStatus, operationId: WorkspaceApplyRecoveryOperationId = null): Promise<boolean> {
+  function persistApplyRecovery(projectID: string, projectRoot: string, status: WorkspaceApplyRecoveryStatus, operationId: WorkspaceApplyRecoveryOperationId = null, reviewPaths?: string[]): Promise<boolean> {
     const activeProject = store().workspace?.project
     if (!activeProject || activeProject.id !== projectID || activeProject.rootPath !== projectRoot) return Promise.resolve(false)
     const next = persistenceQueue.catch(() => undefined).then(async () => {
@@ -1064,11 +1147,12 @@ export function createStudioController(api: StudioAPI) {
       const projectAfterRead = store().workspace?.project
       if (!projectAfterRead || projectAfterRead.id !== projectID || projectAfterRead.rootPath !== projectRoot) return false
       if (current.projectId && current.projectId !== projectID) throw new Error('Workspace state belongs to a different Project')
-      await api.writeWorkspaceState(workspaceStateWithApplyRecovery({ ...current, projectId: projectID }, status, operationId))
+      const retainedReviewPaths = status === 'none' ? [] : reviewPaths ?? store().applyReviewPaths
+      await api.writeWorkspaceState(workspaceStateWithApplyRecovery({ ...current, projectId: projectID }, status, operationId, retainedReviewPaths))
       const latestProject = store().workspace?.project
       if (latestProject?.id === projectID && latestProject.rootPath === projectRoot) {
         const safeOperationId = status !== 'none' && isSafeApplyOperationID(operationId) ? operationId : null
-        store().setApplyRecovery(status, safeOperationId)
+        store().setApplyRecovery(status, safeOperationId, retainedReviewPaths)
       }
       return true
     })
@@ -1258,7 +1342,7 @@ export function createStudioController(api: StudioAPI) {
       }
     } catch (reason: unknown) { fail(reason, `Не удалось выполнить ${command} для ${serviceID}`) }
   }
-  return { api, refresh, refreshGraph, refreshRuntimeStatuses, openProject, createProject, openFileExternally, run, cancelCLI, runtimeCommand, initializeGit, loadServiceSettingsDraft, importServiceSettingsSchema, previewServiceSettingsSchema, refreshServiceSettingsSchema, refreshServiceSettingsContract, persistServiceSettingsDraft, undoServiceSettingsDraft, redoServiceSettingsDraft, saveServiceSettingsDraft, applyServiceSettings, retryFailedServiceSettings, reconcileApplyRecovery, discardServiceSettingsDraft, pluginReadServiceSettings, pluginReadServiceConfigurationUI, pluginReadServiceResource, pluginReadServiceAdminSurface, pluginSelectServiceResourceArtifact, importProjectCertificateResource, pluginPublishServiceResource, pluginWatchServiceResourceOperation, pluginReadServicePeerCatalog, verifyServicePeerContract, readServiceResourceCatalog, pluginPatchServiceSettings, pluginSaveServiceSettings, addService, createLink, updateServiceLink, deleteNodes, deleteEdges, persistNodePosition, persistWorkspace, setLocale, setTheme, loadDiagnostics, loadTraffic, exportTrafficReport, listArtifacts, registerArtifact, trustArtifact, removeArtifact, bindRuntimeServiceArtifact, serviceMetadata, loadStudioPluginSurfaces, installedStudioPluginPackages, studioPluginEditorBindings, saveStudioPluginEditorBindings, serviceEditorButtonCandidates, readServiceEditorButtons, selectStudioPluginPackage, inspectStudioPluginPackage, installStudioPluginPackage, removeStudioPluginPackage }
+  return { api, refresh, refreshGraph, refreshRuntimeStatuses, openProject, createProject, openFileExternally, run, cancelCLI, runtimeCommand, loadServiceSettingsDraft, importServiceSettingsSchema, previewServiceSettingsSchema, refreshServiceSettingsSchema, refreshServiceSettingsContract, persistServiceSettingsDraft, undoServiceSettingsDraft, redoServiceSettingsDraft, saveServiceSettingsDraft, applyServiceSettings, retryFailedServiceSettings, reconcileApplyRecovery, discardServiceSettingsDraft, pluginReadServiceSettings, pluginReadServiceConfigurationUI, pluginReadServiceResource, pluginReadServiceSecretReferences, pluginSelectServiceSecretReference, pluginReadServiceAdminSurface, pluginSelectServiceResourceArtifact, importProjectCertificateResource, pluginPublishServiceResource, pluginWatchServiceResourceOperation, pluginReadServicePeerCatalog, verifyServicePeerContract, readServiceResourceCatalog, pluginPatchServiceSettings, pluginSaveServiceSettings, addService, createLink, updateServiceLink, deleteNodes, deleteEdges, persistNodePosition, persistWorkspace, setLocale, setTheme, loadDiagnostics, loadTraffic, exportTrafficReport, listArtifacts, registerArtifact, trustArtifact, removeArtifact, bindRuntimeServiceArtifact, serviceMetadata, loadStudioPluginSurfaces, installedStudioPluginPackages, studioPluginEditorBindings, saveStudioPluginEditorBindings, serviceEditorButtonCandidates, readServiceEditorButtons, selectStudioPluginPackage, inspectStudioPluginPackage, installStudioPluginPackage, removeStudioPluginPackage }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

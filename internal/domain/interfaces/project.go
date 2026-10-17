@@ -18,33 +18,6 @@ type ProjectStateStore interface {
 	Save(context.Context, string, models.WorkspaceState) error
 }
 
-// GitRepository exposes the bounded read and explicitly confirmed mutation
-// surface needed by the workspace shell. It never exposes an arbitrary shell.
-type GitRepository interface {
-	Init(context.Context, string) error
-	Status(context.Context, string) (models.GitStatus, error)
-	Diff(context.Context, string, string) (models.GitDiff, error)
-	Conflict(context.Context, string, string) (models.GitConflict, error)
-	ResolveConflict(context.Context, string, string, string, bool) error
-	Stage(context.Context, string, []string, bool) error
-	Unstage(context.Context, string, []string, bool) error
-	CommitStaged(context.Context, string, string, bool) (string, error)
-	Stashes(context.Context, string, int) ([]models.GitStash, error)
-	Stash(context.Context, string, string, bool, bool) (string, error)
-	ApplyStash(context.Context, string, int, bool, bool) error
-	Branches(context.Context, string) ([]models.GitBranch, error)
-	History(context.Context, string, int) ([]models.GitCommit, error)
-	Remotes(context.Context, string) ([]models.GitRemote, error)
-	Checkout(context.Context, string, string, bool) error
-	Commit(context.Context, string, string, []string, bool) (string, error)
-	Pull(context.Context, string, string, string, bool) error
-	Push(context.Context, string, string, string, bool) error
-	Merge(context.Context, string, string, bool) error
-	Rebase(context.Context, string, string, bool) error
-	CherryPick(context.Context, string, string, bool) error
-	Abort(context.Context, string, string, bool) error
-}
-
 // GraphRepository mutates only canonical runtime service/link files. Layout is
 // deliberately kept in ProjectStateStore and never enters this boundary.
 type GraphRepository interface {
@@ -71,10 +44,12 @@ type SettingsStore interface {
 	ValidateSchemaDocument(context.Context, string, string, []byte) error
 	RedactSchemaDocument(context.Context, string, string, []byte) ([]byte, error)
 	ValidateValuesAgainstSchemaDocument(context.Context, string, string, string, []byte, []byte) (bool, error)
+	ValidateSettingsDocumentAgainstSchemaDocument(context.Context, string, string, []byte, []byte) (bool, error)
 	Read(context.Context, string, string, string) ([]byte, error)
 	Snapshot(context.Context, string, string, string) (models.ProjectSettingsSnapshot, error)
 	ValidatePatch(context.Context, string, string, string, []byte) error
 	UpdateIfDigest(context.Context, string, string, string, string, []byte) error
+	UpdateProjectCandidateIfDigest(context.Context, string, string, string, string, []byte) error
 }
 
 type ExternalEditorLauncher interface {

@@ -25,12 +25,12 @@ workspace, typed Wails boundary и тестируемый контракт. От
 - command palette, keyboard/focus/accessibility и reduced motion;
 - loading, empty, error и degraded states.
 
-### Этап 2. Project и Git workspace
+### Этап 2. Project workspace
 
 - discovery/open/import canonical Project;
 - project/file tree с `.studio/` boundary;
 - безопасное чтение/запись project-owned files;
-- native Git status, diff, history, branches, commit, push/pull;
+- управление версиями исходников остаётся за внешними инструментами;
 - conflict state и `.studio` layout/workspace persistence;
 - external editor associations (OS default + глобальный редактор + per-mask) без встроенного IDE (CodeMirror удалён).
 

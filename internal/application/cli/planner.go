@@ -138,6 +138,37 @@ func Plan(intent models.CLIIntent, projectRoot string) ([]string, error) {
 			return nil, ErrInvalidIntent
 		}
 		args = []string{"service", "admin-surface", "inspect", intent.ServiceID, "--target", target}
+	case "service.secret.list":
+		if target != "local" || !validTarget(intent.ServiceID) || intent.Label != "" || intent.Reference != "" || intent.Purpose != "" && !validStudioSecretPurpose(intent.Purpose) {
+			return nil, ErrInvalidIntent
+		}
+		args = []string{"service", "secret", "list", "--target", target, "--service", intent.ServiceID}
+		if intent.Purpose != "" {
+			args = append(args, "--purpose", intent.Purpose)
+		}
+	case "service.secret.create":
+		if target != "local" || !validTarget(intent.ServiceID) || !validStudioSecretPurpose(intent.Purpose) ||
+			strings.TrimSpace(intent.Label) == "" || strings.TrimSpace(intent.Label) != intent.Label || len([]rune(intent.Label)) > 128 ||
+			strings.ContainsAny(intent.Label, "\x00\r\n") || intent.Reference != "" {
+			return nil, ErrInvalidIntent
+		}
+		args = []string{"service", "secret", "create", "--target", target, "--service", intent.ServiceID, "--purpose", intent.Purpose, "--label", intent.Label, "--secret-stdin", "--confirm"}
+	case "service.secret.rotate":
+		if target != "local" || !validTarget(intent.ServiceID) || !validStudioSecretReference(intent.Reference) || !validStudioSecretPurpose(intent.Purpose) ||
+			strings.TrimSpace(intent.Label) == "" || strings.TrimSpace(intent.Label) != intent.Label || len([]rune(intent.Label)) > 128 || strings.ContainsAny(intent.Label, "\x00\r\n") {
+			return nil, ErrInvalidIntent
+		}
+		args = []string{"service", "secret", "rotate", "--target", target, "--service", intent.ServiceID, "--reference", intent.Reference, "--purpose", intent.Purpose, "--label", intent.Label, "--secret-stdin", "--confirm"}
+	case "service.secret.register":
+		if target != "local" || !validTarget(intent.ServiceID) || !validStudioSecretReference(intent.Reference) || intent.Purpose != "" || intent.Label != "" {
+			return nil, ErrInvalidIntent
+		}
+		args = []string{"service", "secret", "register", "--target", target, "--service", intent.ServiceID, "--reference", intent.Reference, "--confirm"}
+	case "service.secret.revoke":
+		if target != "local" || !validTarget(intent.ServiceID) || !validStudioSecretReference(intent.Reference) || intent.Purpose != "" || intent.Label != "" {
+			return nil, ErrInvalidIntent
+		}
+		args = []string{"service", "secret", "revoke", "--target", target, "--service", intent.ServiceID, "--reference", intent.Reference, "--confirm"}
 	case "service.resource.list":
 		if target != "local" || !validTarget(intent.ServiceID) || !validTarget(intent.ResourceID) {
 			return nil, ErrInvalidIntent
@@ -180,6 +211,36 @@ func Plan(intent models.CLIIntent, projectRoot string) ([]string, error) {
 		return nil, ErrInvalidIntent
 	}
 	return args, nil
+}
+
+func validStudioSecretPurpose(value string) bool {
+	if value == "" || len(value) > 192 || strings.TrimSpace(value) != value {
+		return false
+	}
+	for _, part := range strings.Split(value, ".") {
+		if part == "" || part[0] < 'a' || part[0] > 'z' {
+			return false
+		}
+		for _, character := range part {
+			if !strings.ContainsRune("abcdefghijklmnopqrstuvwxyz0123456789-", character) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func validStudioSecretReference(value string) bool {
+	const prefix = "ssr:v1:"
+	if len(value) != len(prefix)+32 || !strings.HasPrefix(value, prefix) {
+		return false
+	}
+	for _, character := range value[len(prefix):] {
+		if !strings.ContainsRune("0123456789abcdef", character) {
+			return false
+		}
+	}
+	return true
 }
 
 func validTarget(value string) bool {
