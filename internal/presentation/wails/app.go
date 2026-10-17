@@ -638,6 +638,37 @@ func createRecoveryCopy(a *App, root, path string, contents []byte) error {
 	return nil
 }
 
+// CreateServiceSettingsRecoveryCopy preserves the exact canonical settings
+// bytes reviewed by a plugin migration preview. Only a project-relative backup
+// path and digest cross the Wails boundary; file contents remain host-owned.
+func (a *App) CreateServiceSettingsRecoveryCopy(projectID, serviceID, expectedDigest string) (models.ProjectSettingsRecoveryCopy, error) {
+	workspace, service, err := a.settingsService(projectID, serviceID)
+	if err != nil || a.files == nil || !validSettingsDigest(expectedDigest) {
+		return models.ProjectSettingsRecoveryCopy{}, models.ErrInvalidProject
+	}
+	a.settingsMu.Lock()
+	defer a.settingsMu.Unlock()
+	settingsDocument, readErr := a.files.ReadFile(a.context(), workspace.Project.RootPath, service.SettingsPath)
+	if readErr != nil && !errors.Is(readErr, os.ErrNotExist) {
+		return models.ProjectSettingsRecoveryCopy{}, readErr
+	}
+	if errors.Is(readErr, os.ErrNotExist) {
+		settingsDocument = nil
+	}
+	actualDigest := fmt.Sprintf("sha256:%x", sha256.Sum256(settingsDocument))
+	if actualDigest != expectedDigest {
+		return models.ProjectSettingsRecoveryCopy{}, ErrSchemaPreviewStale
+	}
+	path := settingsMigrationRecoveryPath(service, expectedDigest)
+	if path == "" {
+		return models.ProjectSettingsRecoveryCopy{}, models.ErrInvalidProject
+	}
+	if err := createRecoveryCopy(a, workspace.Project.RootPath, path, settingsDocument); err != nil {
+		return models.ProjectSettingsRecoveryCopy{}, errors.New("project settings recovery copy could not be created")
+	}
+	return models.ProjectSettingsRecoveryCopy{Path: path, Digest: actualDigest}, nil
+}
+
 func (a *App) WriteProjectSettings(projectID, serviceID, expectedDigest string, patch []byte) error {
 	workspace, service, err := a.settingsService(projectID, serviceID)
 	if err != nil {

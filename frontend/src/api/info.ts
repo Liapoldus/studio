@@ -2,6 +2,7 @@ import type {
   Diagnostic as DiagnosticData,
   InstalledStudioPluginState as InstalledStudioPluginStateData,
   ProjectFile as ProjectFileData,
+  ProjectSettingsRecoveryCopy as ProjectSettingsRecoveryCopyData,
   Project as ProjectData,
   ServiceGraph as ServiceGraphData,
   ServiceLink as ServiceLinkData,
@@ -128,6 +129,20 @@ export class ProjectFile implements ProjectFileData {
     this.path = stringField(value, 'path', 'project file')
     this.kind = stringField(value, 'kind', 'project file')
     this.bytes = numberField(value, 'bytes', 'project file')
+  }
+}
+
+export class ProjectSettingsRecoveryCopy implements ProjectSettingsRecoveryCopyData {
+  path: string
+  digest: string
+
+  constructor(source: unknown = {}) {
+    const value = object(source, 'project settings recovery copy')
+    this.path = stringField(value, 'path', 'project settings recovery copy')
+    this.digest = stringField(value, 'digest', 'project settings recovery copy')
+    if (this.path.length > 512 || this.path.startsWith('/') || this.path.includes('\\') || /[\0\r\n]/u.test(this.path) ||
+        !this.path.endsWith('.bak') || this.path.split('/').some((part) => !part || part === '.' || part === '..') ||
+        !/^sha256:[a-f0-9]{64}$/u.test(this.digest)) throw new Error('Invalid Project settings recovery copy')
   }
 }
 
@@ -433,4 +448,4 @@ export class WorkspaceState implements WorkspaceStateData {
 }
 
 
-export const models = { ArtifactReference, ProductInfo, Project, ProjectFile, ToolchainStatus, InstalledStudioPluginState, RuntimeService, ServiceLink, ServiceGraph, TrafficRecordView, Workspace, WorkspaceState }
+export const models = { ArtifactReference, ProductInfo, Project, ProjectFile, ProjectSettingsRecoveryCopy, ToolchainStatus, InstalledStudioPluginState, RuntimeService, ServiceLink, ServiceGraph, TrafficRecordView, Workspace, WorkspaceState }

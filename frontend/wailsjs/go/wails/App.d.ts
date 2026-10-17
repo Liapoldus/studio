@@ -18,6 +18,8 @@ export function CreateRuntimeService(arg1:models.RuntimeServiceInput):Promise<mo
 
 export function CreateServiceLink(arg1:models.ServiceLinkInput):Promise<models.Workspace>;
 
+export function CreateServiceSettingsRecoveryCopy(arg1:string,arg2:string,arg3:string):Promise<models.ProjectSettingsRecoveryCopy>;
+
 export function DeleteRuntimeService(arg1:string,arg2:boolean):Promise<models.Workspace>;
 
 export function DeleteServiceLink(arg1:string,arg2:string,arg3:boolean):Promise<models.Workspace>;

@@ -100,6 +100,14 @@ type ProjectSettingsSnapshot struct {
 	ConfigurationDigest string `json:"configurationDigest"`
 }
 
+// ProjectSettingsRecoveryCopy is a host-created copy of the exact canonical
+// Project settings bytes. Plugin surfaces receive only its safe relative path
+// and digest; they never receive settings file contents or an absolute path.
+type ProjectSettingsRecoveryCopy struct {
+	Path   string `json:"path"`
+	Digest string `json:"digest"`
+}
+
 // ServiceSettingsSchemaPreview binds a read-only compatibility check to the
 // exact schema, Project settings file, and safe draft reviewed by the user.
 type ServiceSettingsSchemaPreview struct {

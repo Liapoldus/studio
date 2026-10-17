@@ -1125,6 +1125,17 @@ export function StudioPluginSurfaceFrame({ tab, controller, surface, project, se
         }
         return
       }
+      if (request.method === 'service.settings.recovery.copy') {
+        if (!hasPermission('service.settings.write')) { reply(request.requestId, undefined, 'bridge.permission_denied'); return }
+        const payload = objectValue(request.payload)
+        if (!payload || typeof payload.baseDigest !== 'string') { reply(request.requestId, undefined, 'bridge.recovery_request_invalid'); return }
+        try { reply(request.requestId, await controller.pluginCreateServiceSettingsRecoveryCopy(project.id, service.id, payload.baseDigest)) }
+        catch (error: unknown) {
+          const code = error instanceof Error && error.message.startsWith('bridge.') ? error.message : 'bridge.recovery_copy_failed'
+          reply(request.requestId, undefined, code)
+        }
+        return
+      }
       if (request.method === 'service.settings.secret-reference.select') {
         if (!hasPermission('service.secrets.read') || !hasPermission('service.settings.write')) { reply(request.requestId, undefined, 'bridge.permission_denied'); return }
         const payload = objectValue(request.payload)

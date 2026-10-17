@@ -23,7 +23,7 @@ export function studioPluginBridgeFailureCode(error: unknown, fallback: string):
 }
 
 export const studioServiceEditorBridgeVersion = 'studio-service-editor/v2'
-export type StudioPluginBridgeMethod = 'context.get' | 'service.settings.read' | 'service.configuration-ui.read' | 'service.resource.list' | 'service.admin-surface.read' | 'service.resource.artifact.select' | 'service.resource.publish' | 'service.resource.operation.watch' | 'service.peer.catalog.read' | 'service.secret.references.read' | 'service.settings.secret-reference.select' | 'service.settings.patch' | 'service.settings.save'
+export type StudioPluginBridgeMethod = 'context.get' | 'service.settings.read' | 'service.configuration-ui.read' | 'service.resource.list' | 'service.admin-surface.read' | 'service.resource.artifact.select' | 'service.resource.publish' | 'service.resource.operation.watch' | 'service.peer.catalog.read' | 'service.secret.references.read' | 'service.settings.secret-reference.select' | 'service.settings.recovery.copy' | 'service.settings.patch' | 'service.settings.save'
 export type StudioPluginBridgeRequest = {
   type: 'studio.bridge.request'
   schemaVersion: typeof studioServiceEditorBridgeVersion
@@ -72,7 +72,7 @@ export function parseStudioPluginBridgeRequest(value: unknown): StudioPluginBrid
   if (entries.type !== 'studio.bridge.request' || entries.schemaVersion !== studioServiceEditorBridgeVersion ||
       typeof entries.sessionId !== 'string' || !safeSessionID.test(entries.sessionId) ||
       typeof entries.requestId !== 'string' || !safeRequestID.test(entries.requestId) ||
-      !['context.get', 'service.settings.read', 'service.configuration-ui.read', 'service.resource.list', 'service.admin-surface.read', 'service.resource.artifact.select', 'service.resource.publish', 'service.resource.operation.watch', 'service.peer.catalog.read', 'service.secret.references.read', 'service.settings.secret-reference.select', 'service.settings.patch', 'service.settings.save'].includes(String(entries.method))) return null
+      !['context.get', 'service.settings.read', 'service.configuration-ui.read', 'service.resource.list', 'service.admin-surface.read', 'service.resource.artifact.select', 'service.resource.publish', 'service.resource.operation.watch', 'service.peer.catalog.read', 'service.secret.references.read', 'service.settings.secret-reference.select', 'service.settings.recovery.copy', 'service.settings.patch', 'service.settings.save'].includes(String(entries.method))) return null
   if (entries.method === 'service.settings.patch') {
     const payload = entries.payload
     if (!isJSONObject(payload) || Object.keys(payload).some((key) => key !== 'path' && key !== 'value') ||
@@ -96,6 +96,10 @@ export function parseStudioPluginBridgeRequest(value: unknown): StudioPluginBrid
         payload.path.some((segment) => typeof segment !== 'string' || segment.length === 0 || segment.length > 256 || ['__proto__', 'prototype', 'constructor'].includes(segment)) ||
         typeof payload.purpose !== 'string' || !/^[a-z][a-z0-9-]*(?:\.[a-z][a-z0-9-]*)*$/u.test(payload.purpose) || payload.purpose.length > 192 ||
         typeof payload.reference !== 'string' || !/^ssr:v1:[a-f0-9]{32}$/u.test(payload.reference)) return null
+  } else if (entries.method === 'service.settings.recovery.copy') {
+    const payload = entries.payload
+    if (!isJSONObject(payload) || Object.keys(payload).length !== 1 || typeof payload.baseDigest !== 'string' ||
+        !/^sha256:[a-f0-9]{64}$/u.test(payload.baseDigest)) return null
   } else if (entries.method === 'service.admin-surface.read' && entries.payload !== undefined) {
     return null
   } else if (entries.method === 'service.resource.artifact.select' && entries.payload !== undefined) {

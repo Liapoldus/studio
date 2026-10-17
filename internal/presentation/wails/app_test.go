@@ -843,6 +843,41 @@ func TestRefreshServiceSettingsSchemaMigratesOnlyTheVersionAndKeepsExactRecovery
 	}
 }
 
+func TestCreateServiceSettingsRecoveryCopyPreservesReviewedBytesAndRejectsStaleDigest(t *testing.T) {
+	root := t.TempDir()
+	project := models.Project{ID: "project-settings-recovery", Name: "Settings recovery", RootPath: root}
+	service := models.RuntimeService{ID: "server", SettingsPath: "services/server/settings.json", SettingsSchemaPath: "schemas/server/settings.json"}
+	workspace := models.Workspace{Project: &project, Graph: models.ServiceGraph{Services: []models.RuntimeService{service}}}
+	store := metadataProjectStore{projects: []models.Project{project}}
+	files := projectfs.FileSystem{}
+	original := []byte("{\n  \"schemaVersion\": 1,\n  \"legacy\": { \"keep\": true }\n}\n")
+	if err := files.WriteFile(context.Background(), root, service.SettingsPath, original); err != nil {
+		t.Fatal(err)
+	}
+	digest := fmt.Sprintf("sha256:%x", sha256.Sum256(original))
+	app := NewApp(nil, workspaceapp.New(store, metadataProjectSource{workspace: workspace}), nil, files, settingsinfra.Store{Files: files}, nil, nil, nil, nil, nil, nil, nil, nil)
+
+	copy, err := app.CreateServiceSettingsRecoveryCopy(project.ID, service.ID, digest)
+	if err != nil || copy.Path == "" || copy.Digest != digest {
+		t.Fatalf("recovery copy=%+v err=%v", copy, err)
+	}
+	recovered, err := files.ReadFile(context.Background(), root, copy.Path)
+	if err != nil || !reflect.DeepEqual(recovered, original) {
+		t.Fatalf("recovery copy did not retain exact source bytes: %q err=%v", recovered, err)
+	}
+	info, err := os.Stat(filepath.Join(root, filepath.FromSlash(copy.Path)))
+	if err != nil || info.Mode().Perm() != 0600 {
+		t.Fatalf("recovery copy permissions=%v err=%v", info, err)
+	}
+	if _, staleErr := app.CreateServiceSettingsRecoveryCopy(project.ID, service.ID, "sha256:"+strings.Repeat("0", 64)); !errors.Is(staleErr, ErrSchemaPreviewStale) {
+		t.Fatalf("stale digest should be rejected, got %v", staleErr)
+	}
+	unchanged, err := files.ReadFile(context.Background(), root, service.SettingsPath)
+	if err != nil || !reflect.DeepEqual(unchanged, original) {
+		t.Fatalf("backup operation mutated Project settings: %q err=%v", unchanged, err)
+	}
+}
+
 func TestRefreshServiceSettingsSchemaRejectsChangedSettingsAfterPreview(t *testing.T) {
 	root := t.TempDir()
 	project := models.Project{ID: "project-schema-preview-stale", Name: "Schema preview", RootPath: root}

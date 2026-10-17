@@ -77,6 +77,7 @@ export interface StudioAPI {
   readProjectSettings(projectId: string, serviceId: string): Promise<ProjectSettingsSnapshot>
   writeProjectSettings(projectId: string, serviceId: string, expectedDigest: string, patch: Uint8Array): Promise<void>
   writeProjectCandidateSettings?(projectId: string, serviceId: string, expectedDigest: string, patch: Uint8Array): Promise<void>
+  createServiceSettingsRecoveryCopy(projectId: string, serviceId: string, expectedDigest: string): Promise<ProjectSettingsRecoveryCopy>
   readServiceSettingsDraft(projectId: string, serviceId: string): Promise<PersistedServiceSettingsDraft | null>
   saveServiceSettingsDraft(projectId: string, serviceId: string, baseDigest: string, patchJson: string): Promise<void>
   deleteServiceSettingsDraft(projectId: string, serviceId: string): Promise<void>
@@ -136,6 +137,11 @@ export interface ProjectSettingsSnapshot {
   valuesJson: string
   digest: string
   configurationDigest?: string
+}
+
+export interface ProjectSettingsRecoveryCopy {
+  path: string
+  digest: string
 }
 
 export interface PersistedServiceSettingsDraft {

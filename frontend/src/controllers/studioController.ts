@@ -458,6 +458,22 @@ export function createStudioController(api: StudioAPI) {
     if (!pluginContextIsCurrent(projectID, serviceID, expectedKey)) throw new Error('bridge.context_changed')
   }
 
+  async function pluginCreateServiceSettingsRecoveryCopy(projectID: string, serviceID: string, expectedDigest: string) {
+    const { key, service } = pluginServiceContext(projectID, serviceID)
+    if (!/^sha256:[a-f0-9]{64}$/u.test(expectedDigest)) throw new Error('bridge.recovery_digest_invalid')
+    await loadServiceSettingsDraft(service)
+    assertPluginContext(projectID, serviceID, key)
+    if (store().serviceSettingsDrafts[key]?.baseDigest !== expectedDigest) throw new Error('bridge.recovery_source_changed')
+    const copy = await api.createServiceSettingsRecoveryCopy(projectID, serviceID, expectedDigest)
+    assertPluginContext(projectID, serviceID, key)
+    if (copy.digest !== expectedDigest || typeof copy.path !== 'string' || copy.path.length === 0 || copy.path.length > 512 ||
+        copy.path.startsWith('/') || copy.path.includes('\\') || /[\0\r\n]/u.test(copy.path) || !copy.path.endsWith('.bak') ||
+        copy.path.split('/').some((part) => !part || part === '.' || part === '..')) {
+      throw new Error('bridge.recovery_response_invalid')
+    }
+    return { path: copy.path, digest: copy.digest }
+  }
+
   function pluginSettingsSnapshot(key: string) {
     const draft = store().serviceSettingsDrafts[key]
     if (!draft?.schema) throw new Error('bridge.settings_unavailable')
@@ -1342,7 +1358,7 @@ export function createStudioController(api: StudioAPI) {
       }
     } catch (reason: unknown) { fail(reason, `Не удалось выполнить ${command} для ${serviceID}`) }
   }
-  return { api, refresh, refreshGraph, refreshRuntimeStatuses, openProject, createProject, openFileExternally, run, cancelCLI, runtimeCommand, loadServiceSettingsDraft, importServiceSettingsSchema, previewServiceSettingsSchema, refreshServiceSettingsSchema, refreshServiceSettingsContract, persistServiceSettingsDraft, undoServiceSettingsDraft, redoServiceSettingsDraft, saveServiceSettingsDraft, applyServiceSettings, retryFailedServiceSettings, reconcileApplyRecovery, discardServiceSettingsDraft, pluginReadServiceSettings, pluginReadServiceConfigurationUI, pluginReadServiceResource, pluginReadServiceSecretReferences, pluginSelectServiceSecretReference, pluginReadServiceAdminSurface, pluginSelectServiceResourceArtifact, importProjectCertificateResource, pluginPublishServiceResource, pluginWatchServiceResourceOperation, pluginReadServicePeerCatalog, verifyServicePeerContract, readServiceResourceCatalog, pluginPatchServiceSettings, pluginSaveServiceSettings, addService, createLink, updateServiceLink, deleteNodes, deleteEdges, persistNodePosition, persistWorkspace, setLocale, setTheme, loadDiagnostics, loadTraffic, exportTrafficReport, listArtifacts, registerArtifact, trustArtifact, removeArtifact, bindRuntimeServiceArtifact, serviceMetadata, loadStudioPluginSurfaces, installedStudioPluginPackages, studioPluginEditorBindings, saveStudioPluginEditorBindings, serviceEditorButtonCandidates, readServiceEditorButtons, selectStudioPluginPackage, inspectStudioPluginPackage, installStudioPluginPackage, removeStudioPluginPackage }
+  return { api, refresh, refreshGraph, refreshRuntimeStatuses, openProject, createProject, openFileExternally, run, cancelCLI, runtimeCommand, loadServiceSettingsDraft, importServiceSettingsSchema, previewServiceSettingsSchema, refreshServiceSettingsSchema, refreshServiceSettingsContract, persistServiceSettingsDraft, undoServiceSettingsDraft, redoServiceSettingsDraft, saveServiceSettingsDraft, applyServiceSettings, retryFailedServiceSettings, reconcileApplyRecovery, discardServiceSettingsDraft, pluginReadServiceSettings, pluginReadServiceConfigurationUI, pluginReadServiceResource, pluginReadServiceSecretReferences, pluginSelectServiceSecretReference, pluginCreateServiceSettingsRecoveryCopy, pluginReadServiceAdminSurface, pluginSelectServiceResourceArtifact, importProjectCertificateResource, pluginPublishServiceResource, pluginWatchServiceResourceOperation, pluginReadServicePeerCatalog, verifyServicePeerContract, readServiceResourceCatalog, pluginPatchServiceSettings, pluginSaveServiceSettings, addService, createLink, updateServiceLink, deleteNodes, deleteEdges, persistNodePosition, persistWorkspace, setLocale, setTheme, loadDiagnostics, loadTraffic, exportTrafficReport, listArtifacts, registerArtifact, trustArtifact, removeArtifact, bindRuntimeServiceArtifact, serviceMetadata, loadStudioPluginSurfaces, installedStudioPluginPackages, studioPluginEditorBindings, saveStudioPluginEditorBindings, serviceEditorButtonCandidates, readServiceEditorButtons, selectStudioPluginPackage, inspectStudioPluginPackage, installStudioPluginPackage, removeStudioPluginPackage }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

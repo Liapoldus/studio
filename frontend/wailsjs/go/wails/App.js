@@ -34,6 +34,10 @@ export function CreateServiceLink(arg1) {
   return window['go']['wails']['App']['CreateServiceLink'](arg1);
 }
 
+export function CreateServiceSettingsRecoveryCopy(arg1, arg2, arg3) {
+  return window['go']['wails']['App']['CreateServiceSettingsRecoveryCopy'](arg1, arg2, arg3);
+}
+
 export function DeleteRuntimeService(arg1, arg2) {
   return window['go']['wails']['App']['DeleteRuntimeService'](arg1, arg2);
 }

@@ -42,6 +42,11 @@ const generated = `export namespace models {
     bytes: number;
     constructor(source: any = {}) {}
   }
+  export class ProjectSettingsRecoveryCopy {
+    path: string;
+    digest: string;
+    constructor(source: any = {}) {}
+  }
   export class RuntimeService {
     id: string;
     name: string;

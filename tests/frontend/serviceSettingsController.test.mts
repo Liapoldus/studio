@@ -1126,6 +1126,37 @@ await test('StudioPlugin receives only active safe secret references for a manif
   assert.equal(catalogReads, 1)
 })
 
+await test('StudioPlugin recovery copy is scoped to the open service and exact canonical Project digest', async () => {
+  const projectID = 'settings-recovery-project'
+  const projectRoot = '/tmp/settings-recovery-project'
+  const digest = `sha256:${'e'.repeat(64)}`
+  useStudioStore.setState({ serviceSettingsDrafts: {}, workspace: {
+    project: { id: projectID, name: projectID, rootPath: projectRoot },
+    graph: { services: [service] },
+  } as Workspace })
+  const schema = { type: 'object', properties: { enabled: { type: 'boolean' } } }
+  const calls: unknown[][] = []
+  const api = {
+    ...recoveryStateAPI(projectID),
+    readProjectSchema: () => Promise.resolve(bytes(schema)),
+    readProjectSettings: () => Promise.resolve({ valuesJson: '{}', digest }),
+    readServiceSettingsDraft: () => Promise.resolve(null),
+    readRuntimeServiceMetadata: liveMetadata(schema),
+    createServiceSettingsRecoveryCopy: (requestedProjectID: string, serviceID: string, expectedDigest: string) => {
+      calls.push([requestedProjectID, serviceID, expectedDigest])
+      return Promise.resolve({ path: 'services/server/.server-settings-recovery-e.bak', digest: expectedDigest })
+    },
+  } as unknown as StudioAPI
+  const controller = createStudioController(api)
+
+  assert.deepEqual(await controller.pluginCreateServiceSettingsRecoveryCopy(projectID, 'server', digest), {
+    path: 'services/server/.server-settings-recovery-e.bak', digest,
+  })
+  await assert.rejects(controller.pluginCreateServiceSettingsRecoveryCopy(projectID, 'server', `sha256:${'f'.repeat(64)}`), /bridge.recovery_source_changed/u)
+  await assert.rejects(controller.pluginCreateServiceSettingsRecoveryCopy('other-project', 'server', digest), /bridge.context_changed/u)
+  assert.deepEqual(calls, [[projectID, 'server', digest]])
+})
+
 await test('generic peer field verifies the selected Project service contract through Core metadata', async () => {
   const projectID = 'generic-peer-project'
   const echo: RuntimeService = { ...service, id: 'echo', name: 'Echo', version: '1.2.1', artifact: { id: 'echo', version: '1.2.1', platform: 'linux/arm64', digest: artifactDigest } }

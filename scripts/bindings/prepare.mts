@@ -2,7 +2,7 @@ import { readFile, writeFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
-export const modelModule = "// Prepared by scripts/bindings/prepare.mts.\nexport { ArtifactReference, Diagnostic, InstalledStudioPluginState, ServiceLink, ServiceArtifactReference, RuntimeService, ServiceGraph, ServiceLinkInput, ServiceSettingsSchemaPreview, ProductInfo, Project, ProjectFile, RuntimeServiceInput, ToolchainStatus, TrafficRecordView, Workspace, WorkspaceState, models } from '../../src/api/info'\nexport type { ReportSummary } from '../../src/api/info'\n"
+export const modelModule = "// Prepared by scripts/bindings/prepare.mts.\nexport { ArtifactReference, Diagnostic, InstalledStudioPluginState, ServiceLink, ServiceArtifactReference, RuntimeService, ServiceGraph, ServiceLinkInput, ServiceSettingsSchemaPreview, ProductInfo, Project, ProjectFile, ProjectSettingsRecoveryCopy, RuntimeServiceInput, ToolchainStatus, TrafficRecordView, Workspace, WorkspaceState, models } from '../../src/api/info'\nexport type { ReportSummary } from '../../src/api/info'\n"
 
 // Fail closed when the canonical Go model changes.
 export function prepareModels(source: string): string {
@@ -12,13 +12,14 @@ export function prepareModels(source: string): string {
     .map(match => `${match[1]}:${match[2]}`)
   const exports = [...source.matchAll(/\bexport (namespace|class|interface|enum|type) (\w+)/gu)]
     .map(match => `${match[1]}:${match[2]}`)
-  const expectedClasses = ['ArtifactReference', 'Diagnostic', 'InstalledStudioPluginState', 'ProductInfo', 'Project', 'ProjectFile', 'ReportSummary', 'ServiceArtifactReference', 'RuntimeService', 'RuntimeServiceInput', 'ServiceLink', 'ServiceGraph', 'ServiceLinkInput', 'ServiceSettingsSchemaPreview', 'ToolchainStatus', 'TrafficRecordView', 'Workspace', 'WorkspaceState']
+  const expectedClasses = ['ArtifactReference', 'Diagnostic', 'InstalledStudioPluginState', 'ProductInfo', 'Project', 'ProjectFile', 'ProjectSettingsRecoveryCopy', 'ReportSummary', 'ServiceArtifactReference', 'RuntimeService', 'RuntimeServiceInput', 'ServiceLink', 'ServiceGraph', 'ServiceLinkInput', 'ServiceSettingsSchemaPreview', 'ToolchainStatus', 'TrafficRecordView', 'Workspace', 'WorkspaceState']
   const legacyFields = [
     'schemaVersion:string', 'timestamp:string', 'owner:string', 'code:string', 'severity:string', 'message:string', 'operationId:string', 'target:string',
     'ID:string', 'Version:string', 'Digest:string', 'Path:string', 'Enabled:boolean', 'Signed:boolean',
     'name:string', 'description:string', 'workspaceFeatures:string[]',
     'id:string', 'name:string', 'rootPath:string',
     'path:string', 'kind:string', 'bytes:number',
+    'path:string', 'digest:string',
     'id:string', 'name:string', 'version:string', 'manifestVersion:string', 'servicePath:string', 'settingsPath:string', 'settingsSchemaPath:string', 'linkPaths:string[]', 'problemCount:number', 'configured:boolean', 'artifact?:ServiceArtifactReference',
     'id:string', 'name:string', 'version:string', 'manifestVersion:string', 'settingsSchemaPath:string',
     'responseSchemaPath:string', 'target:string', 'contractVersion:string', 'transport:string', 'sourcePath:string', 'requestSchemaPath:string', 'contractSchemaPath:string', 'caller:string', 'id:string', 'securityProfile:string', 'redactionPolicy:string', 'compatibility:string', 'disabledMethods:string[]', 'methods:string[]', 'timeoutMillis:number', 'responseLimitBytes:number', 'requestLimitBytes:number', 'retryLimit:number', 'valid:boolean',
@@ -34,12 +35,13 @@ export function prepareModels(source: string): string {
   const reportSummaryFields = ['operationId:string', 'target:string', 'commitSha:string', 'generation:string', 'bundleDigest:string', 'cliVersion:string', 'coreApiCompatibility:string', 'importedAt:string', 'state:string', 'replicaCount:number', 'readyReplicas:number']
   const serviceArtifactFields = ['id:string', 'version:string', 'platform:string', 'digest:string']
   const projectFileEnd = legacyFields.findIndex((field, index) => field === 'path:string' && legacyFields[index + 1] === 'kind:string' && legacyFields[index + 2] === 'bytes:number') + 3
+  const projectRecoveryFieldsEnd = projectFileEnd + 2
   const expectedFields = [
     ...artifactFields,
-    ...legacyFields.slice(0, projectFileEnd),
+    ...legacyFields.slice(0, projectRecoveryFieldsEnd),
     ...reportSummaryFields,
     ...serviceArtifactFields,
-    ...legacyFields.slice(projectFileEnd),
+    ...legacyFields.slice(projectRecoveryFieldsEnd),
   ]
   const expectedExports = ['namespace:models', ...expectedClasses.map((name) => `class:${name}`)]
   const current = source.startsWith('export namespace models {') && JSON.stringify(classes) === JSON.stringify(expectedClasses) && JSON.stringify(exports) === JSON.stringify(expectedExports) && JSON.stringify(fields) === JSON.stringify(expectedFields)

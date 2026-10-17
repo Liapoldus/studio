@@ -2219,6 +2219,35 @@ content.
 - Remaining acceptance: owner checks, package `.50`, complete Studio checks,
   macOS WebView handshake, package trust confirmation and integrated commit/push.
 
+### Recovery copy before Server settings migration — 2026-10-18
+
+- Studio exposes `service.settings.recovery.copy` through the typed
+  `studio-service-editor/v2` bridge. It is gated by `service.settings.write`,
+  the open Project/service context, and the exact reviewed SHA-256 of the
+  canonical settings file. The host writes an idempotent mode-0600 backup and
+  returns only a safe relative path and digest; the plugin never reads or
+  chooses a filesystem path.
+- Server Editor migration refuses to patch settings unless this exact-byte
+  backup succeeds. The preview identifies the response template it will add
+  for a migrated legacy route and clearly says the legacy route did not declare
+  a response contract. Unknown/unrepresentable fields still block migration.
+- `make check` passed on 2026-10-18: 179 frontend tests, all Go package tests,
+  lint, TypeScript checks, `go vet`, and `go build`. `make desktop-build`
+  passed including two-run Wails binding reproducibility and lint. Server
+  Editor `make package PACKAGE=/tmp/liapoldus.server-editor-0.3.60.review.studio-plugin`
+  passed 74/74 tests and Studio installer inspection.
+- Artifacts awaiting native Studio trust/launch confirmation before local
+  WebView acceptance: macOS/arm64 Studio executable SHA-256
+  `6b844d41870d6e55d88c350baf0f8fd09b088e58361beae80631603ba324121e`; Server
+  Editor `.60` SHA-256
+  `c38b138312f5a0bc792a6e7eb26cb23ad36292fce127dd2cf0ccabcea22fb4b1`;
+  requested plugin permissions are settings.read/write,
+  configuration-ui.read, resources.read/publish, peer.catalog.read, and
+  secrets.read. No new package has been installed or trusted in this checkpoint.
+- Secret workflow source tests cover redaction, references and the guarded
+  rotation flow, but live create/rotate/apply/retire, multi-replica ACK,
+  timeout/restart recovery, and Server Editor WebView acceptance remain open.
+
 
 ### Server Editor binding and config apply — 2026-10-17
 
