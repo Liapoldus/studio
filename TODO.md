@@ -3,14 +3,16 @@
 ## Secret retirement host boundary — 2026-10-18
 
 - Studio's typed `service.secret.revoke` intent now passes the open Project root
-  explicitly. The pushed CLI `f60ce65` independently snapshots that Project,
-  verifies that service settings no longer contain the reference, and blocks
-  revocation unless every Core-reported replica is ready on the exact settings
-  digest and acknowledged generation. CLI regression tests cover stale Project,
-  digest mismatch, and an unready replica; owner checks pass. This closes the
-  direct CLI bypass in the normal local workflow, but live multi-replica and
-  crash/restart acceptance still require the current CLI/Core binaries and the
-  action-time install confirmation recorded below.
+  explicitly. CLI `f60ce65` snapshots that Project, verifies that service
+  settings no longer contain the reference, and blocks revocation unless every
+  Core-reported replica is ready on the exact settings digest and acknowledged
+  generation. Follow-up `7e7d607` makes local cleanup retryable after Core has
+  revoked the reference: it rechecks the Project and replica ACKs, skips a
+  duplicate revoke, then clears the local runtime copy, index and OS vault.
+  CLI regression tests cover stale Project, digest mismatch, an unready replica
+  and interrupted cleanup; `make check` and `make test-race` pass. Live
+  multi-replica and crash/restart acceptance still require the current CLI/Core
+  binaries and the action-time install confirmation recorded below.
 
 ## Local runtime and packaged-editor preflight — 2026-10-18
 
@@ -22,10 +24,12 @@
   `echo: studio-http-check-20261018` body.
 - The Studio-selected `/Users/docup/go/bin/liapoldus` is stale for secret
   operations: `service secret list` returns `unsupported service command`.
-  Current CLI commit `f60ce65` adds a fail-closed retirement gate, and its
-  Darwin/arm64 candidate is `/tmp/liapoldus-cli-2026-10-18-f60ce65`, SHA-256
-  `3901057bd6a2b279a03a2926eb8bae8648b4163ab1801dfc2a04bd1c563b55e6`. It
-  reaches the Core secret route, which currently returns HTTP 404.
+  Current CLI commit `7e7d607` includes the fail-closed retirement gate and
+  retryable post-revocation cleanup. Its built but unselected Darwin/arm64
+  candidate is `/tmp/liapoldus-cli-2026-10-18-7e7d607`, SHA-256
+  `606df83422fce3d0b2adbc438e6a57e0424cc39ffc3a4420c43a20179bd78f2a`; it has
+  not been run by Studio. The previous `f60ce65` candidate reached the Core
+  secret route, which returned HTTP 404.
 - The running Core container label reports binary SHA-256
   `9189b7731207bd4434fcfbffa7d6a2083df1c1ceb79c1e9ae724c6199631b9b5` and
   lacks the new secret-catalog route. The current Linux/arm64 candidate is
