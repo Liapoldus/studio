@@ -177,7 +177,18 @@ func (s Store) Snapshot(ctx context.Context, root, settingsPath, schemaPath stri
 		return models.ProjectSettingsSnapshot{}, err
 	}
 	digest := sha256.Sum256(raw)
-	return models.ProjectSettingsSnapshot{ValuesJSON: string(values), Digest: fmt.Sprintf("sha256:%x", digest)}, nil
+	// CLI embeds settings as json.RawMessage: encoding/json compacts whitespace
+	// and escapes HTML characters before Core hashes the candidate bytes.
+	configurationJSON := raw
+	if len(configurationJSON) == 0 {
+		configurationJSON = []byte(`{}`)
+	}
+	encoded, err := json.Marshal(json.RawMessage(configurationJSON))
+	if err != nil {
+		return models.ProjectSettingsSnapshot{}, err
+	}
+	configurationDigest := sha256.Sum256(encoded)
+	return models.ProjectSettingsSnapshot{ValuesJSON: string(values), Digest: fmt.Sprintf("sha256:%x", digest), ConfigurationDigest: fmt.Sprintf("sha256:%x", configurationDigest)}, nil
 }
 
 // ValidatePatch checks that a draft contains only schema-declared,

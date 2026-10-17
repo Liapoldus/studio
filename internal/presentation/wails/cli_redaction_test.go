@@ -29,6 +29,32 @@ func TestSafeCLIJSONRedactsCredentialsAndLocalRuntimePaths(t *testing.T) {
 	}
 }
 
+func TestSafeCLIJSONPreservesNamespacedEditorButtonKeyOnly(t *testing.T) {
+	input := []byte(`{"id":"server","key":"private-value","editorButtons":{"version":"service-editor-buttons/v1","buttons":[{"id":"server.endpoints","key":"endpoints","label":{"ru":"Редактор","en":"Editor"}}]},"nested":{"key":"private-value"}}`)
+	for range 2 {
+		output, err := safeCLIJSON(input)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(string(output), `"key":"endpoints"`) || strings.Contains(string(output), "private-value") {
+			t.Fatalf("public button key lost or private key exposed: %s", output)
+		}
+		input = output
+	}
+}
+
+func TestSafeCLIJSONDoesNotExemptMalformedEditorButtonKeys(t *testing.T) {
+	for _, input := range []string{
+		`{"id":"server","editorButtons":{"version":"unknown","buttons":[{"id":"server.endpoints","key":"endpoints"}]}}`,
+		`{"id":"server","editorButtons":{"version":"service-editor-buttons/v1","buttons":[{"id":"other.endpoints","key":"endpoints"}]}}`,
+	} {
+		output, err := safeCLIJSON([]byte(input))
+		if err != nil || strings.Contains(string(output), `"key":"endpoints"`) {
+			t.Fatalf("invalid public key exemption: %s err=%v", output, err)
+		}
+	}
+}
+
 func TestSafeCLIJSONPreservesSchemaStructureAndRedactsSecretExamples(t *testing.T) {
 	input := []byte(`{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","description":"URLs end with /ready and paths ending in /foo/bar remain literal","properties":{"privateKeyRef":{"$ref":"#/$defs/secretReference","default":"file:///private/key.pem","examples":["sensitive"]},"name":{"type":"string"}},"$defs":{"secretReference":{"type":"object","properties":{"ref":{"type":"string"}}}}}`)
 	output, err := safeCLIJSON(input)

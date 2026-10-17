@@ -95,8 +95,9 @@ type WorkspaceState struct {
 // canonical on-disk file. The digest is used to reject stale writes; ValuesJSON
 // is redacted by the host before crossing the Wails boundary.
 type ProjectSettingsSnapshot struct {
-	ValuesJSON string `json:"valuesJson"`
-	Digest     string `json:"digest"`
+	ValuesJSON          string `json:"valuesJson"`
+	Digest              string `json:"digest"`
+	ConfigurationDigest string `json:"configurationDigest"`
 }
 
 // ServiceSettingsSchemaPreview binds a read-only compatibility check to the

@@ -296,7 +296,8 @@ function parseSettingsSnapshot(encoded: string): ProjectSettingsSnapshot {
   const value: unknown = JSON.parse(encoded)
   if (typeof value !== 'object' || value === null || !('valuesJson' in value) || typeof value.valuesJson !== 'string' ||
     !('digest' in value) || typeof value.digest !== 'string') throw new Error('Invalid project settings snapshot')
-  return { valuesJson: value.valuesJson, digest: value.digest }
+  return { valuesJson: value.valuesJson, digest: value.digest,
+    ...('configurationDigest' in value && typeof value.configurationDigest === 'string' ? { configurationDigest: value.configurationDigest } : {}) }
 }
 
 function parsePersistedSettingsDraft(encoded: string): PersistedServiceSettingsDraft {

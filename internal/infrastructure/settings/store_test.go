@@ -2,6 +2,7 @@ package settings
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -307,6 +308,30 @@ func TestSnapshotDigestRejectsStaleWritesAndDraftsRemainSchemaSafe(t *testing.T)
 	}
 	if updateErr := store.UpdateIfDigest(context.Background(), root, "services/server/settings.json", "schemas/server.json", current.Digest, []byte(`{"port":19100}`)); updateErr != nil {
 		t.Fatalf("current digest should permit the write: %v", updateErr)
+	}
+}
+
+func TestSnapshotConfigurationDigestMatchesCLIEncodingWithoutExposingSecrets(t *testing.T) {
+	root := t.TempDir()
+	files := projectfiles.FileSystem{}
+	raw := []byte("{\n  \"token\": \"private<&>\", \"port\": 8080\n}\n")
+	if err := files.WriteFile(context.Background(), root, "settings.json", raw); err != nil {
+		t.Fatal(err)
+	}
+	if err := files.WriteFile(context.Background(), root, "schema.json", []byte(`{"type":"object","properties":{"token":{"type":"string","x-sensitive":true},"port":{"type":"integer"}}}`)); err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := (Store{Files: files}).Snapshot(context.Background(), root, "settings.json", "schema.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := json.Marshal(json.RawMessage(raw))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := fmt.Sprintf("sha256:%x", sha256.Sum256(encoded))
+	if snapshot.ConfigurationDigest != want || snapshot.Digest == want || strings.Contains(snapshot.ValuesJSON, "private") {
+		t.Fatalf("invalid configuration digest or secret disclosure: %+v", snapshot)
 	}
 }
 

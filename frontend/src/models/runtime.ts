@@ -102,6 +102,8 @@ export function parseServiceRuntimeStatus(value: string, serviceID: string): Par
       replicaId: item.replicaId, artifactVersion: item.artifactVersion, artifactDigest: item.artifactDigest,
       ready: item.ready, generation: readiness.generation, pendingGeneration: readiness.pendingGeneration,
       schemaVersion: readiness.schemaVersion,
+      ...(typeof readiness.sha256 === 'string' && /^(?:sha256:)?[a-f0-9]{64}$/u.test(readiness.sha256)
+        ? { configurationDigest: readiness.sha256.replace(/^sha256:/u, '') } : {}),
       desiredGeneration: configuration.desiredGeneration as number | null,
       appliedGeneration: configuration.appliedGeneration as number | null,
       configurationState: configuration.state as RuntimeReplicaStatus['configurationState'],
@@ -115,6 +117,14 @@ export function parseServiceRuntimeStatus(value: string, serviceID: string): Par
   const mixedEffectiveState = replicas.some((replica) => replica.generation !== firstGeneration || replica.schemaVersion !== firstSchemaVersion || replica.pendingGeneration.length > 0)
   const readiness: RuntimeServiceReadiness = readyCount === 0 ? 'not-ready' : readyCount !== replicas.length || mixedEffectiveState ? 'degraded' : 'ready'
   return { readiness, replicas }
+}
+
+export function projectSettingsApplied(savedDigest: string, replicas: readonly RuntimeReplicaStatus[]): boolean {
+  const digest = savedDigest.replace(/^sha256:/u, '')
+  return /^[a-f0-9]{64}$/u.test(digest) && replicas.length > 0 && replicas.every((replica) =>
+    replica.ready && replica.pendingGeneration === '' && replica.configurationState === 'acknowledged' &&
+    replica.desiredGeneration !== null && replica.desiredGeneration === replica.appliedGeneration &&
+    replica.configurationDigest === digest)
 }
 
 function validConfigurationStatus(value: Record<string, unknown>): boolean {

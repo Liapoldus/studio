@@ -2096,3 +2096,9 @@ content.
   plugin surface is installed and opens the exact service context.
 - Remaining acceptance: owner checks, package `.50`, complete Studio checks,
   macOS WebView handshake, package trust confirmation and integrated commit/push.
+
+
+### Server Editor binding and config apply — 2026-10-17
+
+- Studio now keeps global plugin install/version control in Settings, defaults to the latest installed package, and exposes service-editor bindings there. Inspector renders the assigned Server button, which opens the exact service context. The real UI was verified on `Server Echo Studio` / `local` with plugin `.50`; binding candidate `server.endpoints` opened the editor tab and the bridge reached `bridge_ready`.
+- Fixed redaction of public SDK button keys and project-vs-Core configuration digest comparison. Studio `make check` and `make desktop-build` pass. New macOS/arm64 app SHA-256 `c6d67d38ec90045aea05f00091cb6f13a01da43173203d19fc0737fb33ed6456` is pending the exact local launch gate; plugin `.52` SHA-256 `de0161f0fa6c65159799f03634caa23dbc8a44e14e8b91a81d628e9292b2ff91` is pending install/trust confirmation. Commit/push remain pending.

@@ -123,6 +123,7 @@ export type ServiceSettingsDraft = ConfigurationDraftIdentity & {
   patch: ConfigurationObject
   history: ConfigurationDraftHistory
   baseDigest: string
+  configurationDigest?: string
   status: 'loading' | 'clean' | 'dirty' | 'saving' | 'error' | 'conflict'
   error: string | null
   revision: number
@@ -189,7 +190,7 @@ export type StudioState = {
   setRuntimeStatuses: (statuses: Record<string, RuntimeServiceReadiness>) => void
   setRuntimeReplicas: (replicas: Record<string, RuntimeReplicaStatus[]>) => void
   beginServiceSettingsDraft: (identity: ConfigurationDraftIdentity) => { key: string; shouldLoad: boolean }
-  hydrateServiceSettingsDraft: (key: string, schema: ConfigurationObject, base: ConfigurationObject, baseDigest: string, patch?: ConfigurationObject, conflict?: boolean, configurationUI?: ServiceConfigurationUI | null) => void
+  hydrateServiceSettingsDraft: (key: string, schema: ConfigurationObject, base: ConfigurationObject, baseDigest: string, patch?: ConfigurationObject, conflict?: boolean, configurationUI?: ServiceConfigurationUI | null, configurationDigest?: string) => void
   setConfigurationContractState: (key: string, state: ConfigurationContractState, differences?: string[], mismatchKind?: ConfigurationContractMismatchKind | null) => void
   beginServiceSettingsContractRefresh: (key: string) => boolean
   endServiceSettingsContractRefresh: (key: string) => void
@@ -200,7 +201,7 @@ export type StudioState = {
   undoServiceSettingsDraft: (key: string) => void
   redoServiceSettingsDraft: (key: string) => void
   beginServiceSettingsDraftSave: (key: string) => number | null
-  completeServiceSettingsDraftSave: (key: string, revision: number, base: ConfigurationObject, baseDigest: string) => void
+  completeServiceSettingsDraftSave: (key: string, revision: number, base: ConfigurationObject, baseDigest: string, configurationDigest?: string) => void
   failServiceSettingsDraftSave: (key: string, revision: number, error: string, conflict?: boolean) => void
   refreshServiceSettingsDraftConflict: (key: string, base: ConfigurationObject, baseDigest: string, error: string) => void
   discardServiceSettingsDraft: (key: string) => void
@@ -261,12 +262,12 @@ export const useStudioStore = create<StudioState>((set, get) => ({
     })
     return { key, shouldLoad }
   },
-  hydrateServiceSettingsDraft: (key, schema, base, baseDigest, patch = {}, conflict = false, configurationUI = null) => { set((state) => {
+  hydrateServiceSettingsDraft: (key, schema, base, baseDigest, patch = {}, conflict = false, configurationUI = null, configurationDigest = '') => { set((state) => {
     const draft = state.serviceSettingsDrafts[key]
     if (!draft || draft.status !== 'loading') return {}
     const safePatch = cloneConfigurationObject(patch)
     const status = conflict ? 'conflict' : isConfigurationPatchEmpty(safePatch) ? 'clean' : 'dirty'
-    return { serviceSettingsDrafts: { ...state.serviceSettingsDrafts, [key]: { ...draft, schema: cloneConfigurationObject(schema), configurationUI, base: cloneConfigurationObject(base), baseDigest, patch: safePatch, history: emptyConfigurationDraftHistory(), status, error: conflict ? 'Project settings changed after this draft was saved' : null, revision: draft.revision + 1 } } }
+    return { serviceSettingsDrafts: { ...state.serviceSettingsDrafts, [key]: { ...draft, schema: cloneConfigurationObject(schema), configurationUI, base: cloneConfigurationObject(base), baseDigest, configurationDigest, patch: safePatch, history: emptyConfigurationDraftHistory(), status, error: conflict ? 'Project settings changed after this draft was saved' : null, revision: draft.revision + 1 } } }
   }) },
   setConfigurationContractState: (key, configurationContractState, configurationContractDifferences = [], configurationContractMismatchKind = null) => { set((state) => {
     const draft = state.serviceSettingsDrafts[key]
@@ -378,11 +379,11 @@ export const useStudioStore = create<StudioState>((set, get) => ({
     })
     return revision
   },
-  completeServiceSettingsDraftSave: (key, revision, base, baseDigest) => { set((state) => {
+  completeServiceSettingsDraftSave: (key, revision, base, baseDigest, configurationDigest = '') => { set((state) => {
     const draft = state.serviceSettingsDrafts[key]
     if (!draft || draft.status !== 'saving') return {}
     if (draft.revision !== revision) return { serviceSettingsDrafts: { ...state.serviceSettingsDrafts, [key]: { ...draft, status: 'conflict', error: 'Draft changed while the save was in progress' } } }
-    return { serviceSettingsDrafts: { ...state.serviceSettingsDrafts, [key]: { ...draft, base: cloneConfigurationObject(base), baseDigest, patch: {}, history: emptyConfigurationDraftHistory(), status: 'clean', error: null, revision: draft.revision + 1 } } }
+    return { serviceSettingsDrafts: { ...state.serviceSettingsDrafts, [key]: { ...draft, base: cloneConfigurationObject(base), baseDigest, configurationDigest, patch: {}, history: emptyConfigurationDraftHistory(), status: 'clean', error: null, revision: draft.revision + 1 } } }
   }) },
   failServiceSettingsDraftSave: (key, revision, error, conflict = false) => { set((state) => {
     const draft = state.serviceSettingsDrafts[key]

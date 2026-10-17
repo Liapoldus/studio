@@ -18,14 +18,14 @@ import { messageOf, operationReplicaOutcomes, summarizeCLIEvent, type CLIStreamS
 import { useStudioStore } from '../stores/studio'
 import type { StudioPluginSurface } from '../stores/studio'
 import { createStudioBridgeSessionID, isStudioPluginSurfaceReadyMessage, parseStudioPluginBridgeRequest, studioPluginBridgeFailureCode, studioPluginPermissionGranted, studioPluginSurfaceAssetURL, studioServiceEditorBridgeVersion, withPeerCatalogDeadline } from '../models/pluginSurface'
-import { latestStudioPluginSurfaces } from '../models/studioPluginPackage'
+import { latestStudioPluginSurfaces, workspacePluginNavigationSurfaces } from '../models/studioPluginPackage'
 import { resolveServiceEditorButtons, serviceInspectorHiddenSettingsPaths, serviceInspectorPathIsHidden } from '../models/serviceEditorButtons'
-import { groupRuntimeArtifacts, runtimeReplicasForService, runtimeServiceActionConfirmationText } from '../models/runtime'
+import { groupRuntimeArtifacts, projectSettingsApplied, runtimeReplicasForService, runtimeServiceActionConfirmationText } from '../models/runtime'
 import { BrandMark } from '../ui/BrandMark'
 
 export function ActivityBar({ activeId, t, onNavigate, surfaces, onOpenSurface }: { activeId: string | null; t: Copy; onNavigate: (item: TabKind) => void; surfaces: StudioPluginSurface[]; onOpenSurface: (surface: StudioPluginSurface) => void }) {
   const entries: Array<[TabKind, typeof Boxes, string]> = [['canvas', Boxes, t.graph], ['git', GitCompareArrows, t.git], ['reports', Activity, t.reports], ['problems', CircleAlert, t.problems], ['output', Terminal, 'Output']]
-  const currentSurfaces = latestStudioPluginSurfaces(surfaces.filter((surface) => surface.context === 'workspace'))
+  const currentSurfaces = workspacePluginNavigationSurfaces(surfaces)
   return <nav className="activity-bar" aria-label={t.home}>{entries.map(([id, Icon, label]) => <button type="button" key={id} className={`activity-button ${activeId === id ? 'active' : ''}`} title={label} aria-label={label} aria-current={activeId === id ? 'page' : undefined} onClick={() => { onNavigate(id); }}><Icon size={18} /></button>)}{currentSurfaces.length > 0 && <span className="activity-divider" />}{currentSurfaces.map((surface) => { const id = `studio-plugin:${surface.studioPluginId}:${surface.version}:${surface.id}`; return <button type="button" key={id} className={`activity-button ${activeId === id ? 'active' : ''}`} title={`${surface.studioPluginId} · ${surface.title}`} aria-label={`${surface.studioPluginId} · ${surface.title}`} aria-current={activeId === id ? 'page' : undefined} onClick={() => { onOpenSurface(surface); }}><Puzzle size={16} /></button> })}</nav>
 }
 
@@ -196,7 +196,7 @@ export function Inspector({ controller, workspace, selected, output }: { control
     setEditorButtonsStatus('loading')
     void controller.readServiceEditorButtons(workspace.project.id, service.id).then((buttons) => { if (active) { setEditorButtons(buttons); setEditorButtonsStatus('ready') } }).catch(() => { if (active) { setEditorButtons([]); setEditorButtonsStatus('unavailable') } })
     return () => { active = false }
-  }, [controller, service?.id, workspace.project?.id])
+  }, [controller, service?.id, service?.version, workspace.project?.id, readiness])
   if (!service && !link) return <aside className="inspector"><div className="inspector-empty"><CircleDot size={18} /><span>{locale === 'ru' ? 'Выберите узел или связь' : 'Select a node or link'}</span></div></aside>
   return <><aside className="inspector"><div className="inspector-panel">
     <div className="inspector-heading"><span>{service ? (locale === 'ru' ? 'Свойства сервиса' : 'Service properties') : (locale === 'ru' ? 'Контракт связи' : 'Link contract')}</span><button className="icon-button small" title={locale === 'ru' ? 'Удалить' : 'Delete'} onClick={() => { if (service) void controller.deleteNodes([service.id]); if (link) void controller.deleteEdges([link.id]) }}><Trash2 size={15} /></button></div>
@@ -225,7 +225,7 @@ function ServiceEditorButtons({ controller, service, projectID, locale, buttons,
     let active = true
     void controller.studioPluginEditorBindings().then((items) => { if (active) setBindings(items) }).catch(() => { if (active) setBindings([]) })
     return () => { active = false }
-  }, [controller, projectID])
+  }, [controller, projectID, buttons])
   const activeSurfaces = latestStudioPluginSurfaces(surfaces)
   const entries = resolveServiceEditorButtons(buttons, bindings, activeSurfaces)
   if (entries.length === 0) {
@@ -238,7 +238,7 @@ function ServiceEditorButtons({ controller, service, projectID, locale, buttons,
           : service.id === 'server'
             ? (locale === 'ru' ? `Server ${service.version} не объявляет кнопку редактора. Контракт кнопки добавлен в Server 1.1.7; обновите сервис, затем назначьте кнопку установленному Server Editor в общих настройках.` : `Server ${service.version} does not declare an editor button. The button contract was added in Server 1.1.7; update the service, then assign the button to the installed Server Editor in global Settings.`)
             : (locale === 'ru' ? `Сервис ${service.id} версии ${service.version} не объявил кнопку редактора в live manifest. Добавьте контракт service-editor-buttons/v1 и назначьте кнопку установленному плагину в общих настройках.` : `Service ${service.id} ${service.version} does not declare an editor button in its live manifest. Add the service-editor-buttons/v1 contract and assign the button to an installed plugin in global Settings.`)
-    return <InspectorSection title={locale === 'ru' ? 'Редактор сервиса' : 'Service editor'}><p className="muted" role="status">{message}</p></InspectorSection>
+    return <InspectorSection title={locale === 'ru' ? 'Редактор сервиса' : 'Service editor'}><p className="muted" role="status">{message}</p>{status === 'unavailable' && <button type="button" className="secondary-button compact" onClick={() => void controller.run('runtime.start')}>{locale === 'ru' ? 'Запустить проект для редактирования' : 'Run project to edit'}</button>}</InspectorSection>
   }
   return <InspectorSection title={locale === 'ru' ? 'Редакторы сервиса' : 'Service editors'}><div className="inspector-actions">{entries.map(({ button, surface }) => <button type="button" className="secondary-button compact" key={button.id} title={button.description[locale]} onClick={() => { useStudioStore.getState().openStudioPluginSurface(surface, { projectId: projectID, serviceId: service.id }) }}>{button.label[locale]}</button>)}</div></InspectorSection>
 }
@@ -302,6 +302,7 @@ function schemaControl(schema: JsonObject): string {
   return typeof custom === 'string' ? custom : typeof format === 'string' ? format : typeof schema.type === 'string' ? schema.type : Array.isArray(schema.enum) ? 'select' : ''
 }
 function ServiceSettingsInspector({ controller, service, locale }: { controller: StudioController; service: RuntimeService; locale: Locale }) {
+  const replicas = useStudioStore((state) => runtimeReplicasForService(state.runtimeReplicas, service.id))
   const projectID = useStudioStore((state) => state.workspace?.project?.id ?? '')
   const projectRoot = useStudioStore((state) => state.workspace?.project?.rootPath ?? '')
   const projectServices = useStudioStore((state) => state.workspace?.graph.services ?? [])
@@ -357,7 +358,7 @@ function ServiceSettingsInspector({ controller, service, locale }: { controller:
         setSchemaImportError(reason instanceof Error && reason.message ? reason.message : locale === 'ru' ? 'Не удалось импортировать контракт' : 'Could not import the contract')
       }).finally(() => { setImportingSchema(false) })
     }}>{importingSchema ? (locale === 'ru' ? 'Получаю контракт…' : 'Fetching contract…') : (locale === 'ru' ? 'Импортировать контракт из Core' : 'Import contract from Core')}</button>
-    {draft.status === 'error' && <><button type="button" className="secondary-button compact" onClick={() => { void controller.loadServiceSettingsDraft(service) }}>{locale === 'ru' ? 'Повторить' : 'Retry'}</button><button type="button" className="secondary-button compact" onClick={() => { void controller.discardServiceSettingsDraft(draftKey, service) }}>{locale === 'ru' ? 'Удалить локальный черновик' : 'Delete local draft'}</button></>}
+    {draft.status === 'error' && <><button type="button" className="secondary-button compact" onClick={() => { void controller.loadServiceSettingsDraft(service) }}>{locale === 'ru' ? 'Повторить' : 'Retry'}</button><button type="button" className="secondary-button compact" onClick={() => { void controller.discardServiceSettingsDraft(draftKey, service) }}>{locale === 'ru' ? 'Загрузить из файла' : 'Reload from file'}</button></>}
   </div>
   const renderSchema = effectiveConfigurationSchema(schema, schema, values) ?? schema
   const properties = objectValue(renderSchema.properties) ?? {}
@@ -383,7 +384,7 @@ function ServiceSettingsInspector({ controller, service, locale }: { controller:
     {schemaMismatch && <div className="inline-error" role="alert">
       <p>{draft.configurationContractMismatchKind === 'provenance'
         ? (locale === 'ru' ? 'Live-регистрация Core не совпадает с привязкой сервиса в Project. Изменения заблокированы; перезапуск сам по себе не исправляет provenance. Проверьте Core binary и target в настройках Local Core, затем повторно проверьте контракт.' : 'Core’s live registration does not match the Project service binding. Edits are blocked; restarting Core alone cannot repair provenance. Review the Core binary and target in Local Core settings, then re-check the contract.')
-        : (locale === 'ru' ? 'Live-схема настроек сервиса отличается от схемы в Project. Редактирование и применение приостановлены; черновик сохранён.' : 'The live service settings schema differs from the Project schema. Editing and apply are paused; the draft is preserved.')}</p>
+        : (locale === 'ru' ? 'Live-схема настроек сервиса отличается от схемы в Project. Редактирование и применение приостановлены; изменения сохранены.' : 'The live service settings schema differs from the Project schema. Editing and apply are paused; changes are preserved.')}</p>
       {draft.configurationContractDifferences.length > 0 && <small>{draft.configurationContractMismatchKind === 'provenance' ? (locale === 'ru' ? 'Проверки release: ' : 'Release checks: ') : (locale === 'ru' ? 'Изменённые элементы схемы: ' : 'Changed schema paths: ')}{draft.configurationContractDifferences.slice(0, 8).join(', ')}</small>}
       <button type="button" className="secondary-button compact" disabled={draft.refreshingContract} onClick={() => { void controller.refreshServiceSettingsContract(service) }}>{draft.refreshingContract ? (locale === 'ru' ? 'Проверка…' : 'Checking…') : (locale === 'ru' ? 'Перепроверить Core и контракт' : 'Re-check Core and contract')}</button>
       {draft.configurationContractMismatchKind === 'schema' && !schemaRefreshReviewOpen && <button type="button" className="secondary-button compact" disabled={refreshingSchema || schemaPreviewLoading || draft.refreshingContract} onClick={() => {
@@ -393,10 +394,10 @@ function ServiceSettingsInspector({ controller, service, locale }: { controller:
       }}>{schemaPreviewLoading ? (locale === 'ru' ? 'Проверяю значения…' : 'Checking values…') : (locale === 'ru' ? 'Просмотреть обновление схемы…' : 'Review schema update…')}</button>}
       {draft.configurationContractMismatchKind === 'schema' && schemaRefreshReviewOpen && schemaMigrationPreview && <section className="schema-migration-preview" aria-label={locale === 'ru' ? 'Предпросмотр обновления схемы' : 'Schema update preview'}>
         <strong>{locale === 'ru' ? 'Предпросмотр обновления' : 'Update preview'}</strong>
-        <p>{locale === 'ru' ? 'Будет заменена только JSON Schema в Project актуальным контрактом через CLI → Core. Значения настроек и локальный черновик не переписываются.' : 'Only the Project JSON Schema will be replaced with the current CLI → Core contract. Settings values and the local draft are not rewritten.'}</p>
+        <p>{locale === 'ru' ? 'Будет заменена только JSON Schema в Project актуальным контрактом через CLI → Core. Значения настроек и текущие изменения не переписываются.' : 'Only the Project JSON Schema will be replaced with the current CLI → Core contract. Settings values and current edits are not rewritten.'}</p>
         <p className={schemaMigrationPreview.valuesCompatible ? 'schema-preview-compatible' : 'schema-preview-incompatible'} role="status">{schemaMigrationPreview.valuesCompatible
-          ? (locale === 'ru' ? 'Текущие значения и черновик проходят новую схему.' : 'Current settings and draft satisfy the new schema.')
-          : (locale === 'ru' ? 'Текущие значения или черновик не проходят новую схему. После обновления исправьте ошибки до применения.' : 'Current settings or draft do not satisfy the new schema. Fix validation errors after updating before applying.')}</p>
+          ? (locale === 'ru' ? 'Текущие настройки проходят новую схему.' : 'Current settings satisfy the new schema.')
+          : (locale === 'ru' ? 'Текущие настройки не проходят новую схему. После обновления исправьте ошибки до применения.' : 'Current settings do not satisfy the new schema. Fix validation errors after updating before applying.')}</p>
         <small>{locale === 'ru' ? 'Контракт: ' : 'Contract: '}<code>{schemaMigrationPreview.schemaDigest.slice(0, 23)}…</code></small>
         {configurationSchemaDifferencePaths(schema, schemaMigrationPreview.schemaJson).length > 0 && <ul>{configurationSchemaDifferencePaths(schema, schemaMigrationPreview.schemaJson).slice(0, 12).map((path) => <li key={path}><code>{path}</code></li>)}</ul>}
         {schemaRefreshError && <span className="inline-error" role="alert">{schemaRefreshError}</span>}
@@ -410,7 +411,7 @@ function ServiceSettingsInspector({ controller, service, locale }: { controller:
         </div>
       </section>}
     </div>}
-    {draft.configurationContractState === 'unavailable' && <div className="muted" role="status">{locale === 'ru' ? 'Core не предоставил live-схему. Локальный черновик можно сохранить в Project; применение приостановлено.' : 'Core did not provide the live schema. The local draft can be saved to the Project; apply is paused.'}<button type="button" className="secondary-button compact" disabled={draft.refreshingContract} onClick={() => { void controller.refreshServiceSettingsContract(service) }}>{draft.refreshingContract ? (locale === 'ru' ? 'Проверка…' : 'Checking…') : (locale === 'ru' ? 'Повторить проверку' : 'Retry verification')}</button></div>}
+    {draft.configurationContractState === 'unavailable' && <div className="muted" role="status">{locale === 'ru' ? 'Core не предоставил live-схему. Настройки можно сохранить в файл проекта; применение приостановлено.' : 'Core did not provide the live schema. Settings can be saved to the project file; apply is paused.'}<button type="button" className="secondary-button compact" disabled={draft.refreshingContract} onClick={() => { void controller.refreshServiceSettingsContract(service) }}>{draft.refreshingContract ? (locale === 'ru' ? 'Проверка…' : 'Checking…') : (locale === 'ru' ? 'Повторить проверку' : 'Retry verification')}</button></div>}
     {explicitGroups.map((group) => <fieldset className="schema-object schema-ui-group" key={group.id}>
       <legend>{locale === 'ru' ? group.title.ru : group.title.en}</legend>
       {group.description && <small>{locale === 'ru' ? group.description.ru : group.description.en}</small>}
@@ -432,9 +433,9 @@ function ServiceSettingsInspector({ controller, service, locale }: { controller:
       />)}
     </fieldset>)}
     <SchemaProperties rootSchema={schema} objectSchema={schema} properties={properties} values={values} path={[]} configurationUIPath={[]} configurationUI={draft.configurationUI} required={required} onChange={change} locale={locale} disabled={!editable} excludedPaths={explicitPaths} fieldHints={fieldHints} />
-    {draft.status === 'dirty' && <p className="muted" role="status">{schemaMatched ? (locale === 'ru' ? 'Черновик сохранён локально. После 800 мс без изменений Studio проверит и сохранит Project, затем отправит конфигурацию локальному Core через CLI.' : 'Draft is stored locally. After 800 ms without changes, Studio validates and saves the Project, then applies it to local Core through the CLI.') : (locale === 'ru' ? 'Черновик сохранён локально. Применение начнётся только после подтверждения live-схемы.' : 'Draft is stored locally. Apply will start only after the live schema is verified.')}</p>}
-    {draft.status === 'clean' && <p className="muted" role="status">{schemaMatched ? (locale === 'ru' ? 'Настройки сохранены в Project.' : 'Settings are saved to the Project.') : (locale === 'ru' ? 'Настройки сохранены в Project, но ещё не применены к Core.' : 'Settings are saved to the Project but have not been applied to Core.')}</p>}
-    {draft.status === 'conflict' && <p className="inline-error" role="alert">{locale === 'ru' ? 'Файл настроек Project изменился после создания черновика. Черновик сохранён; отбросьте его, чтобы продолжить с актуальным файлом.' : 'Project settings changed after this draft was created. The draft is retained; discard it to continue from the current file.'}</p>}
+    {draft.status === 'dirty' && <p className="muted" role="status">{schemaMatched ? (locale === 'ru' ? 'После 800 мс без изменений настройки сохранятся в файл проекта и отправятся в Core.' : 'After 800 ms without changes, settings are saved to the project file and sent to Core.') : (locale === 'ru' ? 'Настройки ожидают проверки live-схемы.' : 'Settings are waiting for live schema verification.')}</p>}
+    {draft.status === 'clean' && <p className="muted" role="status">{applyRecoveryStatus === 'applying' ? (locale === 'ru' ? 'Применяется… Файл проекта сохранён.' : 'Applying… Project file saved.') : projectSettingsApplied(draft.configurationDigest ?? '', replicas) ? (locale === 'ru' ? 'Применено. Конфигурация в файле совпадает с активной.' : 'Applied. The project file matches the active configuration.') : (locale === 'ru' ? 'Не применено. Файл проекта сохранён; активная конфигурация пока отличается или не подтверждена.' : 'Not applied. Project file saved; the active configuration differs or has not been confirmed.')}</p>}
+    {draft.status === 'conflict' && <p className="inline-error" role="alert">{locale === 'ru' ? 'Файл настроек изменился во внешнем редакторе. Текущие изменения сохранены; загрузите файл заново, чтобы продолжить с его версией.' : 'The settings file changed in an external editor. Current edits are retained; reload the file to continue with its version.'}</p>}
     {error && <p className="inline-error" role="alert">{error}</p>}
     <div className="inspector-actions">
       <button type="button" className="icon-button small" title={locale === 'ru' ? 'Отменить изменение' : 'Undo change'} aria-label={locale === 'ru' ? 'Отменить изменение' : 'Undo change'} disabled={!editable || undoStack === 0} onClick={() => { void controller.undoServiceSettingsDraft(draftKey) }}><Undo2 size={15} /></button>
@@ -444,7 +445,7 @@ function ServiceSettingsInspector({ controller, service, locale }: { controller:
         <button type="button" className="secondary-button compact" onClick={() => { void controller.applyServiceSettings(draftKey) }}>{applyRecoveryStatus !== 'none' ? (locale === 'ru' ? 'Подтвердить и применить' : 'Confirm & apply') : (locale === 'ru' ? 'Повторить применение' : 'Retry apply')}</button>
         {applyRecoveryStatus === 'confirmation-required' && <button type="button" className="secondary-button compact" disabled={cliStreamState !== 'idle'} onClick={() => { void controller.retryFailedServiceSettings(draftKey) }}>{locale === 'ru' ? 'Повторить неудавшееся применение' : 'Retry failed apply'}</button>}
       </>}
-      <button type="button" className="secondary-button compact" disabled={!hasChanges || saving} onClick={() => { void controller.discardServiceSettingsDraft(draftKey, service) }}>{locale === 'ru' ? 'Отбросить черновик' : 'Discard draft'}</button>
+      <button type="button" className="secondary-button compact" disabled={!hasChanges || saving} onClick={() => { void controller.discardServiceSettingsDraft(draftKey, service) }}>{locale === 'ru' ? 'Загрузить из файла' : 'Reload from file'}</button>
     </div>
   </div></ServicePeerContext.Provider></ServiceResourceContext.Provider>
 }

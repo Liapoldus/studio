@@ -1,6 +1,20 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { EMPTY_RUNTIME_REPLICAS, groupRuntimeArtifacts, runtimeReplicasForService } from '../../frontend/src/models/runtime.ts'
+import { EMPTY_RUNTIME_REPLICAS, groupRuntimeArtifacts, projectSettingsApplied, runtimeReplicasForService } from '../../frontend/src/models/runtime.ts'
+
+await test('saved settings are applied only when every replica acknowledges the exact digest', () => {
+  const replica = {
+    replicaId: 'one', artifactVersion: '1', artifactDigest: `sha256:${'b'.repeat(64)}`,
+    ready: true, generation: '2', pendingGeneration: '', schemaVersion: '1', desiredGeneration: 2,
+    appliedGeneration: 2, configurationState: 'acknowledged' as const, lastFailureCode: '',
+    configurationDigest: 'a'.repeat(64),
+  }
+  assert.equal(projectSettingsApplied(`sha256:${'a'.repeat(64)}`, [replica]), true)
+  assert.equal(projectSettingsApplied('c'.repeat(64), [replica]), false)
+  assert.equal(projectSettingsApplied('a'.repeat(64), []), false)
+  assert.equal(projectSettingsApplied('a'.repeat(64), [replica, { ...replica, configurationDigest: 'c'.repeat(64) }]), false)
+  assert.equal(projectSettingsApplied('a'.repeat(64), [{ ...replica, pendingGeneration: '3' }]), false)
+})
 
 await test('artifact registry display groups versions and puts the current project binding first without pruning', () => {
   const artifacts = [

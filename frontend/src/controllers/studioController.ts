@@ -7,9 +7,9 @@ import { asConfigurationObject, configurationDraftKey, isConfigurationPatchEmpty
 import { configurationSchemaDifferencePaths, configurationSchemasMatch, parseCompatiblePeerService, parseServiceConfigurationUI } from '../models/serviceConfigurationUI'
 import { serviceConfigurationProvenanceDifferences } from '../models/serviceConfigurationProvenance'
 import { studioPluginBridgeFailureCode } from '../models/pluginSurface'
-import { parseInstalledStudioPluginInspections, parseStudioPluginInspection, type StudioPluginPackageInfo } from '../models/studioPluginPackage'
-import { parseServiceEditorButtons, type ServiceEditorButtonCandidate } from '../models/serviceEditorButtons'
-import { useStudioStore } from '../stores/studio'
+import { latestStudioPluginSurfaces, parseInstalledStudioPluginInspections, parseStudioPluginInspection, type StudioPluginPackageInfo } from '../models/studioPluginPackage'
+import { assignSingleServiceEditorPages, parseServiceEditorButtons, type ServiceEditorButtonCandidate } from '../models/serviceEditorButtons'
+import { useStudioStore, type StudioPluginSurface } from '../stores/studio'
 
 export type StudioController = ReturnType<typeof createStudioController>
 
@@ -74,7 +74,7 @@ export function createStudioController(api: StudioAPI) {
 
         const serviceKeys = [...request.serviceKeys]
         request.serviceKeys.clear()
-        const shouldApply = !pausedSettingsApplyScopes.has(scope)
+        const shouldApply = !pausedSettingsApplyScopes.has(scope) || !store().applyRecoveryOperationId
         let hasDirtyDraft = false
         let allDraftsSaved = true
         let allContractsMatched = true
@@ -252,7 +252,7 @@ export function createStudioController(api: StudioAPI) {
         const patch = persisted ? asConfigurationObject(JSON.parse(persisted.patchJson) as unknown) : {}
         if (!schema || !base || !patch || !snapshot.digest) throw new Error('Settings schema, redacted values, or digest are invalid')
         const conflict = Boolean(persisted && persisted.baseDigest !== snapshot.digest)
-        store().hydrateServiceSettingsDraft(key, schema, base, snapshot.digest, patch, conflict)
+        store().hydrateServiceSettingsDraft(key, schema, base, snapshot.digest, patch, conflict, null, snapshot.configurationDigest)
         await loadServiceConfigurationUI(project.id, project.rootPath, service, key, schema)
       } catch (reason: unknown) {
         store().failServiceSettingsDraftLoad(key, messageOf(reason, 'Settings unavailable'))
@@ -896,7 +896,7 @@ export function createStudioController(api: StudioAPI) {
       const snapshot = await api.readProjectSettings(draft.projectId, draft.serviceId)
       const base = asConfigurationObject(JSON.parse(snapshot.valuesJson) as unknown)
       if (!base || !snapshot.digest) throw new Error('Saved settings could not be reloaded as a safe snapshot')
-      store().completeServiceSettingsDraftSave(key, revision, base, snapshot.digest)
+      store().completeServiceSettingsDraftSave(key, revision, base, snapshot.digest, snapshot.configurationDigest)
       savedToProject = true
       try { await api.deleteServiceSettingsDraft(draft.projectId, draft.serviceId) }
       catch { store().setServiceSettingsDraftError(key, 'Project was saved, but the local draft could not be cleared') }
@@ -1173,7 +1173,7 @@ export function createStudioController(api: StudioAPI) {
     }
   }
   async function serviceMetadata(serviceID: string, view: 'manifest' | 'schema' | 'status'): Promise<string | null> { const projectID = store().workspace?.project?.id; if (!projectID) return null; try { const value = await queueCoreMetadataRead(() => api.readRuntimeServiceMetadata(projectID, serviceID, view)); store().setRuntimeOutput(value); store().navigate('output'); return value } catch (reason: unknown) { fail(reason, `Не удалось получить ${view} через Core`); return null } }
-  async function loadStudioPluginSurfaces() {
+  async function loadStudioPluginSurfaces(): Promise<StudioPluginSurface[]> {
     try {
       const packages = await installedStudioPluginPackages()
       const surfaces = packages.flatMap((plugin) => plugin.surfaces.filter((surface) => surface.route).map((surface) => ({
@@ -1181,7 +1181,11 @@ export function createStudioController(api: StudioAPI) {
         permissions: plugin.permissions, grantedPermissions: plugin.grantedPermissions,
       })))
       store().setStudioPluginSurfaces(surfaces)
-    } catch { store().setStudioPluginSurfaces([]) }
+      return surfaces
+    } catch {
+      store().setStudioPluginSurfaces([])
+      return []
+    }
   }
   async function installedStudioPluginPackages(): Promise<StudioPluginPackageInfo[]> {
     return parseInstalledStudioPluginInspections(await api.installedStudioPluginManifests())
@@ -1210,7 +1214,15 @@ export function createStudioController(api: StudioAPI) {
     return results.flat()
   }
   async function readServiceEditorButtons(projectID: string, serviceID: string) {
-    return parseServiceEditorButtons(await queueCoreMetadataRead(() => api.readRuntimeServiceMetadata(projectID, serviceID, 'manifest')), serviceID)
+    return queueCoreMetadataRead(async () => {
+      const buttons = parseServiceEditorButtons(await api.readRuntimeServiceMetadata(projectID, serviceID, 'manifest'), serviceID)
+      if (buttons.length > 0) {
+        const bindings = await studioPluginEditorBindings()
+        const next = assignSingleServiceEditorPages(buttons, bindings, latestStudioPluginSurfaces(store().studioPluginSurfaces))
+        if (next.length !== bindings.length) await saveStudioPluginEditorBindings(next)
+      }
+      return buttons
+    })
   }
   async function selectStudioPluginPackage(): Promise<string> {
     return api.selectStudioPluginPackage()

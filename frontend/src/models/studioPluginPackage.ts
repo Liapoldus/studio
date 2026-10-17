@@ -51,6 +51,10 @@ export function latestStudioPluginSurfaces<T extends { studioPluginId: string; v
   return surfaces.filter((surface) => latestByPlugin.get(surface.studioPluginId) === surface.version)
 }
 
+export function workspacePluginNavigationSurfaces<T extends { studioPluginId: string; version: string; context: string }>(surfaces: readonly T[]): T[] {
+  return latestStudioPluginSurfaces(surfaces).filter((surface) => surface.context === 'workspace')
+}
+
 export function compareStudioPluginVersions(left: string, right: string): number {
   const a = parseSemver(left)
   const b = parseSemver(right)

@@ -12,6 +12,22 @@ const manifest = {
   tools: [],
 }
 
+await test('discovering a live editor button assigns the only installed service page without opening Settings', async () => {
+  const buttons = { version: 'service-editor-buttons/v1', buttons: [{ id: 'server.endpoints', key: 'endpoints', label: { ru: 'Эндпоинты', en: 'Endpoints' }, description: { ru: 'Редактор', en: 'Editor' } }] }
+  let saved = ''
+  useStudioStore.setState({ studioPluginSurfaces: [{ studioPluginId: manifest.id, version: '0.3.50', id: 'server-editor', context: 'service', title: 'Server', route: 'ui/index.html', permissions: [], grantedPermissions: [] }] })
+  const api = {
+    readRuntimeServiceMetadata: () => Promise.resolve(JSON.stringify({ id: 'server', editorButtons: buttons })),
+    studioPluginEditorBindings: () => Promise.resolve(saved || '[]'),
+    saveStudioPluginEditorBindings: (value: string) => { saved = value; return Promise.resolve() },
+  } as unknown as StudioAPI
+  const controller = createStudioController(api)
+  assert.equal((await controller.readServiceEditorButtons('project', 'server')).length, 1)
+  assert.deepEqual(JSON.parse(saved), [{ buttonId: 'server.endpoints', pluginId: manifest.id, surfaceId: 'server-editor' }])
+  await controller.readServiceEditorButtons('project', 'server')
+  assert.equal((JSON.parse(saved) as unknown[]).length, 1)
+})
+
 await test('Studio plugin install forwards the reviewed digest and exact permission set', async () => {
   let installArgs: unknown[] = []
   const api = {

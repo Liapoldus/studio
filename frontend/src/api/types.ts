@@ -142,6 +142,7 @@ export interface StudioAPI {
 export interface ProjectSettingsSnapshot {
   valuesJson: string
   digest: string
+  configurationDigest?: string
 }
 
 export interface PersistedServiceSettingsDraft {
@@ -177,6 +178,7 @@ export interface RuntimeReplicaStatus {
   desiredGeneration: number | null
   appliedGeneration: number | null
   configurationState: RuntimeConfigurationState
+  configurationDigest?: string
   lastFailureCode: string
 }
 

@@ -11,6 +11,7 @@ import (
 var cliAbsolutePathPattern = regexp.MustCompile(`(^|[\s=])(/[\w.@%+,:=~/-]+|[A-Za-z]:\\[^\s"'<>]+)`)
 var cliBearerPattern = regexp.MustCompile(`(?i)(bearer[\s]+)[^\s,;]+`)
 var cliPrivateKeyPattern = regexp.MustCompile(`(?is)-----BEGIN [^-]*PRIVATE KEY-----.*?-----END [^-]*PRIVATE KEY-----`)
+var cliPublicIdentifierPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
 
 // safeCLIJSON is the final renderer boundary for CLI-owned JSON. The CLI
 // remains authoritative for credentials and runtime paths, but Studio UI and
@@ -87,6 +88,7 @@ func safeCLIValue(value any, key string) any {
 		for childKey, child := range typed {
 			result[childKey] = safeCLIValue(child, childKey)
 		}
+		preserveEditorButtonKeys(typed, result)
 		return result
 	case []any:
 		result := make([]any, len(typed))
@@ -98,6 +100,44 @@ func safeCLIValue(value any, key string) any {
 		return safeCLIText(typed)
 	default:
 		return value
+	}
+}
+
+// The SDK's button key is a public developer identifier, not key material.
+// Exempt only bounded identifiers whose ID proves the service namespace.
+func preserveEditorButtonKeys(source, safe map[string]any) {
+	serviceID, ok := source["id"].(string)
+	if !ok || !cliPublicIdentifierPattern.MatchString(serviceID) {
+		return
+	}
+	descriptor, ok := source["editorButtons"].(map[string]any)
+	if !ok || descriptor["version"] != "service-editor-buttons/v1" {
+		return
+	}
+	buttons, ok := descriptor["buttons"].([]any)
+	if !ok || len(buttons) > 64 {
+		return
+	}
+	safeDescriptor, ok := safe["editorButtons"].(map[string]any)
+	if !ok {
+		return
+	}
+	safeButtons, ok := safeDescriptor["buttons"].([]any)
+	if !ok || len(safeButtons) != len(buttons) {
+		return
+	}
+	for index, raw := range buttons {
+		button, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		key, ok := button["key"].(string)
+		if !ok || !cliPublicIdentifierPattern.MatchString(key) || button["id"] != serviceID+"."+key {
+			continue
+		}
+		if safeButton, ok := safeButtons[index].(map[string]any); ok {
+			safeButton["key"] = key
+		}
 	}
 }
 

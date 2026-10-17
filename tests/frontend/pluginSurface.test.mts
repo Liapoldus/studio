@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { isStudioPluginSurfaceReadyMessage, parseStudioPluginBridgeRequest, studioPluginBridgeFailureCode, studioPluginPermissionGranted, studioPluginSurfaceAssetURL, withPeerCatalogDeadline } from '../../frontend/src/models/pluginSurface.ts'
-import { latestStudioPluginSurfaces } from '../../frontend/src/models/studioPluginPackage.ts'
+import { latestStudioPluginSurfaces, workspacePluginNavigationSurfaces } from '../../frontend/src/models/studioPluginPackage.ts'
 
 await test('plugin surface URLs accept only relative HTML routes and encode each segment', () => {
   const tab = { kind: 'studio-plugin', studioPluginId: 'tools.compiler', studioPluginVersion: '1.2.0-beta', surfaceId: 'logs', route: 'ui/index.html' }
@@ -96,4 +96,12 @@ await test('only the latest installed version contributes a plugin navigation su
   assert.deepEqual(latestStudioPluginSurfaces(surfaces).map(({ studioPluginId, version }) => [studioPluginId, version]), [
     ['server.editor', '0.3.29'], ['other.editor', '1.0.0'],
   ])
+})
+
+await test('a latest service-context plugin page does not leave its older workspace page in the activity bar', () => {
+  const surfaces = [
+    { studioPluginId: 'server.editor', version: '0.3.46', id: 'server', title: 'Server', route: 'ui/index.html', context: 'workspace' },
+    { studioPluginId: 'server.editor', version: '0.3.50', id: 'server', title: 'Server', route: 'ui/index.html', context: 'service' },
+  ]
+  assert.deepEqual(workspacePluginNavigationSurfaces(surfaces), [])
 })
