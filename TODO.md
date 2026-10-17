@@ -31,6 +31,11 @@
   apply offers the typed `dev.apply.retryFailed` path separately from a fresh
   apply. Both choices require explicit confirmation and keep the prior
   reference active.
+- Secret values in the local vault are manually supplied by the operator, not
+  generated/managed by an external provider. The UI now says to obtain the new
+  provider value before staging a replacement; automatic rotation remains
+  unavailable without a provider integration, and expiry is shown only when a
+  source supplies it. No scheduler is claimed.
 - Regression coverage verifies all reviewed paths are replaced before save,
   explicit apply and failed-operation retry use the active Project/service
   draft key and correct typed intent, stale paths fail closed, and a Project
