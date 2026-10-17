@@ -32,16 +32,23 @@
   secret route, which returned HTTP 404.
 - The running Core container label reports binary SHA-256
   `9189b7731207bd4434fcfbffa7d6a2083df1c1ceb79c1e9ae724c6199631b9b5` and
-  lacks the new secret-catalog route. The current Linux/arm64 candidate is
-  `/tmp/liapoldus-core-linux-arm64-2026-10-18-b87dd1c`, SHA-256
-  `9aa6bce94f24239ca277af5008b1a094cb4909903d8d82ccb38b2ff1c66c127f`; this
-  exact digest has not been installed. The local secret workflow is therefore
-  not live-accepted yet.
+  lacks the new secret-catalog route. That container still runs the older Core
+  code. After Core published `d7f82cd` with replica/incarnation-bound grants,
+  the Linux/arm64 candidate was rebuilt at
+  `/tmp/liapoldus-core-linux-arm64-2026-10-18-d7f82cd`, SHA-256
+  `157fe9a08bd6c54888cef70abf173b13f34e56aa8666b1013bba0006b70fd1a7`.
+  It is a static ELF aarch64 binary and has not been installed. The previous
+  `b87dd1c` artifact predates this hardening and is superseded. The local secret
+  workflow remains source-verified but not live-accepted.
 - The running Studio UI has the existing Server Editor `0.3.55`. Studio's
   native trust review for `0.3.59` displayed the exact digest and seven
   requested permissions; install remains pending action-time confirmation.
   Package hash:
   `682bd7af7b2d61c312403628b7407fda7a621b9d9d565e65fa7004849cd9094f`.
+  The package manifest requests `service.settings.read`,
+  `service.settings.write`, `service.configuration-ui.read`,
+  `service.resources.read`, `service.resources.publish`,
+  `service.peer.catalog.read`, and `service.secrets.read`.
 - After runtime start, refreshing service-editor assignments loaded Server's
   editorButtons metadata; global Settings showed server.endpoints assigned to
   the installed 0.3.55 page. Selecting Server on Canvas rendered the
