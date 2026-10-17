@@ -21,10 +21,18 @@
   differs from the previously approved digest and has not been installed. The
   local secret workflow is therefore not live-accepted yet.
 - The running Studio UI has the existing Server Editor `0.3.55`. Studio's
-  native trust review for `0.3.59` is open with the exact digest and seven
-  requested permissions. Do not install until the action-time trust
-  confirmation is completed. Package hash:
+  native trust review for `0.3.59` displayed the exact digest and seven
+  requested permissions; install remains pending action-time confirmation.
+  Package hash:
   `682bd7af7b2d61c312403628b7407fda7a621b9d9d565e65fa7004849cd9094f`.
+- After runtime start, refreshing service-editor assignments loaded Server's
+  editorButtons metadata; global Settings showed server.endpoints assigned to
+  the installed 0.3.55 page. Selecting Server on Canvas rendered the
+  Редактор эндпоинтов button in its Inspector. Clicking it opened a separate
+  Server tab with project Server Echo Studio, service server, and
+  bridge_ready. Read-only route navigation reached GET /echo settings without
+  changing the Project. This verifies binding/handshake for 0.3.55, but not
+  the new 0.3.59 HTTP/security UI.
 - Next: complete the native plugin trust action if confirmed, then update the
   host CLI/Core only through their typed Studio workflows with exact candidate
   digests and separate action-time confirmations. Re-run secret catalog and
