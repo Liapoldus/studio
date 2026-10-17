@@ -3,6 +3,7 @@ import { KeyRound, RefreshCw, RotateCw, Trash2 } from 'lucide-react'
 import type { Locale, Workspace } from '../api/types'
 import type { StudioController } from '../controllers/studioController'
 import { parseServiceRuntimeStatus, projectSettingsApplied } from '../models/runtime'
+import { messageOf } from '../models/studio'
 import { parseDeclaredSecretPurposes, parseServiceSecretCatalogDetails, parseServiceSecretRotationResult, serviceSecretJSONPointer, serviceSecretReferencePaths, type PendingServiceSecretRotation, type ServiceSecretReference } from '../models/serviceSecrets'
 
 export function LocalServiceSecretsSettings({ controller, workspace, locale }: { controller: StudioController; workspace: Workspace | null; locale: Locale }) {
@@ -50,7 +51,9 @@ export function LocalServiceSecretsSettings({ controller, workspace, locale }: {
       setPendingRegistrations(catalog.pendingRegistrations)
       setPurpose((current) => nextPurposes.includes(current) ? current : nextPurposes[0] ?? '')
     } catch (reason: unknown) {
-      setError(reason instanceof Error ? reason.message : 'Could not load local secrets')
+      setError(messageOf(reason, russian
+        ? 'Не удалось загрузить каталог секретов. Проверьте версию CLI и доступность local Core, затем нажмите «Обновить».'
+        : 'Could not load the secret catalog. Check the CLI version and local Core availability, then retry.'))
       setPurposes([])
       setItems([])
       setStagedRotations([])
@@ -88,7 +91,7 @@ export function LocalServiceSecretsSettings({ controller, workspace, locale }: {
       setRotationReference('')
       await reloadAfterMutation()
     } catch (reason: unknown) {
-      setError(reason instanceof Error ? reason.message : 'Could not save secret')
+      setError(messageOf(reason, russian ? 'Не удалось сохранить секрет.' : 'Could not save the secret.'))
     } finally { encoded.fill(0); byteValues.fill(0); setBusy(false) }
   }
 
@@ -117,7 +120,7 @@ export function LocalServiceSecretsSettings({ controller, workspace, locale }: {
       }
       setConfirmRotationApply(false)
     } catch (reason: unknown) {
-      setError(reason instanceof Error ? reason.message : 'Could not review the secret rotation')
+      setError(messageOf(reason, russian ? 'Не удалось проверить план ротации.' : 'Could not review the secret rotation.'))
     } finally { setBusy(false) }
   }
 
@@ -141,7 +144,7 @@ export function LocalServiceSecretsSettings({ controller, workspace, locale }: {
         : (russian ? 'Новая ссылка сохранена в Project, но все реплики ещё не подтвердили точный digest и готовность. Старая ссылка остаётся активной; проверьте runtime и повторите проверку.' : 'The new reference is saved in the Project, but every replica has not acknowledged the exact digest and readiness. The old reference stays active; inspect runtime and check again.'))
       await reloadAfterMutation()
     } catch (reason: unknown) {
-      setError(reason instanceof Error ? reason.message : 'Could not apply the secret rotation')
+      setError(messageOf(reason, russian ? 'Не удалось применить ротацию секрета.' : 'Could not apply the secret rotation.'))
     } finally { setBusy(false); setConfirmRotationApply(false) }
   }
 
@@ -156,7 +159,7 @@ export function LocalServiceSecretsSettings({ controller, workspace, locale }: {
         ? (russian ? `Точный digest подтверждён всеми ${String(status.replicaCount)} готовыми репликами.` : `The exact digest is acknowledged by all ${String(status.replicaCount)} ready replicas.`)
         : (russian ? 'Подтверждения пока нет. Старая ссылка остаётся активной; повторите проверку после готовности runtime.' : 'No complete acknowledgement yet. The previous reference stays active; check again when the runtime is ready.'))
     } catch (reason: unknown) {
-      setError(reason instanceof Error ? reason.message : 'Could not check rotation readiness')
+      setError(messageOf(reason, russian ? 'Не удалось проверить готовность реплик.' : 'Could not check replica readiness.'))
     } finally { setBusy(false) }
   }
 
@@ -179,7 +182,7 @@ export function LocalServiceSecretsSettings({ controller, workspace, locale }: {
       setNotice(russian ? 'Ссылка отозвана после проверки конфигурации Project и подтверждения готовности всех реплик.' : 'Reference was revoked after checking the Project config and every replica’s readiness acknowledgement.')
       await reloadAfterMutation()
     } catch (reason: unknown) {
-      setError(reason instanceof Error ? reason.message : 'Could not revoke secret')
+      setError(messageOf(reason, russian ? 'Не удалось отозвать ссылку на секрет.' : 'Could not revoke the secret reference.'))
     } finally { setBusy(false) }
   }
 
@@ -201,7 +204,7 @@ export function LocalServiceSecretsSettings({ controller, workspace, locale }: {
       setNotice(russian ? 'Ссылка зарегистрирована в Core. Значение осталось в системном vault.' : 'The reference is registered in Core. Its value remains in the OS vault.')
       await reloadAfterMutation()
     } catch (reason: unknown) {
-      setError(reason instanceof Error ? reason.message : 'Could not retry secret registration')
+      setError(messageOf(reason, russian ? 'Не удалось повторить регистрацию секрета в Core.' : 'Could not retry secret registration with Core.'))
     } finally { setBusy(false) }
   }
 
