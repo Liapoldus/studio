@@ -6,6 +6,7 @@ import { applySavedServiceSecretRotation, replaceServiceSecretReferencesAndSave 
 import { parseServiceRuntimeStatus, projectSettingsApplied } from '../models/runtime'
 import { messageOf } from '../models/studio'
 import { parseDeclaredSecretPurposes, parseServiceSecretCatalogDetails, parseServiceSecretRotationResult, serviceSecretJSONPointer, serviceSecretReferencePaths, type PendingServiceSecretRotation, type ServiceSecretReference } from '../models/serviceSecrets'
+import { useStudioStore } from '../stores/studio'
 
 export function LocalServiceSecretsSettings({ controller, workspace, locale }: { controller: StudioController; workspace: Workspace | null; locale: Locale }) {
   const api = controller.api
@@ -23,10 +24,14 @@ export function LocalServiceSecretsSettings({ controller, workspace, locale }: {
   const [pendingRotation, setPendingRotation] = useState<{ previous: string; created: ServiceSecretReference; paths: string[][] | null; reviewPaths: string[][] } | null>(null)
   const [rotationReady, setRotationReady] = useState(false)
   const [confirmRotationApply, setConfirmRotationApply] = useState(false)
+  const [rotationApplyIntent, setRotationApplyIntent] = useState<'apply' | 'retry-failed' | null>(null)
   const [confirmRevoke, setConfirmRevoke] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
+  const applyRecoveryStatus = useStudioStore((state) => state.applyRecoveryStatus)
+  const applyRecoveryOperationId = useStudioStore((state) => state.applyRecoveryOperationId)
+  const cliStreamState = useStudioStore((state) => state.cliStreamState)
   const russian = locale === 'ru'
   const selectedService = useMemo(() => services.find((service) => service.id === serviceID), [services, serviceID])
 
@@ -62,7 +67,7 @@ export function LocalServiceSecretsSettings({ controller, workspace, locale }: {
     } finally { setBusy(false) }
   }, [api, serviceID, workspace?.project?.id])
 
-  useEffect(() => { setItems([]); setStagedRotations([]); setPendingRegistrations([]); setPurposes([]); setError(''); setNotice(''); setSecret(''); setConfirmCreate(false); setConfirmRevoke(''); setRotationReference(''); setPendingRotation(null); setConfirmRotationApply(false); void reload() }, [reload])
+  useEffect(() => { setItems([]); setStagedRotations([]); setPendingRegistrations([]); setPurposes([]); setError(''); setNotice(''); setSecret(''); setConfirmCreate(false); setConfirmRevoke(''); setRotationReference(''); setPendingRotation(null); setConfirmRotationApply(false); setRotationApplyIntent(null); void reload() }, [reload])
 
   async function create() {
     if (!selectedService || (!rotationReference && !api.createLocalServiceSecret) || (rotationReference && !api.rotateLocalServiceSecret) || !purpose || !label.trim() || !secret || busy) return
@@ -81,6 +86,7 @@ export function LocalServiceSecretsSettings({ controller, workspace, locale }: {
         const created = parseServiceSecretRotationResult(raw, selectedService.id, rotationReference, purpose)
         setPendingRotation({ previous: rotationReference, created, paths: null, reviewPaths: [] })
         setRotationReady(false)
+        setRotationApplyIntent(null)
         setNotice(russian
           ? `Новая ссылка ${created.reference} создана и доступна для безопасной замены в конфигурации Project.`
           : `New reference ${created.reference} is staged and ready for a reviewed Project configuration replacement.`)
@@ -120,6 +126,7 @@ export function LocalServiceSecretsSettings({ controller, workspace, locale }: {
           : (russian ? 'Новая ссылка уже сохранена в Project, но точный digest ещё не подтверждён всеми готовыми репликами.' : 'The new reference is already saved in the Project, but every ready replica has not acknowledged its exact digest.'))
       }
       setConfirmRotationApply(false)
+      setRotationApplyIntent(null)
     } catch (reason: unknown) {
       setError(messageOf(reason, russian ? 'Не удалось проверить план ротации.' : 'Could not review the secret rotation.'))
     } finally { setBusy(false) }
@@ -154,10 +161,11 @@ export function LocalServiceSecretsSettings({ controller, workspace, locale }: {
     } finally { setBusy(false); setConfirmRotationApply(false) }
   }
 
-  async function retrySavedRotationApply() {
+  async function retrySavedRotationApply(retryFailed: boolean) {
     if (!pendingRotation || pendingRotation.paths === null || pendingRotation.paths.length > 0 || !workspace?.project || !selectedService || busy) return
-    if (!confirmRotationApply) {
-      setConfirmRotationApply(true)
+    const intent = retryFailed ? 'retry-failed' : 'apply'
+    if (rotationApplyIntent !== intent) {
+      setRotationApplyIntent(intent)
       return
     }
     setBusy(true)
@@ -166,7 +174,7 @@ export function LocalServiceSecretsSettings({ controller, workspace, locale }: {
     try {
       await applySavedServiceSecretRotation(
         controller, workspace.project.id, workspace.project.rootPath, selectedService.id,
-        pendingRotation.previous, pendingRotation.created.reference,
+        pendingRotation.previous, pendingRotation.created.reference, retryFailed,
       )
       const status = await refreshRotationReadiness(pendingRotation)
       setRotationReady(status.applied)
@@ -176,7 +184,7 @@ export function LocalServiceSecretsSettings({ controller, workspace, locale }: {
       await reloadAfterMutation()
     } catch (reason: unknown) {
       setError(messageOf(reason, russian ? 'Не удалось повторно применить конфигурацию Project.' : 'Could not retry applying the saved Project configuration.'))
-    } finally { setBusy(false); setConfirmRotationApply(false) }
+    } finally { setBusy(false); setConfirmRotationApply(false); setRotationApplyIntent(null) }
   }
 
   async function recheckRotationReadiness() {
@@ -264,6 +272,7 @@ export function LocalServiceSecretsSettings({ controller, workspace, locale }: {
     setPendingRotation({ previous: rotation.previousReference, created, paths: null, reviewPaths: [] })
     setRotationReady(false)
     setConfirmRotationApply(false)
+    setRotationApplyIntent(null)
     setError('')
     setNotice('')
   }
@@ -330,8 +339,18 @@ export function LocalServiceSecretsSettings({ controller, workspace, locale }: {
                 <button type="button" className="primary-button compact" disabled={busy} onClick={() => void applyRotation()}>{confirmRotationApply ? (russian ? 'Подтвердить и применить' : 'Confirm and apply') : (russian ? 'Заменить и применить' : 'Replace and apply')}</button>
               </>}
             {pendingRotation.paths.length === 0 && pendingRotation.reviewPaths.length > 0 && !rotationReady && <>
-              {confirmRotationApply && <p className="dialog-hint" role="alert">{russian ? 'Подтвердите повторное применение сохранённой конфигурации через Core. Старая ссылка останется активной до подтверждения всех реплик.' : 'Confirm retrying the saved Project configuration through Core. The previous reference remains active until every replica acknowledges it.'}</p>}
-              <button type="button" className="secondary-button compact" disabled={busy} onClick={() => void retrySavedRotationApply()}>{confirmRotationApply ? (russian ? 'Подтвердить применение' : 'Confirm apply') : (russian ? 'Применить сохранённую конфигурацию' : 'Apply saved configuration')}</button>
+              {applyRecoveryOperationId
+                ? <>
+                  <p className="muted" role="status">{russian ? `Сначала проверьте Core operation ${applyRecoveryOperationId}.` : `Reconcile Core operation ${applyRecoveryOperationId} before retrying.`}</p>
+                  <button type="button" className="secondary-button compact" disabled={busy || cliStreamState !== 'idle'} onClick={() => void controller.reconcileApplyRecovery()}>{cliStreamState !== 'idle' ? (russian ? 'Проверяю…' : 'Checking…') : (russian ? 'Проверить операцию' : 'Reconcile operation')}</button>
+                </>
+                : <>
+                  {rotationApplyIntent && <p className="dialog-hint" role="alert">{rotationApplyIntent === 'retry-failed'
+                    ? (russian ? 'Подтвердите повтор неудавшейся Core operation. Старая ссылка останется активной до подтверждения новой конфигурации всеми репликами.' : 'Confirm retrying the failed Core operation. The previous reference remains active until every replica acknowledges the new configuration.')
+                    : (russian ? 'Подтвердите применение сохранённой конфигурации через Core. Старая ссылка останется активной до подтверждения всех реплик.' : 'Confirm applying the saved Project configuration through Core. The previous reference remains active until every replica acknowledges it.')}</p>}
+                  <button type="button" className="secondary-button compact" disabled={busy || cliStreamState !== 'idle'} onClick={() => void retrySavedRotationApply(false)}>{rotationApplyIntent === 'apply' ? (russian ? 'Подтвердить применение' : 'Confirm apply') : (russian ? 'Применить сохранённую конфигурацию' : 'Apply saved configuration')}</button>
+                  {applyRecoveryStatus === 'confirmation-required' && <button type="button" className="secondary-button compact" disabled={busy || cliStreamState !== 'idle'} onClick={() => void retrySavedRotationApply(true)}>{rotationApplyIntent === 'retry-failed' ? (russian ? 'Подтвердить повтор' : 'Confirm retry') : (russian ? 'Повторить неудавшееся применение' : 'Retry failed apply')}</button>}
+                </>}
             </>}
           </>}
       </section>}

@@ -130,6 +130,7 @@ await test('rotation saves every reviewed reference before explicitly applying t
       return Promise.resolve({ serviceId: 'server', values: structuredClone(values), patch: {}, status: 'clean', errorCode: '' })
     },
     applyServiceSettings: (key: string) => { calls.push(`apply:${key}`); return Promise.resolve() },
+    retryFailedServiceSettings: (key: string) => { calls.push(`retry-failed:${key}`); return Promise.resolve() },
   } as unknown as Parameters<typeof replaceServiceSecretReferencesAndSave>[0]
 
   await replaceServiceSecretReferencesAndSave(controller, 'project-1', 'server', previous, created, paths)
@@ -145,6 +146,10 @@ await test('rotation saves every reviewed reference before explicitly applying t
   await applySavedServiceSecretRotation(controller, 'project-1', '/project-1', 'server', previous, created)
   assert.equal(calls.at(-2), 'read')
   assert.equal(calls.at(-1), `apply:${configurationDraftKey('/project-1', 'server')}`)
+
+  await applySavedServiceSecretRotation(controller, 'project-1', '/project-1', 'server', previous, created, true)
+  assert.equal(calls.at(-2), 'read')
+  assert.equal(calls.at(-1), `retry-failed:${configurationDraftKey('/project-1', 'server')}`)
 })
 
 await test('rotation refuses stale reviewed paths and never applies a Project that still uses the old reference', async () => {

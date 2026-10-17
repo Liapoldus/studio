@@ -26,11 +26,16 @@
   retry for the saved candidate. Rotation still cannot revoke the old
   reference until the exact digest/generation is acknowledged by every
   required ready replica.
+- The rotation manager now follows the same recovery boundary as the Inspector:
+  a saved Core operation must be reconciled first, while a terminal failed
+  apply offers the typed `dev.apply.retryFailed` path separately from a fresh
+  apply. Both choices require explicit confirmation and keep the prior
+  reference active.
 - Regression coverage verifies all reviewed paths are replaced before save,
-  explicit apply uses the active Project/service draft key, stale paths fail
-  closed, and a Project still using the old reference is never applied. The
-  targeted secret/settings suite passes 45/45; the production frontend build
-  passes. Studio `make check` passes with 178/178 frontend tests,
+  explicit apply and failed-operation retry use the active Project/service
+  draft key and correct typed intent, stale paths fail closed, and a Project
+  still using the old reference is never applied. Targeted rotation tests pass
+  8/8. Studio `make check` passes with 178/178 frontend tests,
   `make check-race` passes, and `make desktop-build` produces the macOS/arm64
   app with reproducible bindings. The existing Vite large-chunk advisory
   remains.

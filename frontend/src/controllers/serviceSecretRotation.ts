@@ -3,7 +3,7 @@ import { configurationDraftKey } from '../models/configurationDraft'
 import { serviceSecretReferencePaths } from '../models/serviceSecrets'
 
 type RotationController = Pick<StudioController,
-  'pluginReadServiceSettings' | 'pluginPatchServiceSettings' | 'pluginSaveServiceSettings' | 'applyServiceSettings'>
+  'pluginReadServiceSettings' | 'pluginPatchServiceSettings' | 'pluginSaveServiceSettings' | 'applyServiceSettings' | 'retryFailedServiceSettings'>
 
 const opaqueReferencePattern = /^ssr:v1:[a-f0-9]{32}$/u
 const maximumRotationPaths = 64
@@ -40,6 +40,7 @@ export async function applySavedServiceSecretRotation(
   serviceID: string,
   previousReference: string,
   createdReference: string,
+  retryFailed = false,
 ): Promise<void> {
   if (!projectID || !projectRoot || !serviceID || !opaqueReferencePattern.test(previousReference) ||
       !opaqueReferencePattern.test(createdReference) || previousReference === createdReference) {
@@ -51,7 +52,9 @@ export async function applySavedServiceSecretRotation(
       serviceSecretReferencePaths(settings.values, createdReference).length === 0) {
     throw new Error('secret_rotation_project_not_ready')
   }
-  await controller.applyServiceSettings(configurationDraftKey(projectRoot, serviceID))
+  const draftKey = configurationDraftKey(projectRoot, serviceID)
+  if (retryFailed) await controller.retryFailedServiceSettings(draftKey)
+  else await controller.applyServiceSettings(draftKey)
 }
 
 function requireCleanSettings(settings: Awaited<ReturnType<RotationController['pluginReadServiceSettings']>>): void {
