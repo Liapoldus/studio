@@ -31,6 +31,9 @@
   `e336a935e6e81ca44b5dbfb77d3f31ae6fd86e365ba203371e2e34f389b0588f`.
   This confirms the catalog read path on the authorized Core candidate, but no
   secret grant has yet been delivered to Server.
+- Fresh local HTTP check returned `200` with the expected Echo body for
+  `/echo?text=goal-audit-20261018` and `404` for the isolated unsaved test path.
+  Project `services/server/settings.json` still contains only `/echo`.
 - The changed digest requires an action-time confirmation before launching the
   new app build for the pending local WebView check. Production is out of scope.
 - The Project's stored Server schema currently differs from live schema only
