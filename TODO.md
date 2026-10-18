@@ -15,6 +15,11 @@
 - Read-only CLI status reports Server 1.1.8 ready at generation 92, while the
   Project pin remains 1.1.10. No secret values, Project settings or runtime
   state were changed during this preflight.
+- Secret-specific source regressions pass: bundled-Node
+  `frontend/node_modules/.bin/tsx --test tests/frontend/serviceSecrets.test.mts`
+  (8/8), and `GOTOOLCHAIN=go1.26.0 GOWORK=off GOFLAGS=-p=1 go test
+  ./internal/presentation/wails -run '^TestLocalServiceSecretManager'
+  -count=1`. These do not replace the pending WebView acceptance.
 
 ## Server Admin Surface host DTO fix and local rollout — 2026-10-18
 
