@@ -21,6 +21,16 @@
   `make desktop-build` pass. The new macOS/arm64 executable is
   `build/bin/Liapoldus Studio.app/Contents/MacOS/studio`, SHA-256
   `3571989c733abc9556c672842e688b271db3a2d72c0af2f8cdd34e39a57f0e21`.
+- Commit `6d0eae0` is pushed to `origin/main`. Fresh local typed status shows
+  Core, Echo and Server running; Server 1.1.11 is ready at generation 94 while
+  its active settings envelope remains schemaVersion 1 and the Project file is
+  v2. The server secret catalog has one active temporary reference and one
+  revoked record, with no pending registrations or rotations. The active
+  reference is absent from the Project file and runtime configuration.
+- Docker's Core process runs the read-only mounted binary whose host SHA-256 is
+  `e336a935e6e81ca44b5dbfb77d3f31ae6fd86e365ba203371e2e34f389b0588f`.
+  This confirms the catalog read path on the authorized Core candidate, but no
+  secret grant has yet been delivered to Server.
 - The changed digest requires an action-time confirmation before launching the
   new app build for the pending local WebView check. Production is out of scope.
 - The Project's stored Server schema currently differs from live schema only
