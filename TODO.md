@@ -1,5 +1,21 @@
 # Liapoldus Studio — TODO
 
+## Read-only secret UI preflight — 2026-10-18
+
+- The running Studio window on `Server Echo Studio` / `local` is still the
+  previously approved `cc09530…` build. Its Settings → Secrets page reports
+  `Service returned an invalid secret purpose catalog` for Echo, while direct
+  typed CLI reads return valid empty catalogs for Echo and Server. This points
+  to Studio's absent-`secretPurposes` parser behavior, not a Core catalog 404.
+- The source fix maps only an absent `secretPurposes` property to an empty list;
+  explicit `null` and malformed entries remain invalid. The tested macOS/arm64
+  candidate SHA-256 is
+  `54178b00b28ffb3936dcb2e73f71810e9aef249ec174cd0da805a57c9763e505`.
+  It has not been launched; exact-digest launch confirmation remains required.
+- Read-only CLI status reports Server 1.1.8 ready at generation 92, while the
+  Project pin remains 1.1.10. No secret values, Project settings or runtime
+  state were changed during this preflight.
+
 ## Server Admin Surface host DTO fix and local rollout — 2026-10-18
 
 - Studio's runtime Admin Surface validation DTO discarded fields required by
