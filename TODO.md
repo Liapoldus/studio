@@ -17,10 +17,11 @@
   fixes still need a new Server binary and the exact local action approval.
   The typed CLI plan and status calls still succeed.
 - SDK, Core, Server and mechanical service consumers now implement
-  candidate-generation scoped validation. Their source gates are being closed;
-  new Core/Server digests must pass the exact local action gate before install
-  or run. Production is out of scope. Existing Project WIP and `.studio`
-  recovery files remain untouched.
+  candidate-generation scoped validation. Their owner checks and commits are
+  published. New Core/Server binaries are built and verified, but their exact
+  digests still need local action approval before install or run. Production is
+  out of scope. Existing Project WIP and `.studio` recovery files remain
+  untouched.
 
 ## Local secret rotation smoke — superseded checkpoint — 2026-10-18 (updated)
 
