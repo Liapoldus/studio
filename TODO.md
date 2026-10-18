@@ -12,6 +12,11 @@
   label; its secure value field is focused and Save remains disabled. The user
   must enter and submit the temporary token directly in Studio. No credential
   value has been entered or inspected by the agent.
+- The user later replied that the value had been saved. A fresh live UI read
+  still shows an empty secure field and disabled Save button; the typed Core
+  catalog is unchanged (three revoked references, no active or pending item).
+  Treat creation as unconfirmed and wait for a successful save reflected by a
+  new active catalog reference before creating an auth route or applying it.
 - The Project still has only the existing `/echo` route and no secret reference.
   The prior three synthetic references remain revoked. The temporary auth route
   has not been created, applied or sent to the runtime; local auth, rotation,
@@ -20,6 +25,10 @@
   recovery files. They are preserved as-is; only a separate temporary backup of
   the Server settings file was made for the authorized smoke test. Production is
   out of scope.
+- Current owner verification: `PATH=/Users/docup/.cache/codex-runtimes/
+  codex-primary-runtime/dependencies/node/bin:$PATH GOWORK=off GOFLAGS=-p=1
+  make check` passed with 185 frontend tests and all Go/lint/type checks;
+  `make desktop-build` completed. The build was not launched as a new binary.
 
 ## Local secret rotation smoke — current checkpoint — 2026-10-18 (updated)
 
