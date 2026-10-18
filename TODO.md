@@ -35,6 +35,16 @@
   values or references. This verifies the read-only UI/CLI path only; it does
   not prove creation, rotation, service grants, replica acknowledgement or
   revocation.
+- Studio's Toolchain page confirms it selects `/Users/docup/go/bin/liapoldus`
+  (SHA-256 `c33d2114808708be062fb23877da3d48a8c803203ccd3d6be06d2be1227082ae`,
+  source `e297841`). Typed `service secret list` returns an empty valid catalog;
+  `service status server` reports Server 1.1.11, digest
+  `sha256:3f3f66e4d8b852b337d07f39276aa949ca1df5095fa411b88ca976286d4075a1`,
+  generation 92, ready/acknowledged. Runtime readiness still reports schema
+  version 1 while Project settings are v2 and unapplied.
+- The Server Editor `/echo` route page's auth picker also reports no active
+  references. The route editor handshake and typed read path work; create,
+  rotate, secret delivery, ACK and revoke remain unverified.
 - No secret value was entered or persisted. The next live lifecycle check needs
   temporary synthetic values in the `local` vault and must revoke them after
   validation; no runtime configuration was changed during this preflight.
