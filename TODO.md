@@ -2247,6 +2247,16 @@ content.
 - Secret workflow source tests cover redaction, references and the guarded
   rotation flow, but live create/rotate/apply/retire, multi-replica ACK,
   timeout/restart recovery, and Server Editor WebView acceptance remain open.
+- Server Editor `.61` adds an HTTPS setup assistant using the existing typed
+  settings bridge: automatic TLS, optional explicit HTTP→HTTPS listener,
+  automatic-TLS hostname reuse, bind-conflict checks, and opt-in HTTP/3. It does
+  not change runtime until Project settings are saved and applied. Package
+  validation, all 82 editor tests, and Studio installer inspection pass. Exact
+  package SHA-256:
+  `f8a31ecfb01f796cc9c2267ada0075d08c7870c9f293dab9318d9dbd51be05cf`.
+  Installation and macOS WebView verification remain gated by Studio's native
+  trust confirmation for this digest. Plugin source is outside Git and has no
+  remote, so only this Studio-owned acceptance record can be pushed.
 
 
 ### Server Editor binding and config apply — 2026-10-17
