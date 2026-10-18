@@ -5,6 +5,7 @@
 - Current published Studio source HEAD: `bf2ea676d5d3f912ee3f369070562695ba6480fd`. The macOS/arm64 app at `build/bin/Liapoldus Studio.app/Contents/MacOS/studio` has SHA-256 `910320ef7176a8db582a8343e262e8fa1f61923c06d2d7ba9d93a8727a58c53e` and was built from this source after `make check`, `make check-race` and `make desktop-build` passed.
 - Matching Server Editor package `0.3.63` is at `../plugins/studio-server/dist/liapoldus.server-editor-0.3.63.studio-plugin`, SHA-256 `2c6befb58d3a27d5a7e2c58fe7c65da06387b6b28d5ccd06dc7eadd683a333d8`; its package workflow passed 83/83 plugin tests and Studio package inspection.
 - Native launch and package trust for these exact hashes have not yet occurred. Until then, macOS WebView handshake, settings editing and the end-to-end local secret rotation flow are not claimed as accepted.
+- Fresh targeted checks passed: `GOTOOLCHAIN=go1.26.0 GOWORK=off GOFLAGS=-p=1 go test ./internal/presentation/wails -run '^TestLocalServiceSecretManager' -count=1` and `./node_modules/.bin/tsx --test ../tests/frontend/serviceSecrets.test.mts` (8/8). These verify the typed CLI/stdin boundary, input clearing/error redaction and reviewed rotation/apply recovery; they do not replace macOS WebView acceptance.
 
 ## Current secret workflow candidates — 2026-10-18
 
