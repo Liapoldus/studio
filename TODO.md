@@ -2355,3 +2355,25 @@ content.
   Plugin source is not a Git repository and has no remote. Neither this package
   nor the new Studio binary has been installed/launched for WebView acceptance;
   they remain subject to the Studio native trust flow for their exact digests.
+
+### Server Editor save outcome reporting — 2026-10-18
+
+- `service.settings.save` now returns only a bounded `applyState` to the plugin:
+  `applied`, `review-required`, `not-confirmed` or `applying`. Studio's normal
+  lifecycle remains the only apply path; Canvas Inspector remains the review
+  surface for public/security-sensitive changes. The plugin no longer says a
+  runtime validation completed merely because Project settings were saved.
+- Regressions cover public-route review gating in the controller and the plugin
+  message directing users back to Canvas Inspector. Targeted owner checks pass;
+  full `make check` passes with 180 frontend tests, all Go tests, lint,
+  reproducible bindings, vet and build. `make desktop-build` passes.
+- New macOS/arm64 Studio executable SHA-256:
+  `0e3a372123df9865a6e4cec369d5d2a467e0b254c608fdf44fd879c3201894e9`.
+  Server Editor `0.3.64` passes 84/84 tests, package validation and Studio
+  installer inspection; SHA-256
+  `5b714964e68c90f701c77025773cd465eac108030da141580c406be1ba680d38`.
+  Package permissions remain settings.read/write, configuration-ui.read,
+  resources.read/publish, peer.catalog.read and secrets.read.
+- Neither new artifact has been installed/launched for WebView acceptance.
+  Both exact digests remain subject to native Studio review. Plugin source has no
+  Git repository/remote; its source edits and built package remain local.

@@ -906,7 +906,13 @@ export function createStudioController(api: StudioAPI) {
     // only auto-applies after a live contract has been verified.
     await queueSettingsOperation(() => saveServiceSettingsDraftNow(key, true, () => pluginContextIsCurrent(projectID, serviceID, key), allowIncomplete))
     assertPluginContext(projectID, serviceID, key)
-    return pluginSettingsSnapshot(key)
+    const recoveryStatus = store().applyRecoveryStatus
+    const applyState = recoveryStatus === 'none'
+      ? 'applied'
+      : recoveryStatus === 'applying'
+        ? 'applying'
+        : store().applyReviewPaths.length > 0 ? 'review-required' : 'not-confirmed'
+    return { ...pluginSettingsSnapshot(key), applyState }
   }
 
   function persistServiceSettingsDraft(key: string, contextIsCurrent?: () => boolean, autoApply = true): Promise<void> {

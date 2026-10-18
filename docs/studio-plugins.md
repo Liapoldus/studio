@@ -155,6 +155,13 @@ Studio исполняет его в изолированном `<iframe sandbox=
   только для operation ID, созданного этим host для выбранных Project/service;
   состояние и безопасный failure code читаются через typed CLI → Core. Одно
   permission не наследует другое;
+- `service.settings.save` записывает candidate в Project и делегирует общий
+  Studio apply lifecycle: допустимые изменения применяются автоматически,
+  public/security-sensitive изменения требуют review в Canvas Inspector. Ответ
+  содержит только безопасный `applyState` (`applied`, `review-required`,
+  `not-confirmed` или `applying`); он не содержит CLI/Core результата или
+  секретных значений. Плагин не имеет отдельного apply intent и не должен
+  считать сохранение Project подтверждением runtime применения;
 - host применяет строгий CSP `frame-src`, разрешающий только ассеты плагина;
 - ассеты плагина отдаются Wails `AssetServer` по path-confined маршруту из
   installed package root (новое поведение: HTML/JS никогда ранее не отдавались

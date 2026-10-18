@@ -1206,7 +1206,7 @@ export function StudioPluginSurfaceFrame({ tab, controller, surface, project, se
         const payload = objectValue(request.payload)
         if (payload && (Object.keys(payload).length !== 1 || payload.allowIncomplete !== true)) { reply(request.requestId, undefined, 'bridge.invalid_save_options'); return }
         const result = await controller.pluginSaveServiceSettings(project.id, service.id, payload?.allowIncomplete === true)
-        reply(request.requestId, { status: result.status, baseDigest: result.baseDigest, errorCode: result.errorCode })
+        reply(request.requestId, { status: result.status, baseDigest: result.baseDigest, errorCode: result.errorCode, applyState: result.applyState })
       } catch {
         reply(request.requestId, undefined, 'bridge.save_failed')
       }
