@@ -40,6 +40,11 @@
   in two health-check `path` defaults (`/healthz`), which expand through the
   route defaults and route feature schema. No settings values need migration;
   host schema preview must be shown before updating the Project schema pin.
+- Independent typed CLI comparison confirms exactly these two differences:
+  `/$defs/healthCheckDefault/properties/path/default` and
+  `/$defs/healthCheckFeature/properties/path/default` are absent from the pin
+  and equal `/healthz` live. No other schema field differs. `dev plan` is valid
+  and read-only; no Project schema/settings or runtime apply occurred.
 - A synthetic secret with the Server auth purpose was created in the local OS
   vault via secure stdin, but remains unselected and unreferenced by Project or
   runtime. Finish the local-only route/rotation/ACK test, then remove its test
