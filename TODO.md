@@ -20,11 +20,33 @@
 - The existing Project settings and schema are v1; the Server 1.1.10 source
   contract is v2. Studio correctly blocks editing on the live artifact
   provenance mismatch, so a migration preview has not yet been produced. The
-  new host build still needs the exact-digest action-time launch confirmation
-  before validating Admin Surface and continuing the local migration/rollout.
+  new host build is launched and the WebView is verified below; migration and
+  runtime rollout remain open.
 - No secret value was created, rotated or revoked. Generated `.studio`
   workspace files and the intentional Project service pin are outside this
   Studio commit and remain untouched.
+
+## Approved macOS WebView launch and Server Editor diagnosis — 2026-10-18
+
+- After exact-digest approval, launched the macOS/arm64 Studio executable
+  `cc09530c572200219ee8fd6cc3547c267df6221375446c41d7d503a2b4c7485e` for
+  `Server Echo Studio` / `local`. The Server Editor handshake completes,
+  its state changes from `Загрузка редактора…` to `Подключено`, and the route
+  list renders. This rules out the previous permanent loading/handshake issue.
+- Read-only typed CLI `service status server --target local` confirms the
+  active runtime is Server 1.1.8, digest
+  `sha256:5a8e02a65624441b4654eda80103e7e91ea9406f069236f12ce2e128ae6807b2`,
+  generation 92, schemaVersion 1. The Project pin remains Server 1.1.10; the
+  Inspector's displayed 1.1.10 is the desired pin, not the live artifact.
+- Typed CLI `service admin-surface inspect server --target local` returned a
+  live descriptor whose table sections omit `queryResource`; the installed
+  Server Editor 0.3.64 requires it. Server source 1.1.11 declares this field.
+  Production Linux/arm64 candidate SHA-256 is
+  `3f3f66e4d8b852b337d07f39276aa949ca1df5095fa411b88ca976286d4075a1`, but it
+  has not been trusted or installed. Full Server owner checks remain blocked by
+  the shared volume's low free space.
+- This WebView/metadata investigation changed no Project settings, Server
+  runtime state, secrets or plugin permissions.
 
 ## Exact-source current macOS host candidate — 2026-10-18
 
