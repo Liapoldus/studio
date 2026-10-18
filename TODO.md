@@ -1,5 +1,25 @@
 # Liapoldus Studio — TODO
 
+## Current secret workflow candidates — 2026-10-18
+
+- The current macOS/arm64 Studio app candidate is
+  `build/bin/Liapoldus Studio.app/Contents/MacOS/studio`, SHA-256
+  `6b844d41870d6e55d88c350baf0f8fd09b088e58361beae80631603ba324121e`, built
+  from source commit `c8c8035`. Current Studio HEAD adds only documentation
+  after that build. It has not been newly launched for this checkpoint.
+- Exact local candidates are prepared for the next native acceptance: CLI
+  `9ad8c230253ffc16fa628c3c6f3e135a55ac45467c561fe097a40b360832c8f5`, Core
+  `637e881a050e340dba5f16b07b01a0b1f1d6c27d7f9a824f6e89b428570102d4`, Server
+  `784923bea75c65b2ea7eb4ca325bb413e3ef0eef1a84005798e7059762280b60`, and
+  Server Editor package `f8a31ecfb01f796cc9c2267ada0075d08c7870c9f293dab9318d9dbd51be05cf`.
+  The user confirmation for these exact artifacts is pending; none has been
+  installed or trusted in this checkpoint.
+- Source-level Studio rotation/apply tests and `make check`, `make check-race`,
+  and `make desktop-build` are recorded below. Full macOS WebView acceptance,
+  multi-replica ACK/timeout/restart recovery, and successful retirement of an
+  old secret remain open until the approved exact artifacts are used against
+  `Server Echo Studio` / `local`.
+
 ## Secret retirement host boundary — 2026-10-18
 
 - Studio's typed `service.secret.revoke` intent now passes the open Project root
