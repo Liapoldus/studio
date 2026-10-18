@@ -1,5 +1,26 @@
 # Liapoldus Studio — TODO
 
+## Local secret rotation smoke — 2026-10-19 checkpoint
+
+- The approved Core candidate `df625da7…` and CLI `1381dd42…` are installed for
+  `Server Echo Studio` / `local`. A read-only typed plan is valid at Echo/Server
+  revision 96. `runtime start --revision WORKING_TREE` reconciled stale
+  containers; both replicas are ready and acknowledge generation 96. The
+  existing `GET /echo?text=local-smoke` returns HTTP 200.
+- The Studio Secret Manager is open on Server and the declared purpose
+  `server.http.auth.credential`. The form contains only the non-secret test
+  label; its secure value field is focused and Save remains disabled. The user
+  must enter and submit the temporary token directly in Studio. No credential
+  value has been entered or inspected by the agent.
+- The Project still has only the existing `/echo` route and no secret reference.
+  The prior three synthetic references remain revoked. The temporary auth route
+  has not been created, applied or sent to the runtime; local auth, rotation,
+  scoped grant, replica ACK and reference retirement remain unverified.
+- Studio's Project checkout has pre-existing settings edits and workspace
+  recovery files. They are preserved as-is; only a separate temporary backup of
+  the Server settings file was made for the authorized smoke test. Production is
+  out of scope.
+
 ## Local secret rotation smoke — current checkpoint — 2026-10-18 (updated)
 
 - Launched the exact approved Studio executable digest
