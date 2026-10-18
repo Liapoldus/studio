@@ -9,13 +9,34 @@
 - Project settings contain the existing `/echo` route plus the temporary
   `/__codex_auth_smoke_20261019` route, which references one active opaque
   Server secret. Core lists two active synthetic references and no pending
-  rotation. The route has not been applied; no secret value was read or logged.
-- The open Studio window shows Server Editor 0.3.65, but its Admin Surface
-  tables currently report `bridge.admin_table_unavailable` / `bridge.busy` and
-  Output includes a CLI exit error. Server source now fixes empty inventory
-  arrays and all-site release pagination, with focused tests; those source
-  fixes still need a new Server binary and the exact local action approval.
-  The typed CLI plan and status calls still succeed.
+  rotation. No secret value was read or logged.
+- The open Studio window shows Server Editor 0.3.65. It lists both routes, and
+  the auth editor loads and selects the active opaque reference after its
+  asynchronous catalog read completes. The earlier one-route view was stale;
+  a fresh Project open displays the saved test route. The Secrets settings
+  helper incorrectly said rotation was already staged when the catalog had no
+  pending rotations; its copy now describes the safe rotation process without
+  claiming a staged operation.
+- Re-running the already authorized local apply returned Core HTTP 409
+  `bundle_apply_failed: service configuration revision conflict`. Server
+  remains ready at generation 96. The temporary route returns HTTP 404 while
+  `/echo` returns HTTP 200, so the saved Project candidate is not active.
+  `dev plan` and `service status` remain valid. Do not claim runtime auth or
+  secret delivery/ACK acceptance from this state.
+- The misleading rotation helper copy is corrected. `make check`,
+  `make check-race` and `make desktop-build` pass using the bundled Node
+  runtime; the new macOS/arm64 Studio executable is
+  `d7d5f39488ae26f03ae907f82801e51c3857491226bbf0cc760fe82f3fd5f58e`.
+  It has not been launched because its digest is new and the next live runtime
+  acceptance still depends on the pending Core/Server local artifact gate.
+- Server source now fixes empty Admin Surface inventory arrays and all-site
+  release pagination, with focused tests; those source fixes still need the new
+  Server binary and exact local action approval. Candidate-generation scoped
+  validation fixes are published in SDK, Core, Server and service consumers.
+  The built Core `aecc186` and Server `1.1.14` candidates are ready, but their
+  exact digests still need local action approval before install or run.
+  Production is out of scope. Existing `.studio` recovery files remain
+  untouched.
 - SDK, Core, Server and mechanical service consumers now implement
   candidate-generation scoped validation. Their owner checks and commits are
   published. New Core/Server binaries are built and verified, but their exact
