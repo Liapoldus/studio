@@ -1,5 +1,32 @@
 # Liapoldus Studio — TODO
 
+## Approved macOS build retry and local runtime blocker — 2026-10-18
+
+- Launched the approved Studio app bundle from the exact macOS/arm64 executable
+  digest `da1589089e604982565a0e226fa2adb4fcf3720c4e285c0b360202d83fba3998`
+  (source commit `985064c`, pushed to `origin/main`). Server Editor reached
+  `Server Подключено`, loaded `server-editor/ui/index.html`, and listed its
+  route draft. Selecting Server on Canvas rendered the Inspector and its
+  “Запустить проект для редактирования” action; the previous protected-array
+  rendering error did not recur.
+- The Studio Run button first reported that the macOS `Docker` app was missing.
+  Starting the installed OrbStack app exposed Docker Engine 29.8.2 on the
+  `orbstack` context. Retrying Run then failed at Core bootstrap with
+  `Core Management TLS certificate is unavailable`.
+- Typed `liapoldus runtime status --target local` now reports the Core
+  container exited. The local target profile's seven bootstrap TLS assets
+  (management certificate/key/client CA, control certificate/key, and replica
+  client/server CAs) are missing. No matching restore copies were found in
+  Liapoldus app data or the workspace. No certificate, CA, target profile,
+  Project settings, or runtime configuration was changed during this retry.
+- Project `services/server/settings.json` still contains only `/echo` and no
+  secret reference. Live secret-reference selection, schema migration preview,
+  config apply, replacement authentication, replica ACK, and reference
+  retirement could not be exercised while Core was stopped. Do not treat the
+  local rotation workflow as runtime-accepted; restore the existing local Core
+  trust assets before continuing. The attached architecture decision forbids
+  automatic CA replacement.
+
 ## Protected route-array secret-reference selection fix — 2026-10-18
 
 - Launched the explicitly approved Studio `19ce4e6…` in `Server Echo Studio` /
