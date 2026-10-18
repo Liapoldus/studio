@@ -1,5 +1,40 @@
 # Liapoldus Studio — TODO
 
+## Protected route-array secret-reference selection fix — 2026-10-18
+
+- Launched the explicitly approved Studio `19ce4e6…` in `Server Echo Studio` /
+  `local`. Handshake completed, and the Server Editor picker loaded both active
+  local references. Selecting an existing reference returned
+  `bridge.secret_selection_failed`; the Canvas Inspector then reported
+  `Protected array draft operations are invalid`.
+- Root cause: `updateServiceSettingsSecretReference` wrote a sparse numeric
+  path into a protected `routes` array that already contained
+  `$studioArrayOps/v1`. The mixed operation document was invalid, so the host
+  could not persist the local settings draft. Secret-reference edits now use
+  `updateProtectedConfigurationArrayFieldPatch` whenever the schema path is
+  inside a protected array, preserving the validated insert/set operation
+  stream used by the route editor.
+- Extended the controller regression with a pending inserted route. It asserts
+  the secret reference is carried by valid `insert` + `set` operations, merges
+  back to the expected route, and remains only an opaque reference. Focused
+  controller tests pass 41/41. Full Studio `make check` passes (184 frontend
+  tests, Go tests, lint, vet and build); `make check-race` passes.
+- `make desktop-build` passes. New macOS/arm64 executable SHA-256:
+  `da1589089e604982565a0e226fa2adb4fcf3720c4e285c0b360202d83fba3998`.
+  This digest has not been launched; it requires its own exact-digest action
+  approval before the live retest.
+- Live typed `runtime status` shows Core running but Echo and Server exited;
+  `service status server` therefore returned Core HTTP 503
+  `service_unavailable` for service metadata. The Project file still contains
+  only `/echo` and no secret reference. The UI attempt did not save/apply the
+  test route or change runtime configuration. No production target was used.
+- The authorized local synthetic rotation is now staged in the vault/Core
+  catalog: the previous and replacement opaque references are active and one
+  rotation is pending. No reference was written to Project settings or
+  delivered to Server; the exact replica ACK and retirement checks remain
+  open. This supersedes older catalog snapshots below that said there were no
+  pending rotations.
+
 ## Server Editor secret picker failure — 2026-10-18
 
 - Reproduced `bridge.secret_path_not_declared` when selecting the active

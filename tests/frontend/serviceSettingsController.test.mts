@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { beforeEach, test } from 'node:test'
 import type { CLIEvent, RuntimeService, StudioAPI, Workspace, WorkspaceState } from '../../frontend/src/api/types.ts'
 import { createStudioController } from '../../frontend/src/controllers/studioController.ts'
+import { configurationArrayOperations, configurationArrayOperationsKey } from '../../frontend/src/models/configurationArray.ts'
 import { configurationDraftKey, mergeConfiguration } from '../../frontend/src/models/configurationDraft.ts'
 import { serviceConfigurationProvenanceDifferences } from '../../frontend/src/models/serviceConfigurationProvenance.ts'
 import { workspaceStateWithApplyRecovery } from '../../frontend/src/models/studio.ts'
@@ -1201,8 +1202,13 @@ await test('StudioPlugin can attach a declared secret reference to a schema-decl
   const api = {
     ...recoveryStateAPI(projectID),
     readProjectSchema: () => Promise.resolve(bytes(schema)),
-    readProjectSettings: () => Promise.resolve({ valuesJson: JSON.stringify({ schemaVersion: 2, config: { routes: [{ features: { auth: {} } }, { features: { auth: {} } }] } }), digest: 'sha256:base' }),
-    readServiceSettingsDraft: () => Promise.resolve(null),
+    readProjectSettings: () => Promise.resolve({ valuesJson: JSON.stringify({ schemaVersion: 2, config: { routes: [{ features: { auth: {} } }] } }), digest: 'sha256:base' }),
+    readServiceSettingsDraft: () => Promise.resolve({
+      serviceId: 'server', settingsPath: service.settingsPath, schemaPath: service.settingsSchemaPath,
+      baseDigest: 'sha256:base', patchJson: JSON.stringify({ config: { routes: {
+        [configurationArrayOperationsKey]: [{ op: 'insert', index: 1, value: { id: 'test-route', features: { auth: {} } } }],
+      } } }),
+    }),
     saveServiceSettingsDraft: (_projectID: string, _serviceID: string, _baseDigest: string, patchJSON: string) => {
       savedPatch = JSON.parse(patchJSON) as Record<string, unknown>
       return Promise.resolve()
@@ -1222,6 +1228,18 @@ await test('StudioPlugin can attach a declared secret reference to a schema-decl
   assert.equal(result.status, 'dirty')
   assert.ok(savedPatch)
   assert.equal(JSON.stringify(savedPatch).includes(reference), true)
+  const routesPatch = (savedPatch as Record<string, unknown>).config as Record<string, unknown>
+  const routeOperations = configurationArrayOperations(routesPatch.routes)
+  assert.deepEqual(routeOperations?.map((operation) => operation.op), ['insert', 'set'])
+  assert.deepEqual(Object.keys(routesPatch.routes as Record<string, unknown>), [configurationArrayOperationsKey])
+  const merged = mergeConfiguration(
+    { schemaVersion: 2, config: { routes: [{ features: { auth: {} } }] } },
+    savedPatch,
+  )
+  const mergedConfig = merged.config as Record<string, unknown>
+  const mergedRoutes = mergedConfig.routes as Array<Record<string, unknown>>
+  assert.equal(mergedRoutes.length, 2)
+  assert.equal((((mergedRoutes[1]?.features as Record<string, unknown>).auth as Record<string, unknown>).secretRef), reference)
   await assert.rejects(controller.pluginSelectServiceSecretReference(projectID, 'server',
     ['config', 'routes', '1', 'features', 'auth', 'unknown'], purpose, reference), /bridge.secret_schema_path_rejected/u)
   await assert.rejects(controller.pluginSelectServiceSecretReference(projectID, 'server',

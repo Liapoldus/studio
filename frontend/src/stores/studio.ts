@@ -348,7 +348,13 @@ export const useStudioStore = create<StudioState>((set, get) => ({
     if (!draft?.schema || draft.status === 'loading' || draft.status === 'saving' || draft.status === 'conflict' || draft.refreshingContract) return {}
     if (draft.configurationContractState !== 'matched') throw new Error('Live service schema is not verified')
     if (!configurationSecretReferencePathEditable(draft.schema, path, purpose, reference)) throw new Error('Secret reference path or metadata is invalid')
-    const patch = updateConfigurationPatch(draft.base, draft.patch, path, reference)
+    // Secret references live on protected array items (for example a Server
+    // route's auth.secretRef). Keep edits inside the schema-validated array
+    // operation stream; writing a sparse numeric path alongside
+    // `$studioArrayOps/v1` makes the operation document invalid.
+    const patch = isProtectedConfigurationArrayFieldPath(draft.base, draft.patch, draft.schema, path)
+      ? updateProtectedConfigurationArrayFieldPatch(draft.base, draft.patch, draft.schema, path, reference)
+      : updateConfigurationPatch(draft.base, draft.patch, path, reference)
     if (configurationValuesEqual(draft.patch, patch)) return {}
     const history = recordConfigurationDraftEdit(draft.history, draft.patch, JSON.stringify(path))
     const status = isConfigurationPatchEmpty(patch) ? 'clean' : 'dirty'
