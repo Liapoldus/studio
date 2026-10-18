@@ -33,7 +33,7 @@
   the synthetic references only after the runtime no longer uses them. Keep
   `/echo` healthy; production is out of scope.
 
-## Approved macOS build retry and local runtime blocker — 2026-10-18
+## Initial approved macOS build retry (historical) — 2026-10-18
 
 - Launched the approved Studio app bundle from the exact macOS/arm64 executable
   digest `da1589089e604982565a0e226fa2adb4fcf3720c4e285c0b360202d83fba3998`
