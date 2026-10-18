@@ -19,6 +19,10 @@
   multi-replica ACK/timeout/restart recovery, and successful retirement of an
   old secret remain open until the approved exact artifacts are used against
   `Server Echo Studio` / `local`.
+- Repeated host gates on the current application source: bundled-Node `make
+  check` passes (179/179 frontend tests, Wails binding reproducibility, Go/TS
+  lint, typecheck, vet and build); `make check-race` passes. The existing app
+  candidate above was not rebuilt during this verification.
 
 ## Secret retirement host boundary — 2026-10-18
 
