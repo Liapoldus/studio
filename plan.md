@@ -294,26 +294,34 @@ references and Project resources. The owner contract is:
   the typed CLI/Core catalog; it writes only the chosen opaque reference to the
   shared Project draft. Unknown purposes, services, references and revoked
   entries fail closed. Resource/file widgets are not a substitute.
-- Before local Docker Core starts, CLI resolves only references present in the
-  selected immutable Project snapshot from its credential store, writes them
-  into a private ephemeral staging directory, and mounts that directory
-  read-only into the Core container. Core resolves opaque IDs only inside this
-  mounted namespace for the existing one-use Service SDK grant; service
-  containers never mount the secret directory. CLI removes staging after Core
-  and runtime stop. Remote targets are not added to this Studio-local workflow.
+- For `dev apply` and `runtime start`, CLI captures one immutable Project
+  snapshot, reads its service settings, and resolves only the referenced values
+  from the local credential store into a private ephemeral staging directory.
+  Docker mounts that directory read-only into Core. Core resolves opaque IDs
+  only inside this namespace for the existing one-use Service SDK grant;
+  service containers never mount the secret directory. While Core validates a
+  candidate, the private mount retains values for the active configuration and
+  adds only values referenced by that candidate. After every required replica
+  acknowledges the candidate, CLI prunes the mount to the applied Project refs.
+  On rejection, timeout or partial rollout, it keeps the active values and the
+  candidate values for retry. `core stop` clears the plaintext mount; restarting
+  a stopped Core with services goes through `runtime start --project` so CLI can
+  restore the selected Project scope. Remote targets are not part of this local
+  workflow.
 - Creation/rotation uses a new immutable reference ID. CLI stores the material
-  in the local OS vault, then registers safe metadata and prepares a private
-  local Core runtime mount. If Core registration fails, the reference and vault
-  value remain staged and visible for a typed retry; retrying registration does
-  not create a second secret. Revocation disables Core grants first, then CLI
-  removes the staged file, reference index entry and vault value. A cleanup
-  failure leaves the already-revoked value inaccessible and reports which local
-  cleanup step needs attention.
+  only in the local OS vault, then registers safe metadata and records a private
+  local retry entry; it does not expose the value to Core until a Project
+  snapshot selects the new reference. If Core registration fails, the reference
+  and vault value remain pending for a typed retry; retrying does not create a
+  second secret. Revocation disables Core grants first. After the Project no
+  longer uses the reference and all required replicas acknowledge the exact
+  applied digest, CLI removes the local mount file, reference-index entry and
+  vault value. A cleanup failure reports which local step needs attention.
 - Rotation is manual or assisted. There is no background scheduler and no
   provider API that can rotate third-party credentials. The replacement stays
-  staged while Studio shows the affected Project paths and a safe diff, asks for
-  explicit confirmation, writes the opaque reference to the Project, and
-  submits the saved candidate through Core. Studio may offer old-reference
+  in the OS vault while Studio shows the affected Project paths and a safe diff,
+  asks for explicit confirmation, writes the opaque reference to the Project,
+  and submits the saved candidate through Core. Studio may offer old-reference
   revocation only after the saved Project no longer contains it and every
   required replica is ready and acknowledges the exact saved digest and
   applied generation. A failed apply, timeout, partial rollout or unavailable
@@ -322,12 +330,13 @@ references and Project resources. The owner contract is:
 
 As of the 2026-10-18 implementation checkpoint, the local path now includes
 Core's metadata-only catalog and scoped grants, SDK-declared purposes, CLI OS
-vault and retryable staging, Studio's host-owned local manager, and the
-Server Editor's contextual opaque-reference picker. The value is entered in
-Studio's host view, sent only through the typed CLI secret-input channel, and
-cleared from the host input after the operation. The sandboxed plugin receives
-only its declared service/purpose-filtered reference metadata and the selected
-opaque reference. Remote targets and unattended rotation remain unavailable.
+vault and project-scoped runtime materialization, Studio's host-owned local
+manager, and the Server Editor's contextual opaque-reference picker. The value
+is entered in Studio's host view, sent only through the typed CLI secret-input
+channel, and cleared from the host input after the operation. The sandboxed
+plugin receives only its declared service/purpose-filtered reference metadata
+and selected opaque reference. Remote targets and unattended rotation remain
+unavailable.
 These source-level flows are covered by owner tests; live macOS WebView,
 multi-replica Core/Server rotation recovery and hosted cross-platform checks
 remain release gates. Do not infer a catalog from filesystem paths, enumerate
