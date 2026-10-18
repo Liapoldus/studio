@@ -20,6 +20,14 @@
   (8/8), and `GOTOOLCHAIN=go1.26.0 GOWORK=off GOFLAGS=-p=1 go test
   ./internal/presentation/wails -run '^TestLocalServiceSecretManager'
   -count=1`. These do not replace the pending WebView acceptance.
+- Read-only inspection of Studio's client registry confirms Server Editor
+  `0.3.64`, digest
+  `sha256:5b714964e68c90f701c77025773cd465eac108030da141580c406be1ba680d38`,
+  is installed and enabled, with an approved trust record and the exact
+  settings/configuration-ui/resources/peer-catalog/secrets permissions. A
+  fresh package build reproduces that digest and passes 84/84 tests plus
+  Studio installer inspection. This confirms package installation/trust only;
+  it does not clear the live Server 1.1.8 Admin Surface incompatibility.
 
 ## Server Admin Surface host DTO fix and local rollout — 2026-10-18
 
@@ -2478,6 +2486,7 @@ content.
   `5b714964e68c90f701c77025773cd465eac108030da141580c406be1ba680d38`.
   Package permissions remain settings.read/write, configuration-ui.read,
   resources.read/publish, peer.catalog.read and secrets.read.
-- Neither new artifact has been installed/launched for WebView acceptance.
-  Both exact digests remain subject to native Studio review. Plugin source has no
-  Git repository/remote; its source edits and built package remain local.
+- At this checkpoint both artifacts were pending native review. Later registry
+  inspection confirms the plugin package is installed/trusted; the Studio
+  executable remains unlaunched for this acceptance. Plugin source has no Git
+  repository/remote; its source edits and built package remain local.
