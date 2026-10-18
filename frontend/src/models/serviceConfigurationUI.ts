@@ -140,10 +140,28 @@ const schemaMapKeywords = new Set(['$defs', 'definitions', 'properties', 'patter
 const schemaArrayKeywords = new Set(['allOf', 'anyOf', 'oneOf', 'prefixItems'])
 const schemaSingleKeywords = new Set(['additionalProperties', 'unevaluatedProperties', 'propertyNames', 'items', 'not', 'if', 'then', 'else', 'contains', 'unevaluatedItems', 'contentSchema'])
 
-function normalizeSchemaReferences(root: Record<string, unknown>, value: unknown, depth = 0): Record<string, unknown> | null {
+function normalizeSchemaReferences(root: Record<string, unknown>, value: unknown, depth = 0, seenReferences = new Set<string>()): Record<string, unknown> | null {
   if (depth > 64) return null
-  const resolved = resolveConfigurationSchema(root, value, depth)
-  if (!resolved) return null
+  const source = objectValue(value)
+  if (!source) return null
+  let resolved: Record<string, unknown> = {}
+  let childReferences = seenReferences
+  if (Object.hasOwn(source, '$ref')) {
+    const reference = source.$ref
+    if (typeof reference !== 'string' || seenReferences.has(reference)) return null
+    const target = schemaReferenceTarget(root, reference)
+    if (!target) return null
+    childReferences = new Set(seenReferences)
+    childReferences.add(reference)
+    const normalizedTarget = normalizeSchemaReferences(root, target, depth + 1, childReferences)
+    if (!normalizedTarget) return null
+    resolved = { ...normalizedTarget }
+  }
+  // Match the host's validated schema projection: JSON Schema siblings of
+  // `$ref` replace annotations/keywords from the target in document order.
+  for (const [key, child] of Object.entries(source)) {
+    if (key !== '$ref') resolved[key] = child
+  }
   const normalized: Record<string, unknown> = { ...resolved }
   for (const keyword of schemaMapKeywords) {
     const entries = objectValue(resolved[keyword])
@@ -152,7 +170,7 @@ function normalizeSchemaReferences(root: Record<string, unknown>, value: unknown
     for (const [name, child] of Object.entries(entries)) {
       if (typeof child === 'boolean') mapped[name] = child
       else {
-        const normalizedChild = normalizeSchemaReferences(root, child, depth + 1)
+        const normalizedChild = normalizeSchemaReferences(root, child, depth + 1, childReferences)
         if (!normalizedChild) return null
         mapped[name] = normalizedChild
       }
@@ -166,7 +184,7 @@ function normalizeSchemaReferences(root: Record<string, unknown>, value: unknown
     for (const child of entries) {
       if (typeof child === 'boolean') mapped.push(child)
       else {
-        const normalizedChild = normalizeSchemaReferences(root, child, depth + 1)
+        const normalizedChild = normalizeSchemaReferences(root, child, depth + 1, childReferences)
         if (!normalizedChild) return null
         mapped.push(normalizedChild)
       }
@@ -182,7 +200,7 @@ function normalizeSchemaReferences(root: Record<string, unknown>, value: unknown
       for (const entry of child) {
         if (typeof entry === 'boolean') mapped.push(entry)
         else {
-          const normalizedChild = normalizeSchemaReferences(root, entry, depth + 1)
+          const normalizedChild = normalizeSchemaReferences(root, entry, depth + 1, childReferences)
           if (!normalizedChild) return null
           mapped.push(normalizedChild)
         }
@@ -190,11 +208,32 @@ function normalizeSchemaReferences(root: Record<string, unknown>, value: unknown
       normalized[keyword] = mapped
       continue
     }
-    const normalizedChild = normalizeSchemaReferences(root, child, depth + 1)
+    const normalizedChild = normalizeSchemaReferences(root, child, depth + 1, childReferences)
     if (!normalizedChild) return null
     normalized[keyword] = normalizedChild
   }
   return normalized
+}
+
+function schemaReferenceTarget(root: Record<string, unknown>, reference: string): unknown {
+  if (!reference.startsWith('#/')) return undefined
+  let pointer: string
+  try {
+    pointer = decodeURIComponent(reference.slice(1))
+  } catch {
+    return undefined
+  }
+  if (!pointer.startsWith('/')) return undefined
+  let current: unknown = root
+  for (const rawSegment of pointer.slice(1).split('/')) {
+    if (/~(?![01])/u.test(rawSegment)) return undefined
+    const segment = rawSegment.replaceAll('~1', '/').replaceAll('~0', '~')
+    if (['__proto__', 'prototype', 'constructor'].includes(segment)) return undefined
+    const object = objectValue(current)
+    if (!object || !Object.hasOwn(object, segment)) return undefined
+    current = object[segment]
+  }
+  return current
 }
 
 /**

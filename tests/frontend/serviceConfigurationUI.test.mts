@@ -133,6 +133,22 @@ await test('schema reconciliation treats local JSON Schema refs and Core-expande
   assert.deepEqual(configurationSchemaDifferencePaths(projectSchema, JSON.stringify(coreExpandedSchema)), [])
 })
 
+await test('schema reconciliation applies JSON Schema $ref sibling overrides like the host projection', () => {
+  const target = { type: 'object', description: 'target description', properties: { enabled: { type: 'boolean' } } }
+  const liveSchema = { $defs: { defaults: target }, type: 'object', properties: { defaults: { $ref: '#/$defs/defaults', description: 'shared route defaults' } } }
+  const projectSchema = {
+    $defs: { defaults: target },
+    type: 'object',
+    properties: { defaults: { ...target, description: 'shared route defaults' } },
+  }
+  assert.equal(configurationSchemasMatch(projectSchema, JSON.stringify(liveSchema)), true)
+  assert.deepEqual(configurationSchemaDifferencePaths(projectSchema, JSON.stringify(liveSchema)), [])
+
+  const changedSibling = { ...liveSchema, properties: { defaults: { ...liveSchema.properties.defaults, description: 'changed route defaults' } } }
+  assert.equal(configurationSchemasMatch(projectSchema, JSON.stringify(changedSibling)), false)
+  assert.deepEqual(configurationSchemaDifferencePaths(projectSchema, JSON.stringify(changedSibling)), ['/properties/defaults/description'])
+})
+
 await test('applies the most specific wildcard descriptor to concrete array items', () => {
   const parsed = parseServiceConfigurationUI(manifest({
     version: 'service-configuration-ui/v1',
