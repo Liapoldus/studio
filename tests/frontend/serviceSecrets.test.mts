@@ -6,9 +6,11 @@ import { parseDeclaredSecretPurposes, parseServiceSecretCatalog, parseServiceSec
 
 await test('secret manager purposes are deduplicated and validated as public manifest metadata', () => {
   assert.deepEqual(parseDeclaredSecretPurposes('{"id":"server","secretPurposes":["http.auth.bearer","http.auth.bearer","server.tls.key"]}', 'server'), ['http.auth.bearer', 'server.tls.key'])
+  assert.deepEqual(parseDeclaredSecretPurposes('{"id":"echo"}', 'echo'), [])
   for (const raw of [
     '{"id":"other","secretPurposes":["http.auth.bearer"]}',
     '{"id":"server","secretPurposes":"http.auth.bearer"}',
+    '{"id":"server","secretPurposes":null}',
     '{"id":"server","secretPurposes":["invalid purpose"]}',
   ]) assert.throws(() => parseDeclaredSecretPurposes(raw, 'server'))
 })

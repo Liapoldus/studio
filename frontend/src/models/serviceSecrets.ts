@@ -49,8 +49,9 @@ const purposePattern = /^[a-z][a-z0-9-]*(?:\.[a-z][a-z0-9-]*)*$/u
 export function parseDeclaredSecretPurposes(raw: string, serviceID: string): string[] {
   if (raw.length > 1_048_576) throw new Error('Service manifest is too large')
   const manifest = objectValue(JSON.parse(raw) as unknown)
-  if (!manifest || manifest.id !== serviceID || !Array.isArray(manifest.secretPurposes) || manifest.secretPurposes.length > 128) throw new Error('Service returned an invalid secret purpose catalog')
-  const purposes = manifest.secretPurposes
+  if (!manifest || manifest.id !== serviceID) throw new Error('Service returned an invalid secret purpose catalog')
+  const purposes = manifest.secretPurposes === undefined ? [] : manifest.secretPurposes
+  if (!Array.isArray(purposes) || purposes.length > 128) throw new Error('Service returned an invalid secret purpose catalog')
   if (!purposes.every((purpose: unknown) => typeof purpose === 'string' && purpose.length <= 192 && purposePattern.test(purpose))) throw new Error('Service returned an invalid secret purpose catalog')
   return [...new Set(purposes as string[])].sort()
 }
