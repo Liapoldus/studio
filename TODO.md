@@ -43,8 +43,10 @@
   Server Editor 0.3.64 requires it. Server source 1.1.11 declares this field.
   Production Linux/arm64 candidate SHA-256 is
   `3f3f66e4d8b852b337d07f39276aa949ca1df5095fa411b88ca976286d4075a1`, but it
-  has not been trusted or installed. Full Server owner checks remain blocked by
-  the shared volume's low free space.
+  has not been trusted or installed. The complete Server owner checks now pass:
+  Go tests, Vitest (34 files / 88 tests), and `go build ./...`; the production
+  cross-build is this candidate. Live rollout still requires exact-digest
+  trust and confirmation in Studio.
 - This WebView/metadata investigation changed no Project settings, Server
   runtime state, secrets or plugin permissions.
 
