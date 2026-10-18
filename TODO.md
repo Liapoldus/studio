@@ -26,6 +26,19 @@
   Runtime remains ready at generation 92; no settings, Project schema, secrets
   or runtime configuration changed during verification.
 
+## Local secret manager WebView preflight — 2026-10-18
+
+- On the same approved `57766394…` build, Settings → Secrets recognized Server's
+  declared purpose `server.http.auth.credential` and rendered the host-owned
+  secure input. Echo correctly reports no declared purposes. Refreshing the
+  Server reference catalog completed without an error and exposed no secret
+  values or references. This verifies the read-only UI/CLI path only; it does
+  not prove creation, rotation, service grants, replica acknowledgement or
+  revocation.
+- No secret value was entered or persisted. The next live lifecycle check needs
+  temporary synthetic values in the `local` vault and must revoke them after
+  validation; no runtime configuration was changed during this preflight.
+
 ## Non-migration schema preview contract fix — 2026-10-18
 
 - After Server 1.1.11 and the reviewed v1→v2 Project migration, refreshing the
