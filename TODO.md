@@ -14,9 +14,12 @@
   pass using the bundled Node runtime. The first `make check` attempt with the
   host Homebrew Node failed because its `libllhttp` dylib is missing; the
   bundled runtime avoids that host installation issue.
-- A clean-source macOS/arm64 candidate will be rebuilt after this source commit
-  for the required native WebView verification. No Project, Core, runtime or
-  secret state changed while fixing and checking the preview contract.
+- Clean-source macOS/arm64 candidate built from published Studio commit
+  `569f04d`: SHA-256
+  `f18dc39f2b3bc530720b087416e38f5786a88b85495c34ca3a13f4c3701b2548`.
+  `go version -m` confirms `GOOS=darwin`, `GOARCH=arm64`; exact-digest launch
+  approval is still required before native WebView verification. No Project,
+  Core, runtime or secret state changed while fixing and checking the preview.
 
 ## Read-only secret UI preflight — 2026-10-18
 
