@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io/fs"
 	"os"
@@ -17,7 +18,7 @@ import (
 	"github.com/Liapoldus/studio/internal/domain/models"
 )
 
-const adminServiceDescriptorFixture = `{"service":"server","version":1,"pages":[{"id":"sites","sections":[{"id":"sites","kind":"table","queryResource":"sites","columns":["siteId","currentRevision"],"actions":[{"id":"rollback","title":"Откатить релиз","confirmation":"Переключить текущий релиз на предыдущий?","dangerous":true,"ifMatchField":"expectedCurrentRevision"}]}]}]}`
+const adminServiceDescriptorFixture = `{"service":"server","requiredCapabilities":["admin.surface.get","server.sites.list","server.sites.rollback"],"version":1,"pages":[{"id":"sites","title":"Сайты и релизы","capability":"server.sites.list","permissions":["services.server.read"],"sections":[{"id":"sites","kind":"table","title":"Сайты","dataCapability":"server.sites.list","queryResource":"sites","columns":["siteId","currentRevision"],"actions":[{"id":"rollback","title":"Откатить релиз","capability":"server.sites.rollback","confirmation":"Переключить текущий релиз на предыдущий?","dangerous":true,"ifMatchField":"expectedCurrentRevision","rowInput":{"siteId":"siteId"},"inputSchema":{"type":"object","additionalProperties":false,"required":["siteId"],"properties":{"siteId":{"type":"string","minLength":1,"maxLength":128}}}}]}]}]}`
 
 func adminSurfaceFixture() []byte {
 	digest := sha256.Sum256([]byte(adminServiceDescriptorFixture))
@@ -108,6 +109,34 @@ func TestReadRuntimeServiceAdminTableUsesTypedCLIAndFiltersColumns(t *testing.T)
 		if !reflect.DeepEqual(runner.calls[index].Args, want[index]) || runner.calls[index].ProjectRoot != project.RootPath {
 			t.Fatalf("CLI call %d=%+v want args=%q", index, runner.calls[index], want[index])
 		}
+	}
+}
+
+func TestReadRuntimeServiceAdminSurfacePreservesEditorContract(t *testing.T) {
+	runner := &adminSurfaceCLIRunner{}
+	app, project := adminActionApp(t, runner)
+	workspace, err := app.workspace.OpenByID(app.context(), project.ID)
+	if err != nil {
+		t.Fatalf("open project workspace: %v", err)
+	}
+	surface, err := app.readRuntimeAdminSurface(workspace, "server")
+	if err != nil {
+		t.Fatalf("read runtime admin surface: %v", err)
+	}
+	if !reflect.DeepEqual(surface.Descriptor.RequiredCapabilities, []string{"admin.surface.get", "server.sites.list", "server.sites.rollback"}) {
+		t.Fatalf("required capabilities were lost: %#v", surface.Descriptor.RequiredCapabilities)
+	}
+	page := surface.Descriptor.Pages[0]
+	if page.Title != "Сайты и релизы" || page.Capability != "server.sites.list" || !reflect.DeepEqual(page.Permissions, []string{"services.server.read"}) {
+		t.Fatalf("page contract was lost: %#v", page)
+	}
+	section := page.Sections[0]
+	if section.Title != "Сайты" || section.DataCapability != "server.sites.list" {
+		t.Fatalf("section contract was lost: %#v", section)
+	}
+	action := section.Actions[0]
+	if action.Capability != "server.sites.rollback" || action.RowInput["siteId"] != "siteId" || !json.Valid(action.InputSchema) {
+		t.Fatalf("action contract was lost: %#v", action)
 	}
 }
 

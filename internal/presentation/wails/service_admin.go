@@ -26,30 +26,40 @@ type runtimeAdminSurface struct {
 }
 
 type runtimeAdminDescriptor struct {
-	Service string             `json:"service"`
-	Pages   []runtimeAdminPage `json:"pages"`
-	Version int                `json:"version"`
+	Service              string             `json:"service"`
+	RequiredCapabilities []string           `json:"requiredCapabilities,omitempty"`
+	Pages                []runtimeAdminPage `json:"pages"`
+	Version              int                `json:"version"`
 }
 
 type runtimeAdminPage struct {
-	ID       string                `json:"id"`
-	Sections []runtimeAdminSection `json:"sections"`
+	ID          string                `json:"id"`
+	Title       string                `json:"title"`
+	Capability  string                `json:"capability"`
+	Permissions []string              `json:"permissions,omitempty"`
+	Sections    []runtimeAdminSection `json:"sections"`
 }
 
 type runtimeAdminSection struct {
-	ID            string               `json:"id"`
-	Kind          string               `json:"kind"`
-	QueryResource string               `json:"queryResource"`
-	Columns       []string             `json:"columns"`
-	Actions       []runtimeAdminAction `json:"actions"`
+	ID             string               `json:"id"`
+	Kind           string               `json:"kind"`
+	Title          string               `json:"title"`
+	DataCapability string               `json:"dataCapability"`
+	QueryResource  string               `json:"queryResource,omitempty"`
+	Columns        []string             `json:"columns"`
+	Actions        []runtimeAdminAction `json:"actions"`
 }
 
 type runtimeAdminAction struct {
-	ID           string `json:"id"`
-	Title        string `json:"title"`
-	Confirmation string `json:"confirmation"`
-	IfMatchField string `json:"ifMatchField"`
-	Dangerous    bool   `json:"dangerous"`
+	RowInput      map[string]string `json:"rowInput,omitempty"`
+	ID            string            `json:"id"`
+	Title         string            `json:"title"`
+	Capability    string            `json:"capability"`
+	Confirmation  string            `json:"confirmation,omitempty"`
+	IfMatchField  string            `json:"ifMatchField,omitempty"`
+	InputSchema   json.RawMessage   `json:"inputSchema"`
+	ArtifactInput json.RawMessage   `json:"artifactInput,omitempty"`
+	Dangerous     bool              `json:"dangerous,omitempty"`
 }
 
 // ReadRuntimeServiceAdminTable queries one descriptor-declared table through

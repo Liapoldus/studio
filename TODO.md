@@ -1,5 +1,31 @@
 # Liapoldus Studio — TODO
 
+## Server Admin Surface host DTO fix and local rollout — 2026-10-18
+
+- Studio's runtime Admin Surface validation DTO discarded fields required by
+  the declared editor contract (`title`, capability names, `dataCapability`,
+  `rowInput` and JSON input schemas). The host now retains those fields while
+  keeping table data allowlisted and action invocation typed. A regression test
+  asserts these fields survive the Core-backed CLI boundary.
+- Bundled-Node `make check` passes: Wails bindings reproducible, lint/typecheck,
+  180 frontend tests, Go tests, `go vet` and `go build`. `make check-race` and
+  `make desktop-build` also pass. The macOS/arm64 desktop candidate at
+  `build/bin/Liapoldus Studio.app/Contents/MacOS/studio` has SHA-256
+  `cc09530c572200219ee8fd6cc3547c267df6221375446c41d7d503a2b4c7485e`.
+- On the explicitly approved `Server Echo Studio` / `local` target, Studio
+  attempted the approved Server 1.1.10 artifact update but readiness timed out;
+  Core restored Server 1.1.8 and its working generation 92. CLI status confirms
+  the running artifact digest remains `sha256:5a8e02a65624441b4654eda80103e7e91ea9406f069236f12ce2e128ae6807b2`.
+  Project pin is 1.1.10 `sha256:ed9f865367e9389c5a2fad2a224ab8ff407c3c7cb846e6ebb8e198bdc54995f9`.
+- The existing Project settings and schema are v1; the Server 1.1.10 source
+  contract is v2. Studio correctly blocks editing on the live artifact
+  provenance mismatch, so a migration preview has not yet been produced. The
+  new host build still needs the exact-digest action-time launch confirmation
+  before validating Admin Surface and continuing the local migration/rollout.
+- No secret value was created, rotated or revoked. Generated `.studio`
+  workspace files and the intentional Project service pin are outside this
+  Studio commit and remain untouched.
+
 ## Exact-source current macOS host candidate — 2026-10-18
 
 - Current published Studio source HEAD is
