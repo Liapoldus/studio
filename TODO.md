@@ -50,6 +50,25 @@
 - This WebView/metadata investigation changed no Project settings, Server
   runtime state, secrets or plugin permissions.
 
+## Empty secret-purpose manifest handling — 2026-10-18
+
+- Echo 1.2.2 and the active Server 1.1.8 omit `secretPurposes` when the SDK
+  catalog is empty (`omitempty`). Studio treated that valid empty catalog as a
+  malformed manifest and showed an error instead of its empty state. The
+  parser now maps only an absent property to `[]`; explicit `null`, wrong types
+  and invalid entries still fail closed.
+- `tests/frontend/serviceSecrets.test.mts` passes 8/8. Full bundled-Node
+  `make check` passes, including 180 frontend tests, lint/typecheck, Wails
+  binding reproducibility, Go tests, vet and build. `make desktop-build` passes.
+- Clean source commit `2d48716` desktop candidate:
+  `build/bin/Liapoldus Studio.app/Contents/MacOS/studio`, SHA-256
+  `54178b00b28ffb3936dcb2e73f71810e9aef249ec174cd0da805a57c9763e505`.
+  It has not been launched; the currently open process still has the previous
+  embedded frontend. Exact-digest launch confirmation is pending.
+- The selected CLI candidate `5e30a42a1bcf5af1d3c6ac4131fa71a109ca3c234650e31443eaf28ef9ce8829`
+  returns an empty typed local catalog for both Echo and Server. These
+  read-only checks exposed no secret values and changed no secret state.
+
 ## Exact-source current macOS host candidate — 2026-10-18
 
 - Current published Studio source HEAD is
