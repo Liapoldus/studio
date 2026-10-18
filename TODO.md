@@ -1,5 +1,23 @@
 # Liapoldus Studio — TODO
 
+## Non-migration schema preview contract fix — 2026-10-18
+
+- After Server 1.1.11 and the reviewed v1→v2 Project migration, refreshing the
+  live schema required no further settings migration. Studio's typed preview
+  adapter rejected that valid response because Go serialized the absent
+  `migrationChangedPaths` slice as `null`; the adapter requires an array. The
+  host now emits `[]`, with a regression assertion on the serialized DTO.
+- The Inspector now renders a failed schema preview beside the action that
+  starts it, including when the preview dialog could not open.
+- `GOWORK=off GOFLAGS=-p=1 make check` passes (180 frontend tests, Go tests,
+  lint/typecheck, vet and build); `make check-race` and `make desktop-build`
+  pass using the bundled Node runtime. The first `make check` attempt with the
+  host Homebrew Node failed because its `libllhttp` dylib is missing; the
+  bundled runtime avoids that host installation issue.
+- A clean-source macOS/arm64 candidate will be rebuilt after this source commit
+  for the required native WebView verification. No Project, Core, runtime or
+  secret state changed while fixing and checking the preview contract.
+
 ## Read-only secret UI preflight — 2026-10-18
 
 - The running Studio window on `Server Echo Studio` / `local` is still the

@@ -755,15 +755,15 @@ func TestRefreshServiceSettingsSchemaReplacesOnlyTheDerivedSchemaThroughCoreCLI(
 	app := NewApp(nil, workspaceapp.New(store, metadataProjectSource{workspace: workspace}), nil, files, settingsinfra.Store{Files: files}, cli, nil, nil, nil, nil, nil, nil, nil)
 	const patch = `{"port":9000}`
 	preview, err := app.PreviewServiceSettingsSchema(project.ID, service.ID, patch)
-	if err != nil || !preview.ValuesCompatible || preview.SchemaJSON == "" {
+	if err != nil || !preview.ValuesCompatible || preview.SchemaJSON == "" || preview.MigrationChangedPaths == nil {
 		t.Fatalf("schema preview=%+v err=%v", preview, err)
+	}
+	previewJSON, marshalErr := json.Marshal(preview)
+	if marshalErr != nil || strings.Contains(string(previewJSON), `"migrationChangedPaths":null`) {
+		t.Fatalf("non-migration preview must serialize an empty changed-path list: %s err=%v", previewJSON, marshalErr)
 	}
 	if strings.Contains(preview.SchemaJSON, "must-not-leak") {
 		t.Fatalf("schema preview disclosed a sensitive default: %s", preview.SchemaJSON)
-	}
-	previewJSON, marshalErr := json.Marshal(preview)
-	if marshalErr != nil {
-		t.Fatal(marshalErr)
 	}
 	refreshed, err := app.RefreshServiceSettingsSchema(project.ID, service.ID, string(previewJSON), patch)
 	if err != nil || refreshed.Project == nil || refreshed.Project.ID != project.ID {

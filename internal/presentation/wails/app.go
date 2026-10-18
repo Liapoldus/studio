@@ -446,9 +446,10 @@ func (a *App) PreviewServiceSettingsSchema(projectID, serviceID, patchJSON strin
 		return models.ServiceSettingsSchemaPreview{}, migrationErr
 	}
 	preview := models.ServiceSettingsSchemaPreview{
-		PreviousSchemaDigest: previousSchemaDigest,
-		SettingsDigest:       snapshot.Digest,
-		DraftDigest:          fmt.Sprintf("sha256:%x", sha256.Sum256(patch)),
+		PreviousSchemaDigest:  previousSchemaDigest,
+		SettingsDigest:        snapshot.Digest,
+		DraftDigest:           fmt.Sprintf("sha256:%x", sha256.Sum256(patch)),
+		MigrationChangedPaths: []string{},
 	}
 	if migrationFound {
 		var draft map[string]json.RawMessage
