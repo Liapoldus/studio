@@ -2,6 +2,13 @@
 
 ## Current secret workflow candidates — 2026-10-18
 
+- Latest read-only macOS preflight: the already-open Studio window still shows
+  the previous secret-manager explanation and `Could not load local secrets`.
+  The process predates the rebuilt `7c2fa69` app candidate and has not been
+  relaunched. CLI `/Users/docup/go/bin/liapoldus` remains SHA-256
+  `f04d7b013f11cbf5848ba80291bb8b2b85b5dbeaf40f2cb97ae319b38c3419d1`; typed
+  `runtime status --target local` reports Core, Echo and Server running. These
+  checks changed no Project, target, container or secret state.
 - The current macOS/arm64 Studio app candidate is
   `build/bin/Liapoldus Studio.app/Contents/MacOS/studio`, SHA-256
   `175d3f7a298bd647f48ddfba549f9bcf89c3b1db6686721b60abe43b97f9f02d`, built
