@@ -11,17 +11,19 @@
 - Server Editor source is local at `plugins/studio-server/` and has no Git
   remote. Version `0.3.65` validates, all 85 plugin tests pass, `make package`
   passes the Studio installer inspection test, and the local package digest is
-  `13fc69f134f0da5c7552aac9f30f6502934b7ce2fbae25c603114dded8d8bb3c`. It has
-  not been installed: the current Studio native package picker leaves Open
-  disabled even after selecting a ZIP or ordinary JSON file, so the native
-  package review/trust step was never reached. The installed editor remains
-  `0.3.64`.
-- The approved local synthetic-secret run stopped at that rejected auth patch.
-  No test route was saved or applied. The unused test reference was revoked
-  after the secret manager confirmed it was no longer referenced; the Project
-  still contains only `/echo`, contains no secret reference, and
-  `http://127.0.0.1:19080/echo?text=secret-test-cleanup` still returns the Echo
-  response. Rotation, replica ACK and protected-route HTTP checks remain open.
+  `13fc69f134f0da5c7552aac9f30f6502934b7ce2fbae25c603114dded8d8bb3c`. It was
+  installed and trusted through Studio's normal package review for the exact
+  digest and declared permissions. In macOS Open Panel, selecting by icon left
+  Open disabled; navigating to the selected path with Go to and pressing Return
+  enabled Open. No native trust policy was bypassed.
+- The new editor emits leaf patches when adding `features.auth.mode`; Studio
+  accepted the auth toggle on the isolated `/__server-secret-rotation-smoke`
+  draft without `bridge.patch_path_rejected`. The draft was not saved/applied.
+  Project `services/server/settings.json` still contains only `/echo`, with no
+  secret reference. A revoked record from the earlier smoke remains in the
+  metadata catalog; there are no active references. `/echo?text=goal-recheck`
+  returns HTTP 200 and the isolated path returns 404. Rotation, replica ACK and
+  protected-route HTTP checks remain open.
 
 ## Schema `$ref` sibling reconciliation fix — 2026-10-18
 
@@ -53,24 +55,27 @@
 
 - On the same approved `57766394…` build, Settings → Secrets recognized Server's
   declared purpose `server.http.auth.credential` and rendered the host-owned
-  secure input. Echo correctly reports no declared purposes. Refreshing the
-  Server reference catalog completed without an error and exposed no secret
-  values or references. This verifies the read-only UI/CLI path only; it does
-  not prove creation, rotation, service grants, replica acknowledgement or
-  revocation.
+  secure input. Echo correctly reports no declared purposes. The reference
+  catalog now contains one revoked record and no active reference; no secret
+  values are exposed. This verifies the read-only UI/CLI path only; it does not
+  prove creation, rotation, service grants, replica acknowledgement or
+  revocation of an active reference.
 - Studio's Toolchain page confirms it selects `/Users/docup/go/bin/liapoldus`
   (SHA-256 `c33d2114808708be062fb23877da3d48a8c803203ccd3d6be06d2be1227082ae`,
-  source `e297841`). Typed `service secret list` returns an empty valid catalog;
+  source `e297841`). Typed `service secret list` now returns one revoked
+  metadata record and no active references;
   `service status server` reports Server 1.1.11, digest
   `sha256:3f3f66e4d8b852b337d07f39276aa949ca1df5095fa411b88ca976286d4075a1`,
-  generation 92, ready/acknowledged. Runtime readiness still reports schema
+  generation 93, ready/acknowledged. Runtime readiness still reports schema
   version 1 while Project settings are v2 and unapplied.
-- The Server Editor `/echo` route page's auth picker also reports no active
-  references. The route editor handshake and typed read path work; create,
-  rotate, secret delivery, ACK and revoke remain unverified.
-- No secret value was entered or persisted. The next live lifecycle check needs
-  temporary synthetic values in the `local` vault and must revoke them after
-  validation; no runtime configuration was changed during this preflight.
+- The Server Editor auth picker reports no active references. The route editor
+  handshake and typed read path work; create, rotate, secret delivery, ACK and
+  revoke remain unverified. Server status now reports generation 93; the active
+  envelope is still schema v1 while the canonical Project file is v2.
+- A form is prepared for a new temporary value under Server purpose
+  `server.http.auth.credential`, with only a non-secret label filled. Its secure
+  field is awaiting manual user entry and submission. No new credential has
+  been entered or persisted, and no runtime configuration was changed.
 
 ## Non-migration schema preview contract fix — 2026-10-18
 
