@@ -76,6 +76,16 @@
   `server.http.auth.credential`, with only a non-secret label filled. Its secure
   field is awaiting manual user entry and submission. No new credential has
   been entered or persisted, and no runtime configuration was changed.
+- Focused tests re-run on 2026-10-18:
+  `PATH=/Users/docup/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:$PATH
+  ./frontend/node_modules/.bin/tsx --test tests/frontend/serviceSecrets.test.mts`
+  passes 8/8;
+  `GOTOOLCHAIN=go1.26.0 GOWORK=off GOFLAGS=-p=1 go test
+  ./internal/presentation/wails -run '^TestLocalServiceSecretManager' -count=1`
+  passes. From `plugins/studio-server`,
+  `PATH=/Users/docup/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:$PATH
+  make test` passes 85/85. These source tests do not replace the pending local
+  rotation and ACK flow.
 
 ## Non-migration schema preview contract fix — 2026-10-18
 
