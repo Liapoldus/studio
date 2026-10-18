@@ -2690,3 +2690,26 @@ content.
   remain pending that handoff.
 - The editor source/package lives in `plugins/studio-server/`, which has no
   Git repository or remote. Studio-owned acceptance evidence is recorded here.
+
+### Server Editor secret picker host guard — 2026-10-18
+
+- Reproduced `bridge.secret_path_not_declared` in the freshly launched approved
+  Studio build while the Core-backed catalog successfully listed the active
+  local test reference. The isolated route is still an unsaved editor draft;
+  Project settings and runtime were not changed.
+- Removed the redundant requirement that a secret path also appear in the
+  declarative `configurationUI` descriptor. The host now authorizes selection
+  from the service schema's exact secret-reference format and purpose metadata,
+  while still checking any matching UI hint for conflicting widget/purpose,
+  verifying the service-declared purpose and requiring an active service-scoped
+  catalog reference. This keeps the host fail-closed while allowing a
+  specialized editor to expose a schema-declared field omitted from UI hints.
+- Added controller coverage for both a matching UI hint and an omitted hint;
+  unknown schema paths, purpose mismatches and non-reference values remain
+  rejected. `make check` (184 frontend tests), `make check-race`, and
+  `make desktop-build` pass.
+- New macOS/arm64 Studio executable SHA-256:
+  `19ce4e6a3c3a6d9352fded2bc762c3c471b6ea0ebd9c1d39ba31a6ff2ddf51e5`.
+  Live retry is pending Studio's action-time approval for this exact digest. No
+  production target, Project settings, runtime config, or secret values were
+  changed.

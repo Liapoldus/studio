@@ -1223,11 +1223,75 @@ await test('StudioPlugin can attach a declared secret reference to a schema-decl
   assert.ok(savedPatch)
   assert.equal(JSON.stringify(savedPatch).includes(reference), true)
   await assert.rejects(controller.pluginSelectServiceSecretReference(projectID, 'server',
-    ['config', 'routes', '1', 'features', 'auth', 'unknown'], purpose, reference), /bridge.secret_path_not_declared/u)
+    ['config', 'routes', '1', 'features', 'auth', 'unknown'], purpose, reference), /bridge.secret_schema_path_rejected/u)
   await assert.rejects(controller.pluginSelectServiceSecretReference(projectID, 'server',
     ['config', 'routes', '1', 'features', 'auth', 'secretRef'], 'server.http.other', reference), /bridge.secret_path_purpose_mismatch/u)
   await assert.rejects(controller.pluginSelectServiceSecretReference(projectID, 'server',
     ['config', 'routes', '1', 'features', 'auth', 'secretRef'], purpose, 'plaintext'), /bridge.secret_schema_path_rejected/u)
+})
+
+await test('StudioPlugin can select a schema-declared secret when configuration UI omits the specialized editor field', async () => {
+  const projectID = 'secret-route-without-ui-hint'
+  const purpose = 'server.http.auth.credential'
+  const reference = `ssr:v1:${'f'.repeat(32)}`
+  const schema = {
+    type: 'object',
+    properties: {
+      config: {
+        type: 'object',
+        properties: {
+          routes: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                features: {
+                  type: 'object',
+                  properties: {
+                    auth: {
+                      type: 'object',
+                      properties: {
+                        secretRef: {
+                          type: 'string', pattern: '^ssr:v1:[a-f0-9]{32}$', 'x-liapoldus-secret-reference': true,
+                          'x-studio-secret-purpose': purpose,
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  }
+  const projectRoot = '/tmp/secret-route-without-ui-hint'
+  const workspace = {
+    project: { id: projectID, name: projectID, rootPath: projectRoot },
+    graph: { services: [service], links: [] }, files: [],
+  } as unknown as Workspace
+  useStudioStore.setState({ serviceSettingsDrafts: {}, workspace })
+  const api = {
+    ...recoveryStateAPI(projectID),
+    readProjectSchema: () => Promise.resolve(bytes(schema)),
+    readProjectSettings: () => Promise.resolve({ valuesJson: JSON.stringify({ config: { routes: [{ features: { auth: {} } }] } }), digest: 'sha256:secret-ui-omitted' }),
+    readServiceSettingsDraft: () => Promise.resolve(null),
+    saveServiceSettingsDraft: () => Promise.resolve(),
+    deleteServiceSettingsDraft: () => Promise.resolve(),
+    readRuntimeServiceMetadata: liveMetadata(schema, { secretPurposes: [purpose] }),
+    readLocalServiceSecretReferences: (serviceID: string) => Promise.resolve(JSON.stringify({
+      schemaVersion: 'service-secret-references/v1', target: 'local', serviceId: serviceID,
+      items: [{ reference, serviceId: serviceID, purpose, label: 'temporary test credential', state: 'active', createdAt: '2026-10-18T12:00:00Z' }],
+      pendingRotations: [], pendingRegistrations: [],
+    })),
+  } as unknown as StudioAPI
+  const controller = createStudioController(api)
+
+  const result = await controller.pluginSelectServiceSecretReference(projectID, 'server',
+    ['config', 'routes', '0', 'features', 'auth', 'secretRef'], purpose, reference)
+  assert.equal(result.status, 'dirty')
+  assert.equal(JSON.stringify(useStudioStore.getState().serviceSettingsDrafts[configurationDraftKey(projectRoot, 'server')]?.patch).includes(reference), true)
 })
 
 await test('StudioPlugin recovery copy is scoped to the open service and exact canonical Project digest', async () => {

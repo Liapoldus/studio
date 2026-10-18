@@ -575,10 +575,14 @@ export function createStudioController(api: StudioAPI) {
       throw new Error('bridge.secret_path_invalid')
     }
     const draft = store().serviceSettingsDrafts[key]
-    const field = matchServiceConfigurationUIField(draft?.configurationUI, path)
     if (!draft?.schema) throw new Error('bridge.secret_schema_unavailable')
-    if (!field) throw new Error('bridge.secret_path_not_declared')
-    if (field.widget !== 'secret' || field.secretPurpose !== purpose) throw new Error('bridge.secret_path_purpose_mismatch')
+    const field = matchServiceConfigurationUIField(draft.configurationUI, path)
+    // The JSON Schema is authoritative for secret paths. configurationUI is
+    // presentation metadata and may omit a field used by a specialized
+    // editor. If it does declare the path, still reject a conflicting hint.
+    if (field && (field.widget !== 'secret' || field.secretPurpose !== purpose)) {
+      throw new Error('bridge.secret_path_purpose_mismatch')
+    }
     if (!configurationSecretReferencePathEditable(draft.schema, path, purpose, reference)) {
       throw new Error('bridge.secret_schema_path_rejected')
     }
