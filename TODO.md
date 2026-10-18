@@ -17,9 +17,14 @@
   pass using the bundled Node runtime. The clean-source macOS/arm64 candidate
   from `ba0e687` has SHA-256
   `577663940f37e62a9d17bab39c06f274bc85c64841816eee6cd4d7000bc32395`;
-  its Go build metadata confirms `GOOS=darwin`, `GOARCH=arm64`. It has not yet
-  been launched in the local WebView. Exact-digest launch approval is required
-  for that next check. No Project, Core, runtime or secret state changed.
+  its Go build metadata confirms `GOOS=darwin`, `GOARCH=arm64`.
+- After exact-digest approval, launched this build in `Server Echo Studio` /
+  `local`. The Server 1.1.11 Inspector no longer reports schema mismatch and
+  its `Просмотреть обновление схемы…` action is gone because Project schema v2
+  now matches the live contract. The Server Editor opens from the Inspector,
+  completes the bridge handshake (`Подключено`) and renders the route list.
+  Runtime remains ready at generation 92; no settings, Project schema, secrets
+  or runtime configuration changed during verification.
 
 ## Non-migration schema preview contract fix — 2026-10-18
 
