@@ -1,36 +1,28 @@
 # Liapoldus Studio — TODO
 
-## Local secret rotation smoke — 2026-10-19 checkpoint
+## Local secret rotation smoke — current checkpoint — 2026-10-19
 
-- The approved Core candidate `df625da7…` and CLI `1381dd42…` are installed for
-  `Server Echo Studio` / `local`. A read-only typed plan is valid at Echo/Server
-  revision 96. `runtime start --revision WORKING_TREE` reconciled stale
-  containers; both replicas are ready and acknowledge generation 96. The
-  existing `GET /echo?text=local-smoke` returns HTTP 200.
-- The Studio Secret Manager is open on Server and the declared purpose
-  `server.http.auth.credential`. The form contains only the non-secret test
-  label; its secure value field is focused and Save remains disabled. The user
-  must enter and submit the temporary token directly in Studio. No credential
-  value has been entered or inspected by the agent.
-- The user later replied that the value had been saved. A fresh live UI read
-  still shows an empty secure field and disabled Save button; the typed Core
-  catalog is unchanged (three revoked references, no active or pending item).
-  Treat creation as unconfirmed and wait for a successful save reflected by a
-  new active catalog reference before creating an auth route or applying it.
-- The Project still has only the existing `/echo` route and no secret reference.
-  The prior three synthetic references remain revoked. The temporary auth route
-  has not been created, applied or sent to the runtime; local auth, rotation,
-  scoped grant, replica ACK and reference retirement remain unverified.
-- Studio's Project checkout has pre-existing settings edits and workspace
-  recovery files. They are preserved as-is; only a separate temporary backup of
-  the Server settings file was made for the authorized smoke test. Production is
-  out of scope.
-- Current owner verification: `PATH=/Users/docup/.cache/codex-runtimes/
-  codex-primary-runtime/dependencies/node/bin:$PATH GOWORK=off GOFLAGS=-p=1
-  make check` passed with 185 frontend tests and all Go/lint/type checks;
-  `make desktop-build` completed. The build was not launched as a new binary.
+- The current project is `/Users/docup/Projects/Liapoldus Engine/server-echo-studio`.
+  Read-only typed `dev plan` is valid at Echo/Server revision 96; the local
+  runtime reports Core, Echo and Server running, and Server 1.1.12 ready at
+  generation 96.
+- Project settings contain the existing `/echo` route plus the temporary
+  `/__codex_auth_smoke_20261019` route, which references one active opaque
+  Server secret. Core lists two active synthetic references and no pending
+  rotation. The route has not been applied; no secret value was read or logged.
+- The open Studio window shows Server Editor 0.3.65, but its Admin Surface
+  tables currently report `bridge.admin_table_unavailable` / `bridge.busy` and
+  Output includes a CLI exit error. Server source now fixes empty inventory
+  arrays and all-site release pagination, with focused tests; those source
+  fixes still need a new Server binary and the exact local action approval.
+  The typed CLI plan and status calls still succeed.
+- SDK, Core, Server and mechanical service consumers now implement
+  candidate-generation scoped validation. Their source gates are being closed;
+  new Core/Server digests must pass the exact local action gate before install
+  or run. Production is out of scope. Existing Project WIP and `.studio`
+  recovery files remain untouched.
 
-## Local secret rotation smoke — current checkpoint — 2026-10-18 (updated)
+## Local secret rotation smoke — superseded checkpoint — 2026-10-18 (updated)
 
 - Launched the exact approved Studio executable digest
   `88a4d2b0939f24277152910d0e44ea880496f3d0480eb10bef7c8816e2eed2cf` in
