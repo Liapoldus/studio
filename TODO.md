@@ -12,14 +12,19 @@
   `bundle_apply_failed: service configuration revision conflict`; no successful
   apply or secret delivery/replica ACK was observed. Server and Echo remained
   ready at generation 95 with no pending generation. Core logs had no matching
-  explanation, so the source of the revision conflict remains unresolved.
+  explanation, so the source of the revision conflict remains unresolved. Core
+  source maps this generic conflict to stale current revision, an existing
+  staged candidate, or an open settings/traffic rollout; Studio's typed service
+  status does not expose which condition applied. No Core database was read or
+  changed.
 - Removed the temporary route through Server Editor. The Project digest is now
   `sha256:c0ed4230629e8d35d3c725e6db1a8d44cfaa64c733351c4d3d62ddea8f2a2bac`;
   `liapoldus dev plan` is valid and lists only the original Echo/Server
   configuration. `/echo` returns HTTP 200 and the test route returns HTTP 404.
   All three synthetic local secret references are revoked, with no pending
-  registrations or rotations. No secret value was read into Studio/plugin,
-  Project, logs, or this checkpoint.
+  registrations or rotations. Values were entered through the host-owned secure
+  input and were not exposed to the plugin, Project, Core SQLite, logs, or this
+  checkpoint; no raw value was inspected or printed.
 - Fixed Studio's recovery classification: a failed Core operation confirmed by
   the typed event stream is the only state that exposes
   “Retry failed apply” / `dev.apply.retryFailed`. An HTTP 409 request rejection
