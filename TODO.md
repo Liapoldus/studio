@@ -1,5 +1,19 @@
 # Liapoldus Studio — TODO
 
+## Exact-source current macOS host candidate — 2026-10-18
+
+- Current published Studio source HEAD is
+  `aa55b880d770c34e537247d32fb7e426a0c850c7`. The macOS/arm64 application at
+  `build/bin/Liapoldus Studio.app/Contents/MacOS/studio` has SHA-256
+  `0e3a372123df9865a6e4cec369d5d2a467e0b254c608fdf44fd879c3201894e9`.
+- `make check` and `make desktop-build` pass for this source; the desktop build
+  includes reproducible Wails bindings, frontend tests, lint/typecheck, Go tests,
+  vet and build.
+- This exact application has not been launched for the pending Server Editor
+  and secret-workflow acceptance. Plugin trust and native launch confirmation
+  remain action-time gates; the currently selected CLI/Core runtime is stale as
+  recorded below. No Project, runtime or secret state changed during build.
+
 ## Exact-source macOS candidate for current editor and secret workflow — 2026-10-18
 
 - Current published Studio source HEAD: `bf2ea676d5d3f912ee3f369070562695ba6480fd`. The macOS/arm64 app at `build/bin/Liapoldus Studio.app/Contents/MacOS/studio` has SHA-256 `910320ef7176a8db582a8343e262e8fa1f61923c06d2d7ba9d93a8727a58c53e` and was built from this source after `make check`, `make check-race` and `make desktop-build` passed.
