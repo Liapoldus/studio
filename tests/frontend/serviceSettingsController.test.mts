@@ -391,7 +391,7 @@ await test('an apply failure pauses subsequent automatic applies until explicit 
   assert.equal(writes, 1)
   assert.equal(applyCalls, 1)
   const failedRecovery = JSON.parse(recovery.recoveryState().tabsJson) as { applyRecovery: { state: string; operationId: string; schemaVersion: string; target: string } }
-  assert.deepEqual(failedRecovery.applyRecovery, { schemaVersion: 'studio-apply-recovery/v3', state: 'confirmation-required', target: 'local', operationId: 'operation-123' })
+  assert.deepEqual(failedRecovery.applyRecovery, { schemaVersion: 'studio-apply-recovery/v4', state: 'confirmation-required', target: 'local', operationId: 'operation-123' })
   assert.equal(useStudioStore.getState().applyRecoveryOperationId, 'operation-123')
 
   useStudioStore.setState({ workspace: null, applyRecoveryStatus: 'none', serviceSettingsDrafts: {} })
@@ -442,11 +442,39 @@ await test('recovery watches the persisted Core operation before clearing the am
   assert.equal(Object.hasOwn(JSON.parse(recovery.recoveryState().tabsJson) as object, 'applyRecovery'), false)
 })
 
+await test('a rejected config-bundle request requires confirmation but does not enable failed-operation retry', async () => {
+  const projectRoot = '/tmp/rejected-config-bundle'
+  const project = { id: 'rejected-config-bundle', name: 'rejected', rootPath: projectRoot }
+  const workspace = { project, graph: { services: [service], links: [] }, files: [] } as unknown as Workspace
+  useStudioStore.setState({ workspace, applyRecoveryStatus: 'none', applyRecoveryOperationId: null, serviceSettingsDrafts: {} })
+  const schema = { type: 'object', properties: { enabled: { type: 'boolean' } } }
+  let intent = ''
+  const api = {
+    ...recoveryStateAPI(project.id),
+    readProjectSchema: () => Promise.resolve(bytes(schema)),
+    readProjectSettings: () => Promise.resolve({ valuesJson: JSON.stringify({ enabled: true }), digest: 'sha256:rejected-base' }),
+    readServiceSettingsDraft: () => Promise.resolve(null),
+    readRuntimeServiceMetadata: liveMetadata(schema),
+    runStudioCommandAndWait: (command: string) => { intent = command; return Promise.reject(new Error('core apply returned HTTP 409 [bundle_apply_failed]: service configuration revision conflict')) },
+  } as unknown as StudioAPI
+  const controller = createStudioController(api)
+  await controller.loadServiceSettingsDraft(service)
+  const key = configurationDraftKey(projectRoot, service.id)
+
+  await controller.applyServiceSettings(key)
+
+  assert.equal(intent, 'dev.apply')
+  assert.equal(useStudioStore.getState().applyRecoveryStatus, 'confirmation-required')
+  const recovery = JSON.parse((api as unknown as ReturnType<typeof recoveryStateAPI>).recoveryState().tabsJson) as { applyRecovery: { state: string } }
+  assert.equal(recovery.applyRecovery.state, 'confirmation-required')
+  await assert.rejects(controller.retryFailedServiceSettings(key), /no failed local Core operation/u)
+})
+
 await test('explicit failed-apply recovery uses the typed retry CLI intent', async () => {
   const projectRoot = '/tmp/explicit-failed-apply-retry'
   const project = { id: 'explicit-failed-apply-retry', name: 'retry', rootPath: projectRoot }
   const workspace = { project, graph: { services: [service], links: [] }, files: [] } as unknown as Workspace
-  useStudioStore.setState({ workspace, applyRecoveryStatus: 'confirmation-required', applyRecoveryOperationId: null, serviceSettingsDrafts: {} })
+  useStudioStore.setState({ workspace, applyRecoveryStatus: 'retryable-failure', applyRecoveryOperationId: null, serviceSettingsDrafts: {} })
   const schema = { type: 'object', properties: { enabled: { type: 'boolean' } } }
   let intent: string[] = []
   const api = {

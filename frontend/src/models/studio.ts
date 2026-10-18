@@ -32,7 +32,7 @@ export type WorkspaceSnapshot = {
   tabs: WorkspaceTab[]
   layout: Layout
 }
-export type WorkspaceApplyRecoveryStatus = 'none' | 'applying' | 'confirmation-required'
+export type WorkspaceApplyRecoveryStatus = 'none' | 'applying' | 'confirmation-required' | 'retryable-failure'
 export type OperationReplicaOutcome = { replicaId: string; desiredGeneration: number; state: 'pending' | 'applied' | 'failed'; failureCode?: string }
 
 export const initialWorkspaceTabs = (): WorkspaceTab[] => [{ id: 'canvas', kind: 'canvas', title: 'Canvas' }]
@@ -208,7 +208,7 @@ export function workspaceStateWithApplyRecovery(saved: WorkspaceState, status: W
   const safeReviewPaths = [...new Set(reviewPaths.filter((path): path is string => typeof path === 'string' && /^[A-Za-z0-9_.: -]{1,800}$/u.test(path)))].slice(0, 64)
   if (status === 'none') delete tabs.applyRecovery
   else tabs.applyRecovery = {
-    schemaVersion: 'studio-apply-recovery/v3',
+    schemaVersion: 'studio-apply-recovery/v4',
     state: status,
     target: 'local',
     ...(isSafeApplyOperationID(operationId) ? { operationId } : {}),
@@ -229,16 +229,17 @@ function restoredApplyRecovery(snapshot: Record<string, unknown>): { status: Wor
     if (recovery.state === 'none') return { status: 'none', operationId: null, reviewPaths: [] }
     return { status: 'confirmation-required', operationId: null, reviewPaths: [] }
   }
-  if (!['studio-apply-recovery/v2', 'studio-apply-recovery/v3'].includes(String(recovery.schemaVersion)) || recovery.target !== 'local') {
+  if (!['studio-apply-recovery/v2', 'studio-apply-recovery/v3', 'studio-apply-recovery/v4'].includes(String(recovery.schemaVersion)) || recovery.target !== 'local') {
     return { status: 'confirmation-required', operationId: null, reviewPaths: [] }
   }
   if (recovery.state === 'none') return { status: 'none', operationId: null, reviewPaths: [] }
   const operationId = isSafeApplyOperationID(recovery.operationId) ? recovery.operationId : null
-  const reviewPaths = recovery.schemaVersion === 'studio-apply-recovery/v3' && Array.isArray(recovery.reviewPaths) && recovery.reviewPaths.length <= 64 &&
+  const reviewPaths = ['studio-apply-recovery/v3', 'studio-apply-recovery/v4'].includes(String(recovery.schemaVersion)) && Array.isArray(recovery.reviewPaths) && recovery.reviewPaths.length <= 64 &&
     recovery.reviewPaths.every((path) => typeof path === 'string' && /^[A-Za-z0-9_.: -]{1,800}$/u.test(path))
     ? [...new Set(recovery.reviewPaths as string[])] : []
+  const retryableFailure = recovery.schemaVersion === 'studio-apply-recovery/v4' && recovery.state === 'retryable-failure'
   // A process restart during an apply is ambiguous: require an explicit retry.
-  return { status: 'confirmation-required', operationId, reviewPaths }
+  return { status: retryableFailure ? 'retryable-failure' : 'confirmation-required', operationId, reviewPaths }
 }
 
 export async function restoreWorkspaceState(api: StudioAPI): Promise<{ tabs: WorkspaceTab[]; activeTabId: string | null; layout: Layout; writable: boolean; applyRecoveryStatus: WorkspaceApplyRecoveryStatus; applyRecoveryOperationId: WorkspaceApplyRecoveryOperationId; applyReviewPaths: WorkspaceApplyReviewPaths }> {

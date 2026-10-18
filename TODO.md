@@ -1,6 +1,43 @@
 # Liapoldus Studio — TODO
 
-## Local secret rotation smoke — current checkpoint — 2026-10-18
+## Local secret rotation smoke — current checkpoint — 2026-10-18 (updated)
+
+- Launched the exact approved Studio executable digest
+  `88a4d2b0939f24277152910d0e44ea880496f3d0480eb10bef7c8816e2eed2cf` in
+  `Server Echo Studio` / `local`. Server Editor completed its sandbox bridge
+  handshake, loaded routes and the local secret catalog, and accepted selection
+  of the staged replacement opaque reference in the isolated test route.
+- Saved the temporary route to the local Project and explicitly confirmed
+  apply. Core rejected the bundle with HTTP 409
+  `bundle_apply_failed: service configuration revision conflict`; no successful
+  apply or secret delivery/replica ACK was observed. Server and Echo remained
+  ready at generation 95 with no pending generation. Core logs had no matching
+  explanation, so the source of the revision conflict remains unresolved.
+- Removed the temporary route through Server Editor. The Project digest is now
+  `sha256:c0ed4230629e8d35d3c725e6db1a8d44cfaa64c733351c4d3d62ddea8f2a2bac`;
+  `liapoldus dev plan` is valid and lists only the original Echo/Server
+  configuration. `/echo` returns HTTP 200 and the test route returns HTTP 404.
+  All three synthetic local secret references are revoked, with no pending
+  registrations or rotations. No secret value was read into Studio/plugin,
+  Project, logs, or this checkpoint.
+- Fixed Studio's recovery classification: a failed Core operation confirmed by
+  the typed event stream is the only state that exposes
+  “Retry failed apply” / `dev.apply.retryFailed`. An HTTP 409 request rejection
+  without a failed operation remains `confirmation-required`; the controller
+  also rejects a forged retry call. Recovery marker v4 persists the distinct
+  state while older markers restore conservatively. Regression tests cover the
+  rejected request and the explicit failed-operation retry.
+- `make check` passes (185 frontend tests, Go tests, bindings, lint, vet and
+  build); `make check-race` and `make desktop-build` pass. The new desktop build
+  was not launched because its executable digest differs from the approved
+  live-test binary. Studio source, TODO and this checkpoint still need commit
+  and push.
+- Remaining acceptance: diagnose Core's revision conflict, then repeat the
+  local configuration apply, authenticated request, rotation and exact replica
+  ACK checks. Until then, editor/selection and local vault lifecycle are
+  verified, but the end-to-end runtime secret rotation is not.
+
+## Earlier local secret rotation smoke checkpoint (superseded) — 2026-10-18
 
 - Supersedes the earlier bootstrap-certificate blocker below: with explicit
   approval, the local Core CA and service certificates were regenerated and the

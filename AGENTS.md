@@ -23,10 +23,13 @@ Core-клиент.
   сохраняют layout и plugin tabs, удаляют file-manager/runtime/artifact tabs и
   переводят active tab на Canvas при удалении текущей вкладки; исходные байты сохраняются в
   `.studio/workspace-recovery-<sha256>.json`. Неизвестные версии не перезаписывать.
-  Apply recovery metadata использует `studio-apply-recovery/v2` и хранит только
-  bounded safe Core operation ID + local target; после перезапуска operation
-  сверяется typed `operation.watch`, а маркер снимается лишь после подтверждённого
-  terminal success. Не retry-ить operation, пока её сохранённый ID не сверён.
+  Apply recovery metadata использует версионированный `studio-apply-recovery`
+  marker и хранит только bounded safe Core operation ID + local target; после
+  перезапуска operation сверяется typed `operation.watch`, а маркер снимается
+  лишь после подтверждённого terminal success. Retry доступен только если
+  typed event подтвердил failed Core operation; отклонённый запрос без такой
+  операции требует явного подтверждения и не запускает failed-operation
+  recovery. Не retry-ить operation, пока её сохранённый ID не сверён.
 - Frontend assets находятся в `internal/infrastructure/assets/desktop`;
   product metadata — typed Go definitions в `infrastructure/product/reader.go`.
   Не создавать Core transport, SSH adapters или runtime parsers для внутренних

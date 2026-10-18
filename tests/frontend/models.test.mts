@@ -286,13 +286,17 @@ await test('apply recovery marker survives workspace updates and restores ambigu
   const applying = workspaceStateWithApplyRecovery(saved, 'applying', 'op-123')
   assert.deepEqual(JSON.parse(applying.tabsJson), {
     schemaVersion: 'workspace/v5', activeTabId: 'canvas', tabs: [{ id: 'canvas', kind: 'canvas', title: 'Canvas' }], layout: {}, extensionState: { retained: true },
-    applyRecovery: { schemaVersion: 'studio-apply-recovery/v3', state: 'applying', target: 'local', operationId: 'op-123' },
+    applyRecovery: { schemaVersion: 'studio-apply-recovery/v4', state: 'applying', target: 'local', operationId: 'op-123' },
   })
   const updated = workspaceStateUpdate(applying, workspaceSnapshot({ activeTabId: 'canvas', tabs: initialWorkspaceTabs(), layout: {} }))
   assert.equal((JSON.parse(updated.tabsJson) as { applyRecovery: { state: string } }).applyRecovery.state, 'applying')
   const restored = await restoreWorkspaceState({ readWorkspaceState: () => Promise.resolve(updated) } as unknown as StudioAPI)
   assert.equal(restored.applyRecoveryStatus, 'confirmation-required')
   assert.equal(restored.applyRecoveryOperationId, 'op-123')
+
+  const retryable = workspaceStateWithApplyRecovery(updated, 'retryable-failure')
+  const retryableRestored = await restoreWorkspaceState({ readWorkspaceState: () => Promise.resolve(retryable) } as unknown as StudioAPI)
+  assert.equal(retryableRestored.applyRecoveryStatus, 'retryable-failure')
 
   const cleared = workspaceStateWithApplyRecovery(updated, 'none')
   const clearedJson = JSON.parse(cleared.tabsJson) as Record<string, unknown>
@@ -318,6 +322,7 @@ await test('malformed apply recovery markers restore fail-closed', async () => {
     { schemaVersion: 'studio-apply-recovery/v1', state: 'unknown' },
     { schemaVersion: 'studio-apply-recovery/v2', state: 'applying', target: 'remote', operationId: 'op-123' },
     { schemaVersion: 'studio-apply-recovery/v2', state: 'applying', target: 'local', operationId: '../unsafe' },
+    { schemaVersion: 'studio-apply-recovery/v3', state: 'retryable-failure', target: 'local' },
     null,
   ]) {
     const restored = await restoreWorkspaceState({ readWorkspaceState: () => Promise.resolve({ projectId: 'p', tabsJson: JSON.stringify({ schemaVersion: 'workspace/v4', tabs: [], applyRecovery: marker }), layoutJson: '{}', filtersJson: '{}' }) } as unknown as StudioAPI)

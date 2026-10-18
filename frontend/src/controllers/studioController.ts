@@ -1082,6 +1082,9 @@ export function createStudioController(api: StudioAPI) {
   function retryFailedServiceSettings(key: string): Promise<void> {
     return queueSettingsOperation(() => {
       const draft = requireMatchedConfigurationContract(key)
+      if (store().applyRecoveryStatus !== 'retryable-failure') {
+        throw new Error('There is no failed local Core operation to retry.')
+      }
       if (draft.status !== 'clean' || !isConfigurationPatchEmpty(draft.patch)) {
         throw new Error('Save or discard the settings draft before retrying a failed Core operation.')
       }
@@ -1143,7 +1146,8 @@ export function createStudioController(api: StudioAPI) {
       await operationMarkerWrite
       setPausedSettingsApplyScope(projectID, projectRoot, true)
       const unresolvedOperationId = operationState === 'failed' || operationState === 'degraded' ? null : operationId
-      await persistApplyRecovery(projectID, projectRoot, 'confirmation-required', unresolvedOperationId)
+      const recoveryStatus = operationState === 'failed' ? 'retryable-failure' : 'confirmation-required'
+      await persistApplyRecovery(projectID, projectRoot, recoveryStatus, unresolvedOperationId)
       fail(reason, 'Настройки сохранены в Project, но применение к локальному Core не удалось. Проверьте CLI/Core и повторите применение.')
     } finally {
       unsubscribe?.()
@@ -1168,7 +1172,8 @@ export function createStudioController(api: StudioAPI) {
       await api.runStudioCommandAndWait('operation.watch', 'local', operationId)
     } catch (reason: unknown) {
       const unresolvedOperationId = operationState === 'failed' || operationState === 'degraded' ? null : operationId
-      await persistApplyRecovery(project.id, project.rootPath, 'confirmation-required', unresolvedOperationId)
+      const recoveryStatus = operationState === 'failed' ? 'retryable-failure' : 'confirmation-required'
+      await persistApplyRecovery(project.id, project.rootPath, recoveryStatus, unresolvedOperationId)
       fail(reason, 'Не удалось получить подтверждённое состояние Core operation')
       return
     } finally {
@@ -1187,7 +1192,9 @@ export function createStudioController(api: StudioAPI) {
     }
 
     setPausedSettingsApplyScope(project.id, project.rootPath, true)
-    await persistApplyRecovery(project.id, project.rootPath, 'confirmation-required', operationId)
+    const recoveryStatus = operationState === 'failed' ? 'retryable-failure' : 'confirmation-required'
+    const unresolvedOperationId = operationState === 'failed' || operationState === 'degraded' ? null : operationId
+    await persistApplyRecovery(project.id, project.rootPath, recoveryStatus, unresolvedOperationId)
     fail(new Error(`Core operation state was not a successful terminal state: ${operationState || 'unknown'}`), 'Применение не подтверждено; проверьте состояние Core перед повтором')
   }
 
