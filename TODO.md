@@ -2583,3 +2583,30 @@ content.
   inspection confirms the plugin package is installed/trusted; the Studio
   executable remains unlaunched for this acceptance. Plugin source has no Git
   repository/remote; its source edits and built package remain local.
+
+### Server Editor 0.3.65 local patch-path smoke — 2026-10-18
+
+- Server Editor `0.3.65` package passes `make check`, `make test`, and
+  `make package` (85/85 tests); Studio installer inspection passes. Package
+  SHA-256: `13fc69f134f0da5c7552aac9f30f6502934b7ce2fbae25c603114dded8d8bb3c`.
+  Installed through Studio's package review and trusted for its declared
+  settings, configuration UI, resource, peer catalog, and secret-reference
+  read permissions.
+- macOS native package chooser initially kept Open disabled after icon
+  selection. Using its Go to path sheet and Return activated Open; the package
+  then reached Studio's normal digest/permission review. No picker policy was
+  bypassed.
+- In the Server editor, enabling auth on the isolated
+  `/__server-secret-rotation-smoke` draft returned “Изменения переданы Studio”
+  without `bridge.patch_path_rejected`. This exercises the leaf-patch fix for
+  adding `features.auth.mode`. The draft was not saved or applied. Project
+  `services/server/settings.json` still contains only `/echo`; local HTTP
+  request to the isolated path returned 404, and `/echo` remains untouched.
+- Studio Secret Manager reports Server's declared purpose
+  `server.http.auth.credential`. The prior synthetic test reference remains
+  revoked. A new test-secret form is prepared with only a non-secret label;
+  its secure value field is awaiting manual user entry and submission. No new
+  credential has been entered by the agent, and runtime rotation/ACK checks
+  remain pending that handoff.
+- The editor source/package lives in `plugins/studio-server/`, which has no
+  Git repository or remote. Studio-owned acceptance evidence is recorded here.
