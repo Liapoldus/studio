@@ -21,8 +21,13 @@
   `bundle_apply_failed: service configuration revision conflict`. Server
   remains ready at generation 96. The temporary route returns HTTP 404 while
   `/echo` returns HTTP 200, so the saved Project candidate is not active.
-  `dev plan` and `service status` remain valid. Do not claim runtime auth or
-  secret delivery/ACK acceptance from this state.
+  `dev plan` and `service status` remain valid. A local filter that emitted
+  only whitelisted safe outcome tokens found the latest Server-log event
+  `grantDenied` at `2026-10-18T23:17:52.423698534Z`, consistent with this
+  attempt. This confirms the scoped secret grant was denied; the Core response
+  still mislabels that as a revision conflict. Raw log lines and secret values
+  were not emitted. Do not claim runtime auth or secret delivery/ACK acceptance
+  from this state.
 - The misleading rotation helper copy is corrected. `make check`,
   `make check-race` and `make desktop-build` pass using the bundled Node
   runtime; the new macOS/arm64 Studio executable is
