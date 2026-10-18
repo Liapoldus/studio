@@ -1,5 +1,26 @@
 # Liapoldus Studio — TODO
 
+## Schema `$ref` sibling reconciliation fix — 2026-10-18
+
+- The remaining Server 1.1.11 Inspector mismatch came from two different
+  `$ref` sibling rules: the Go Project-schema projection applies sibling
+  keywords over the referenced schema, while Studio's comparison kept the
+  target annotation. The two descriptions at `defaults` therefore appeared
+  different even though the checked schema document matched the live one.
+- Schema comparison now resolves bounded local references and applies sibling
+  overrides using the same projection rule as the host. Regression coverage
+  verifies both an equal override and a real description change. Replaying the
+  saved redacted Project/live schema documents now returns `matched` with no
+  difference paths.
+- `GOWORK=off GOFLAGS=-p=1 make check` passes (181 frontend tests, Go tests,
+  lint, typecheck, vet and build); `make check-race` and `make desktop-build`
+  pass using the bundled Node runtime. The clean-source macOS/arm64 candidate
+  from `ba0e687` has SHA-256
+  `577663940f37e62a9d17bab39c06f274bc85c64841816eee6cd4d7000bc32395`;
+  its Go build metadata confirms `GOOS=darwin`, `GOARCH=arm64`. It has not yet
+  been launched in the local WebView. Exact-digest launch approval is required
+  for that next check. No Project, Core, runtime or secret state changed.
+
 ## Non-migration schema preview contract fix — 2026-10-18
 
 - After Server 1.1.11 and the reviewed v1→v2 Project migration, refreshing the
