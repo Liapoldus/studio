@@ -1,5 +1,38 @@
 # Liapoldus Studio — TODO
 
+## Local secret rotation smoke — current checkpoint — 2026-10-18
+
+- Supersedes the earlier bootstrap-certificate blocker below: with explicit
+  approval, the local Core CA and service certificates were regenerated and the
+  approved CLI was installed with a backup. Core, Echo and Server now start on
+  `local`; the existing `/echo` request returned HTTP 200.
+- Server Editor opens in the approved Studio build, completes its bridge
+  handshake, and loads its settings and secret catalog. The isolated
+  `/__secret-rotation-smoke` route exists only in Studio's local draft; the
+  canonical Project file still contains only `/echo`, and runtime auth has not
+  changed.
+- Reproduced the latest secret-selection failure in the Studio host validator.
+  An auth schema's conditional `then.required` branch contains `secretRef` but
+  no value schema; validation incorrectly inferred that the reference was
+  sensitive from its name alone and rejected it. The host now only performs the
+  opaque-reference check when the current schema branch declares a property
+  schema. Added regression coverage for a valid opaque reference and rejected
+  plaintext within protected route-array operations.
+- Focused settings tests, full `make check`, `make check-race`, and
+  `make desktop-build` pass. New macOS/arm64 executable SHA-256:
+  `88a4d2b0939f24277152910d0e44ea880496f3d0480eb10bef7c8816e2eed2cf`.
+  This candidate has not been launched; exact-digest approval is still needed
+  for the live retest. Commit/push and the live retest remain outstanding. The
+  existing UI draft reported `settings_operation_failed`; after the source fix
+  is packaged and launched with exact-digest approval, verify the selection
+  persists before saving/applying the temporary route.
+- The local catalog has two active synthetic references and a staged rotation
+  from the previous reference to its replacement. Neither has been applied to
+  the Project or delivered to Server. Complete authenticated request and
+  replica-ACK checks, then remove the temporary route through Studio and revoke
+  the synthetic references only after the runtime no longer uses them. Keep
+  `/echo` healthy; production is out of scope.
+
 ## Approved macOS build retry and local runtime blocker — 2026-10-18
 
 - Launched the approved Studio app bundle from the exact macOS/arm64 executable

@@ -367,6 +367,64 @@ func TestOpaqueSecretReferenceIsVisibleAndWritableButPlaintextIsRejected(t *test
 	}
 }
 
+func TestOpaqueSecretReferenceCanBePatchedThroughConditionalProtectedArray(t *testing.T) {
+	root := t.TempDir()
+	files := projectfiles.FileSystem{}
+	write := func(path, content string) {
+		t.Helper()
+		if err := files.WriteFile(context.Background(), root, path, []byte(content)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("settings.json", `{"config":{"routes":[]}}`)
+	write("schema.json", `{
+	  "$defs": {
+	    "auth": {
+	      "type": "object",
+	      "properties": {
+	        "mode": {"type": "string"},
+	        "scheme": {"type": "string"},
+	        "secretRef": {
+	          "type": "string",
+	          "pattern": "^ssr:v1:[a-f0-9]{32}$",
+	          "x-liapoldus-secret-reference": true,
+	          "x-studio-secret-purpose": "server.http.auth.credential"
+	        }
+	      },
+	      "allOf": [{
+	        "if": {"properties": {"mode": {"const": "enabled"}}},
+	        "then": {"required": ["scheme", "secretRef"]}
+	      }]
+	    },
+	    "route": {
+	      "type": "object",
+	      "properties": {
+	        "id": {"type": "string"},
+	        "features": {"type": "object", "properties": {"auth": {"$ref": "#/$defs/auth"}}}
+	      }
+	    }
+	  },
+	  "type": "object",
+	  "properties": {
+	    "config": {
+	      "type": "object",
+	      "properties": {"routes": {"type": "array", "items": {"$ref": "#/$defs/route"}}}
+	    }
+	  }
+	}`)
+	store := Store{Files: files}
+	const reference = "ssr:v1:00112233445566778899aabbccddeeff"
+	patch := []byte(`{"config":{"routes":{"$studioArrayOps/v1":[` +
+		`{"op":"insert","index":0,"value":{"id":"test-route","features":{"auth":{"mode":"enabled"}}}},` +
+		`{"op":"set","index":0,"patch":{"features":{"auth":{"secretRef":"` + reference + `"}}}}]}}}`)
+	if err := store.ValidatePatch(context.Background(), root, "settings.json", "schema.json", patch); err != nil {
+		t.Fatalf("declared opaque reference should survive conditional validation in a protected array: %v", err)
+	}
+	if err := store.ValidatePatch(context.Background(), root, "settings.json", "schema.json", []byte(`{"config":{"routes":{"$studioArrayOps/v1":[{"op":"insert","index":0,"value":{"id":"test-route","features":{"auth":{"mode":"enabled","secretRef":"plaintext"}}}}]}}}`)); !errors.Is(err, ErrSensitiveField) {
+		t.Fatalf("plaintext secret in a protected-array insert should be rejected, got %v", err)
+	}
+}
+
 func TestSnapshotConfigurationDigestMatchesCLIEncodingWithoutExposingSecrets(t *testing.T) {
 	root := t.TempDir()
 	files := projectfiles.FileSystem{}

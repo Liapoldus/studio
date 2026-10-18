@@ -514,7 +514,14 @@ func validatePatchSafety(value, schema any, propertyName string) error {
 				return fmt.Errorf("%w: forbidden property %s", ErrUnsupportedPatch, key)
 			}
 			childSchema := propertySchema(schemaObject, key)
-			if isSensitive(childSchema, key) && !validOpaqueSecretReference(child, childSchema, key) {
+			// Assertion-only composition branches can mention a field in
+			// `required` without declaring its value schema (for example an
+			// auth `then` clause that requires `secretRef`). Treating that
+			// missing schema as sensitive by its name rejects a reference that
+			// the parent schema has already declared and validated. Unknown
+			// properties remain rejected by mergeSafe below; declared sensitive
+			// properties still need the opaque-reference annotation here.
+			if childSchema != nil && isSensitive(childSchema, key) && !validOpaqueSecretReference(child, childSchema, key) {
 				return fmt.Errorf("%w: %s", ErrSensitiveField, key)
 			}
 			if childObject, ok := childSchema.(map[string]any); ok {
