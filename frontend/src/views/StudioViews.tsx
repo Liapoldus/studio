@@ -1056,6 +1056,38 @@ export function StudioPluginSurfaceFrame({ tab, controller, surface, project, se
         }
         return
       }
+      if (request.method === 'service.admin.table.query') {
+        if (!hasPermission('service.resources.read')) { reply(request.requestId, undefined, 'bridge.permission_denied'); return }
+        const payload = objectValue(request.payload)
+        if (!payload || typeof payload.pageId !== 'string' || typeof payload.sectionId !== 'string' ||
+            typeof payload.surfaceDigest !== 'string' ||
+            (payload.cursor !== undefined && typeof payload.cursor !== 'string')) { reply(request.requestId, undefined, 'bridge.invalid_admin_query'); return }
+        try { reply(request.requestId, await controller.pluginReadServiceAdminTable(project.id, service.id, payload.pageId, payload.sectionId, payload.surfaceDigest, typeof payload.cursor === 'string' ? payload.cursor : '')) }
+        catch (error: unknown) {
+          const code = studioPluginBridgeFailureCode(error, 'bridge.admin_table_unavailable')
+          reply(request.requestId, undefined, code)
+        }
+        return
+      }
+      if (request.method === 'service.admin.action.invoke') {
+        if (!hasPermission('service.resources.publish')) { reply(request.requestId, undefined, 'bridge.permission_denied'); return }
+        const payload = objectValue(request.payload)
+        const input = objectValue(payload?.input)
+        if (!payload || typeof payload.pageId !== 'string' || typeof payload.sectionId !== 'string' || typeof payload.actionId !== 'string' ||
+            typeof payload.surfaceDigest !== 'string' || !input || (payload.ifMatch !== undefined && typeof payload.ifMatch !== 'string')) {
+          reply(request.requestId, undefined, 'bridge.invalid_admin_action'); return
+        }
+        try {
+          reply(request.requestId, await controller.pluginInvokeServiceAdminAction(project.id, service.id, {
+            pageId: payload.pageId, sectionId: payload.sectionId, actionId: payload.actionId,
+            input, surfaceDigest: payload.surfaceDigest, ...(typeof payload.ifMatch === 'string' ? { ifMatch: payload.ifMatch } : {}),
+          }))
+        } catch (error: unknown) {
+          const code = studioPluginBridgeFailureCode(error, 'bridge.admin_action_failed')
+          reply(request.requestId, undefined, code)
+        }
+        return
+      }
       if (request.method === 'service.resource.artifact.select') {
         if (!hasPermission('service.resources.publish')) { reply(request.requestId, undefined, 'bridge.permission_denied'); return }
         const selection = objectValue(request.payload)

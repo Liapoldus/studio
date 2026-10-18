@@ -214,6 +214,18 @@ typed host API Studio. Запрещены
 обход общего Zustand draft. Текущий `studio-service-editor/v2` bridge уже
 поддерживает redacted settings read, schema-safe общий draft и сохранение
 canonical Project через host при выданных разрешениях. Это не Core apply.
+Admin Surface также поддерживает только типизированные операции: `service.admin.table.query`
+читает объявленные descriptor-ом таблицы и возвращает строки, повторно
+отфильтрованные host-ом по allowlist колонок; `service.admin.action.invoke`
+передаёт только ограниченный non-secret input объявленного действия. Перед
+вызовом host заново читает live descriptor, сверяет service/page/section/action
+и digest, а CLI повторно проверяет digest в Core. Input записывается во временный
+файл проекта с режимом `0600`, удаляется после операции, опасное или явно
+подтверждаемое действие требует native confirmation Studio. В plugin возвращается
+только безопасный маркер завершения, не произвольный ответ сервиса. Query требует
+`service.resources.read`; invoke — `service.resources.publish`; оба требуют
+совпадения declared и granted permissions. Это не предоставляет iframe прямой
+доступ к Core, CLI или файлам и не превращает Service Admin Surface в общий shell.
 Пока полный security corpus и installed-package acceptance не пройдены,
 расширение обязано fail-closed на неизвестные методы, scope, permission и
 некорректную схему; сохранение Project нельзя показывать как применение к Core.

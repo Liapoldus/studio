@@ -98,6 +98,8 @@ export interface StudioAPI {
   bindRuntimeServiceArtifact(projectId: string, serviceId: string, version: string, platform: string): Promise<Workspace>
   readRuntimeServiceMetadata(projectId: string, serviceID: string, view: 'manifest' | 'schema' | 'status'): Promise<string>
   readRuntimeServiceAdminSurface?(projectId: string, serviceID: string): Promise<string>
+  readRuntimeServiceAdminTable?(projectId: string, serviceID: string, pageID: string, sectionID: string, surfaceDigest: string, cursor: string): Promise<string>
+  invokeRuntimeServiceAdminAction?(projectId: string, serviceID: string, pageID: string, sectionID: string, actionID: string, inputJSON: string, ifMatch: string, surfaceDigest: string): Promise<string>
   selectRuntimeServiceResourceArtifact?(projectId: string, serviceID: string): Promise<string>
   selectRuntimeServiceProjectDirectory?(projectId: string, serviceID: string): Promise<string>
   importRuntimeServiceProjectCertificate?(projectId: string, serviceID: string, resourceID: string): Promise<string>

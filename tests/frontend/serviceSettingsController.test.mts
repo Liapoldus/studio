@@ -1053,6 +1053,43 @@ await test('StudioPlugin Admin Surface bridge is Core-backed, project-scoped and
   await assert.rejects(createStudioController(invalidResponseAPI).pluginReadServiceAdminSurface(projectID, 'server'), /bridge.admin_surface_response_invalid/u)
 })
 
+await test('StudioPlugin Admin Surface table and actions stay typed and service-scoped', async () => {
+  const projectID = 'admin-actions-project'
+  useStudioStore.setState({ serviceSettingsDrafts: {}, workspace: {
+    project: { id: projectID, name: projectID, rootPath: '/tmp/admin-actions-project' },
+    graph: { services: [service] },
+  } as Workspace })
+  const calls: unknown[][] = []
+  const api = {
+    readRuntimeServiceAdminTable: (...args: unknown[]) => {
+      calls.push(['query', ...args])
+      return Promise.resolve(JSON.stringify({ items: [{ siteId: 'docs' }], nextCursor: null }))
+    },
+    invokeRuntimeServiceAdminAction: (...args: unknown[]) => {
+      calls.push(['action', ...args])
+      return Promise.resolve(JSON.stringify({ completed: true }))
+    },
+  } as unknown as StudioAPI
+  const controller = createStudioController(api)
+  assert.deepEqual(await controller.pluginReadServiceAdminTable(projectID, 'server', 'sites', 'sites', artifactDigest, 'cursor-1'), {
+    items: [{ siteId: 'docs' }], nextCursor: null,
+  })
+  assert.deepEqual(await controller.pluginInvokeServiceAdminAction(projectID, 'server', {
+    pageId: 'sites', sectionId: 'sites', actionId: 'rollback',
+    input: { siteId: 'docs', expectedCurrentRevision: 'r-2', targetRevision: 'r-1' },
+    surfaceDigest: artifactDigest, ifMatch: 'r-2',
+  }), { completed: true })
+  assert.deepEqual(calls, [
+    ['query', projectID, 'server', 'sites', 'sites', artifactDigest, 'cursor-1'],
+    ['action', projectID, 'server', 'sites', 'sites', 'rollback', JSON.stringify({ siteId: 'docs', expectedCurrentRevision: 'r-2', targetRevision: 'r-1' }), 'r-2', artifactDigest],
+  ])
+  await assert.rejects(controller.pluginInvokeServiceAdminAction(projectID, 'server', {
+    pageId: 'sites', sectionId: 'sites', actionId: 'rollback', input: { apiToken: 'never' }, surfaceDigest: artifactDigest,
+  }), /bridge.admin_action_input_invalid/u)
+  await assert.rejects(controller.pluginReadServiceAdminTable(projectID, 'server', 'sites', 'sites', 'invalid-digest'), /bridge.admin_surface_digest_invalid/u)
+  await assert.rejects(controller.pluginReadServiceAdminTable('other-project', 'server', 'sites', 'sites', artifactDigest), /bridge.context_changed/u)
+})
+
 await test('StudioPlugin peer catalog exposes project services and Core-backed peer methods only', async () => {
   const projectID = 'peer-project'
   const echo: RuntimeService = { ...service, id: 'echo', name: 'Echo service', version: '2.0.0' }

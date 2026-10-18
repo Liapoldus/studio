@@ -2,6 +2,7 @@ package models
 
 import (
 	"encoding/json"
+	"path/filepath"
 	"testing"
 )
 
@@ -34,6 +35,9 @@ func TestCLIRequestAllowsOnlyReviewedStudioCommandShapes(t *testing.T) {
 		{name: "service status", args: []string{"service", "status", "echo", "--target", "local"}, want: true},
 		{name: "service admin surface from Core", args: []string{"service", "admin-surface", "inspect", "server", "--target", "local"}, want: true},
 		{name: "service admin surface remote target rejected", args: []string{"service", "admin-surface", "inspect", "server", "--target", "production"}},
+		{name: "service admin query binds the inspected surface", args: []string{"service", "admin", "query", "server", "--page", "sites", "--section", "sites", "--surface-digest", "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", "--target", "local"}, want: true},
+		{name: "service admin invoke binds the inspected surface", args: []string{"service", "admin", "invoke", "server", "--page", "sites", "--section", "sites", "--action", "rollback", "--project", root, "--surface-digest", "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", "--request-file", filepath.Join(root, ".studio", "action.json"), "--if-match", "revision-1", "--idempotency-key", "action-1", "--target", "local", "--confirm"}, want: true},
+		{name: "service admin invoke rejects invalid surface digest", args: []string{"service", "admin", "invoke", "server", "--page", "sites", "--section", "sites", "--action", "rollback", "--project", root, "--surface-digest", "invalid", "--request-file", filepath.Join(root, ".studio", "action.json"), "--if-match", "revision-1", "--idempotency-key", "action-1", "--target", "local", "--confirm"}},
 		{name: "service secret list", args: []string{"service", "secret", "list", "--target", "local", "--service", "server"}, want: true},
 		{name: "service secret create requires trusted stdin", args: []string{"service", "secret", "create", "--target", "local", "--service", "server", "--purpose", "http.auth.bearer", "--label", "edge token", "--secret-stdin", "--confirm"}},
 		{name: "service secret rotate requires trusted stdin", args: []string{"service", "secret", "rotate", "--target", "local", "--service", "server", "--reference", "ssr:v1:00112233445566778899aabbccddeeff", "--purpose", "http.auth.bearer", "--label", "edge token v2", "--secret-stdin", "--confirm"}},

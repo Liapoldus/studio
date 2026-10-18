@@ -23,7 +23,7 @@ export function studioPluginBridgeFailureCode(error: unknown, fallback: string):
 }
 
 export const studioServiceEditorBridgeVersion = 'studio-service-editor/v2'
-export type StudioPluginBridgeMethod = 'context.get' | 'service.settings.read' | 'service.configuration-ui.read' | 'service.resource.list' | 'service.admin-surface.read' | 'service.resource.artifact.select' | 'service.resource.publish' | 'service.resource.operation.watch' | 'service.peer.catalog.read' | 'service.secret.references.read' | 'service.settings.secret-reference.select' | 'service.settings.recovery.copy' | 'service.settings.patch' | 'service.settings.save'
+export type StudioPluginBridgeMethod = 'context.get' | 'service.settings.read' | 'service.configuration-ui.read' | 'service.resource.list' | 'service.admin-surface.read' | 'service.admin.table.query' | 'service.admin.action.invoke' | 'service.resource.artifact.select' | 'service.resource.publish' | 'service.resource.operation.watch' | 'service.peer.catalog.read' | 'service.secret.references.read' | 'service.settings.secret-reference.select' | 'service.settings.recovery.copy' | 'service.settings.patch' | 'service.settings.save'
 export type StudioPluginBridgeRequest = {
   type: 'studio.bridge.request'
   schemaVersion: typeof studioServiceEditorBridgeVersion
@@ -72,7 +72,7 @@ export function parseStudioPluginBridgeRequest(value: unknown): StudioPluginBrid
   if (entries.type !== 'studio.bridge.request' || entries.schemaVersion !== studioServiceEditorBridgeVersion ||
       typeof entries.sessionId !== 'string' || !safeSessionID.test(entries.sessionId) ||
       typeof entries.requestId !== 'string' || !safeRequestID.test(entries.requestId) ||
-      !['context.get', 'service.settings.read', 'service.configuration-ui.read', 'service.resource.list', 'service.admin-surface.read', 'service.resource.artifact.select', 'service.resource.publish', 'service.resource.operation.watch', 'service.peer.catalog.read', 'service.secret.references.read', 'service.settings.secret-reference.select', 'service.settings.recovery.copy', 'service.settings.patch', 'service.settings.save'].includes(String(entries.method))) return null
+      !['context.get', 'service.settings.read', 'service.configuration-ui.read', 'service.resource.list', 'service.admin-surface.read', 'service.admin.table.query', 'service.admin.action.invoke', 'service.resource.artifact.select', 'service.resource.publish', 'service.resource.operation.watch', 'service.peer.catalog.read', 'service.secret.references.read', 'service.settings.secret-reference.select', 'service.settings.recovery.copy', 'service.settings.patch', 'service.settings.save'].includes(String(entries.method))) return null
   if (entries.method === 'service.settings.patch') {
     const payload = entries.payload
     if (!isJSONObject(payload) || Object.keys(payload).some((key) => key !== 'path' && key !== 'value') ||
@@ -102,6 +102,22 @@ export function parseStudioPluginBridgeRequest(value: unknown): StudioPluginBrid
         !/^sha256:[a-f0-9]{64}$/u.test(payload.baseDigest)) return null
   } else if (entries.method === 'service.admin-surface.read' && entries.payload !== undefined) {
     return null
+  } else if (entries.method === 'service.admin.table.query') {
+    const payload = entries.payload
+    if (!isJSONObject(payload) || Object.keys(payload).some((key) => !['pageId', 'sectionId', 'surfaceDigest', 'cursor'].includes(key)) ||
+        typeof payload.pageId !== 'string' || !safeSegment.test(payload.pageId) ||
+        typeof payload.sectionId !== 'string' || !safeSegment.test(payload.sectionId) ||
+        typeof payload.surfaceDigest !== 'string' || !/^sha256:[a-f0-9]{64}$/u.test(payload.surfaceDigest) ||
+        (payload.cursor !== undefined && (typeof payload.cursor !== 'string' || payload.cursor.length > 1024 || /[\0\r\n]/u.test(payload.cursor)))) return null
+  } else if (entries.method === 'service.admin.action.invoke') {
+    const payload = entries.payload
+    if (!isJSONObject(payload) || Object.keys(payload).some((key) => !['pageId', 'sectionId', 'actionId', 'input', 'surfaceDigest', 'ifMatch'].includes(key)) ||
+        typeof payload.pageId !== 'string' || !safeSegment.test(payload.pageId) ||
+        typeof payload.sectionId !== 'string' || !safeSegment.test(payload.sectionId) ||
+        typeof payload.actionId !== 'string' || !safeSegment.test(payload.actionId) ||
+        typeof payload.surfaceDigest !== 'string' || !/^sha256:[a-f0-9]{64}$/u.test(payload.surfaceDigest) ||
+        !isJSONObject(payload.input) || !safeServiceActionMetadata(payload.input) ||
+        (payload.ifMatch !== undefined && (typeof payload.ifMatch !== 'string' || payload.ifMatch.length > 512 || /[\0\r\n]/u.test(payload.ifMatch)))) return null
   } else if (entries.method === 'service.resource.artifact.select' && entries.payload !== undefined) {
     const payload = entries.payload
     if (!isJSONObject(payload) || Object.keys(payload).length !== 1 || payload.source !== 'project-directory') return null

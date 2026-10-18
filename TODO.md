@@ -2303,3 +2303,48 @@ content.
 
 - Studio now keeps global plugin install/version control in Settings, defaults to the latest installed package, and exposes service-editor bindings there. Inspector renders the assigned Server button, which opens the exact service context. The real UI was verified on `Server Echo Studio` / `local` with plugin `.50`; binding candidate `server.endpoints` opened the editor tab and the bridge reached `bridge_ready`.
 - Fixed redaction of public SDK button keys and project-vs-Core configuration digest comparison. Studio `make check` and `make desktop-build` pass. New macOS/arm64 app SHA-256 `c6d67d38ec90045aea05f00091cb6f13a01da43173203d19fc0737fb33ed6456` is pending the exact local launch gate; plugin `.52` SHA-256 `de0161f0fa6c65159799f03634caa23dbc8a44e14e8b91a81d628e9292b2ff91` is pending install/trust confirmation. Commit/push remain pending.
+
+### Typed Server Admin Surface tables and actions — 2026-10-18
+
+- Studio host exposes `service.admin.table.query` and
+  `service.admin.action.invoke` through `studio-service-editor/v2`. Table rows
+  are filtered again against descriptor-declared safe columns. Actions re-read
+  the Core-backed descriptor, compare its live digest and exact service/page/
+  section/action, stage bounded metadata in a project-local mode-0600 file,
+  require native confirmation for dangerous/confirmed actions, and return only
+  `{completed:true}` to the iframe.
+- CLI intents and planner tests cover local-only table query/action invocation,
+  pagination cursor, absolute request-file paths, CAS and idempotency guards.
+  Frontend parser/controller tests cover scoped payloads and the bridge handler
+  requires declared + granted resource read/publish capabilities.
+- Remaining: run full Studio `make check`, `make check-race`, and
+  `make desktop-build`; package Server Editor with the updated admin table UI;
+  then commit/push Studio and update the docs source pin. Local WebView/package
+  install still requires action-time trust approval for the exact digest. No
+  live Service action has been invoked by these source tests.
+
+### Server Admin Surface typed tables/actions — 2026-10-18
+
+- Studio bridge v2 now exposes descriptor-declared table queries and actions.
+  The iframe includes the exact surface digest; host checks it against a fresh
+  Core descriptor and the typed CLI checks it again before sending the request.
+  Table rows are filtered twice against the descriptor's safe columns. Action
+  inputs are bounded, reject secret-like fields, are staged only in a private
+  mode-0600 Project temp file, and are removed after the operation; dangerous
+  or explicitly-confirmed actions use the native Studio confirmation dialog.
+  The iframe receives only `{completed:true}` from an action.
+- CLI change pushed as `11b9a21` (`fix(cli): сверять digest Admin Surface`).
+  `make check` and `make test-race` both pass. Studio commit/push is the next
+  step; documentation pins should then move to the published Studio, CLI and
+  current Core revisions.
+- Studio `make check` passes: Wails binding reproducibility, Go and frontend
+  lint, 180 frontend tests, Go tests, vet and build. `make check-race` and
+  `make desktop-build` pass. Desktop binary:
+  `build/bin/Liapoldus Studio.app/Contents/MacOS/studio`, SHA-256
+  `910320ef7176a8db582a8343e262e8fa1f61923c06d2d7ba9d93a8727a58c53e`.
+- Server Editor `.63` package passes `make package`, all 83 plugin tests and
+  Studio installer inspection. SHA-256:
+  `2c6befb58d3a27d5a7e2c58fe7c65da06387b6b28d5ccd06dc7eadd683a333d8`.
+  Plugin source is not a Git repository and has no remote. Neither this package
+  nor the new Studio binary has been installed/launched for WebView acceptance;
+  they remain subject to the Studio native trust flow for their exact digests.

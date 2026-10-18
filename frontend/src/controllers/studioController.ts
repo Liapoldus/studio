@@ -608,6 +608,42 @@ export function createStudioController(api: StudioAPI) {
     return parsed
   }
 
+  async function pluginReadServiceAdminTable(projectID: string, serviceID: string, pageID: string, sectionID: string, surfaceDigest: string, cursor = '') {
+    const { key } = pluginServiceContext(projectID, serviceID)
+    if (!api.readRuntimeServiceAdminTable) throw new Error('bridge.admin_table_api_unavailable')
+    if (!/^sha256:[a-f0-9]{64}$/u.test(surfaceDigest)) throw new Error('bridge.admin_surface_digest_invalid')
+    const encoded = await queueCoreMetadataRead(() => api.readRuntimeServiceAdminTable?.(projectID, serviceID, pageID, sectionID, surfaceDigest, cursor) ?? Promise.reject(new Error('bridge.admin_table_api_unavailable')))
+    if (encoded.length > 1_048_576) throw new Error('bridge.admin_table_response_invalid')
+    let parsed: unknown
+    try { parsed = JSON.parse(encoded) as unknown } catch { throw new Error('bridge.admin_table_response_invalid') }
+    if (!isRecord(parsed) || !Array.isArray(parsed.items) || parsed.items.length > 100 ||
+        (parsed.nextCursor !== null && parsed.nextCursor !== undefined && (typeof parsed.nextCursor !== 'string' || parsed.nextCursor.length > 1024))) {
+      throw new Error('bridge.admin_table_response_invalid')
+    }
+    if (pluginServiceContext(projectID, serviceID).key !== key) throw new Error('bridge.context_changed')
+    return { items: parsed.items, nextCursor: parsed.nextCursor ?? null }
+  }
+
+  async function pluginInvokeServiceAdminAction(projectID: string, serviceID: string, payload: { pageId: string; sectionId: string; actionId: string; input: Record<string, unknown>; surfaceDigest: string; ifMatch?: string }) {
+    const { key } = pluginServiceContext(projectID, serviceID)
+    if (!api.invokeRuntimeServiceAdminAction) throw new Error('bridge.admin_action_api_unavailable')
+    let encoded: string
+    try {
+      if (!isRecord(payload.input) || !isSafeServiceAdminActionInput(payload.input)) throw new Error('bridge.admin_action_input_invalid')
+      encoded = JSON.stringify(payload.input)
+      if (encoded.length > 65_536) throw new Error('bridge.admin_action_input_invalid')
+    } catch {
+      throw new Error('bridge.admin_action_input_invalid')
+    }
+    const result = await api.invokeRuntimeServiceAdminAction(projectID, serviceID, payload.pageId, payload.sectionId, payload.actionId, encoded, payload.ifMatch ?? '', payload.surfaceDigest)
+    if (result.length > 4096) throw new Error('bridge.admin_action_response_invalid')
+    let parsed: unknown
+    try { parsed = JSON.parse(result) as unknown } catch { throw new Error('bridge.admin_action_response_invalid') }
+    if (!isRecord(parsed) || Object.keys(parsed).length !== 1 || parsed.completed !== true) throw new Error('bridge.admin_action_response_invalid')
+    if (pluginServiceContext(projectID, serviceID).key !== key) throw new Error('bridge.context_changed')
+    return { completed: true as const }
+  }
+
   async function pluginSelectServiceResourceArtifact(projectID: string, serviceID: string, source: 'archive' | 'project-directory' = 'archive') {
     pluginServiceContext(projectID, serviceID)
     let selected: string | null
@@ -1358,11 +1394,23 @@ export function createStudioController(api: StudioAPI) {
       }
     } catch (reason: unknown) { fail(reason, `Не удалось выполнить ${command} для ${serviceID}`) }
   }
-  return { api, refresh, refreshGraph, refreshRuntimeStatuses, openProject, createProject, openFileExternally, run, cancelCLI, runtimeCommand, loadServiceSettingsDraft, importServiceSettingsSchema, previewServiceSettingsSchema, refreshServiceSettingsSchema, refreshServiceSettingsContract, persistServiceSettingsDraft, undoServiceSettingsDraft, redoServiceSettingsDraft, saveServiceSettingsDraft, applyServiceSettings, retryFailedServiceSettings, reconcileApplyRecovery, discardServiceSettingsDraft, pluginReadServiceSettings, pluginReadServiceConfigurationUI, pluginReadServiceResource, pluginReadServiceSecretReferences, pluginSelectServiceSecretReference, pluginCreateServiceSettingsRecoveryCopy, pluginReadServiceAdminSurface, pluginSelectServiceResourceArtifact, importProjectCertificateResource, pluginPublishServiceResource, pluginWatchServiceResourceOperation, pluginReadServicePeerCatalog, verifyServicePeerContract, readServiceResourceCatalog, pluginPatchServiceSettings, pluginSaveServiceSettings, addService, createLink, updateServiceLink, deleteNodes, deleteEdges, persistNodePosition, persistWorkspace, setLocale, setTheme, loadDiagnostics, loadTraffic, exportTrafficReport, listArtifacts, registerArtifact, trustArtifact, removeArtifact, bindRuntimeServiceArtifact, serviceMetadata, loadStudioPluginSurfaces, installedStudioPluginPackages, studioPluginEditorBindings, saveStudioPluginEditorBindings, serviceEditorButtonCandidates, readServiceEditorButtons, selectStudioPluginPackage, inspectStudioPluginPackage, installStudioPluginPackage, removeStudioPluginPackage }
+  return { api, refresh, refreshGraph, refreshRuntimeStatuses, openProject, createProject, openFileExternally, run, cancelCLI, runtimeCommand, loadServiceSettingsDraft, importServiceSettingsSchema, previewServiceSettingsSchema, refreshServiceSettingsSchema, refreshServiceSettingsContract, persistServiceSettingsDraft, undoServiceSettingsDraft, redoServiceSettingsDraft, saveServiceSettingsDraft, applyServiceSettings, retryFailedServiceSettings, reconcileApplyRecovery, discardServiceSettingsDraft, pluginReadServiceSettings, pluginReadServiceConfigurationUI, pluginReadServiceResource, pluginReadServiceSecretReferences, pluginSelectServiceSecretReference, pluginCreateServiceSettingsRecoveryCopy, pluginReadServiceAdminSurface, pluginReadServiceAdminTable, pluginInvokeServiceAdminAction, pluginSelectServiceResourceArtifact, importProjectCertificateResource, pluginPublishServiceResource, pluginWatchServiceResourceOperation, pluginReadServicePeerCatalog, verifyServicePeerContract, readServiceResourceCatalog, pluginPatchServiceSettings, pluginSaveServiceSettings, addService, createLink, updateServiceLink, deleteNodes, deleteEdges, persistNodePosition, persistWorkspace, setLocale, setTheme, loadDiagnostics, loadTraffic, exportTrafficReport, listArtifacts, registerArtifact, trustArtifact, removeArtifact, bindRuntimeServiceArtifact, serviceMetadata, loadStudioPluginSurfaces, installedStudioPluginPackages, studioPluginEditorBindings, saveStudioPluginEditorBindings, serviceEditorButtonCandidates, readServiceEditorButtons, selectStudioPluginPackage, inspectStudioPluginPackage, installStudioPluginPackage, removeStudioPluginPackage }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function isSafeServiceAdminActionInput(value: unknown, depth = 0): boolean {
+  if (depth > 16) return false
+  if (Array.isArray(value)) return value.length <= 512 && value.every((item) => isSafeServiceAdminActionInput(item, depth + 1))
+  if (isRecord(value)) {
+    const entries = Object.entries(value)
+    return entries.length <= 512 && entries.every(([key, child]) =>
+      !/(?:secret|password|passwd|token|private.?key|credential|authorization|authkey)/iu.test(key) &&
+      isSafeServiceAdminActionInput(child, depth + 1))
+  }
+  return value === null || typeof value === 'string' || typeof value === 'boolean' || (typeof value === 'number' && Number.isFinite(value))
 }
 
 function safeResourceText(value: string): boolean {

@@ -29,7 +29,9 @@ type CLIIntent struct {
 	Reference       string `json:"reference,omitempty"`
 	ResourceID      string `json:"resourceId,omitempty"`
 	PageID          string `json:"pageId,omitempty"`
+	SectionID       string `json:"sectionId,omitempty"`
 	ActionID        string `json:"actionId,omitempty"`
+	Cursor          string `json:"cursor,omitempty"`
 	ArtifactPath    string `json:"artifactPath,omitempty"`
 	ContentType     string `json:"contentType,omitempty"`
 	MetadataPath    string `json:"metadataPath,omitempty"`
@@ -90,7 +92,7 @@ func (i CLIIntent) Validate() error {
 	if strings.TrimSpace(i.Command) == "" || strings.ContainsAny(i.Command, "\x00\r\n") {
 		return ErrInvalidCLIRequest
 	}
-	for _, value := range []string{i.Target, i.OperationID, i.ProfilePath, i.ArtifactID, i.Version, i.Platform, i.BinaryPath, i.Digest, i.ServiceID, i.Purpose, i.Label, i.Reference, i.ResourceID, i.PageID, i.ActionID, i.ArtifactPath, i.ContentType, i.MetadataPath, i.RequestFilePath, i.IfMatch, i.IdempotencyKey} {
+	for _, value := range []string{i.Target, i.OperationID, i.ProfilePath, i.ArtifactID, i.Version, i.Platform, i.BinaryPath, i.Digest, i.ServiceID, i.Purpose, i.Label, i.Reference, i.ResourceID, i.PageID, i.SectionID, i.ActionID, i.Cursor, i.ArtifactPath, i.ContentType, i.MetadataPath, i.RequestFilePath, i.IfMatch, i.IdempotencyKey} {
 		if strings.ContainsAny(value, "\x00\r\n") {
 			return ErrInvalidCLIRequest
 		}
@@ -330,6 +332,61 @@ func validateCLICommand(args []string) error {
 			return err
 		}
 		return requireLocalTarget(args[7])
+	}
+	if (len(args) == 10 || len(args) == 12 || len(args) == 14) && args[0] == "service" && args[1] == "admin" && args[2] == "query" &&
+		args[4] == "--page" && args[6] == "--section" {
+		for _, identifier := range []string{args[3], args[5], args[7]} {
+			if err := validCLIIdentifier(identifier); err != nil {
+				return err
+			}
+		}
+		targetIndex := 8
+		switch {
+		case args[8] == "--surface-digest":
+			if len(args) != 12 && len(args) != 14 || !validSHA256Digest(args[9]) {
+				return ErrInvalidCLIRequest
+			}
+			targetIndex = 10
+			if len(args) == 14 {
+				if args[10] != "--cursor" || len(args[11]) > 1024 || strings.ContainsAny(args[11], "\x00\r\n") {
+					return ErrInvalidCLIRequest
+				}
+				targetIndex = 12
+			}
+		case len(args) == 12:
+			if args[8] != "--cursor" || len(args[9]) > 1024 || strings.ContainsAny(args[9], "\x00\r\n") || args[10] != "--target" {
+				return ErrInvalidCLIRequest
+			}
+			targetIndex = 11
+		case args[8] != "--target":
+			return ErrInvalidCLIRequest
+		}
+		if args[targetIndex] == "--target" {
+			targetIndex++
+		}
+		return requireLocalTarget(args[targetIndex])
+	}
+	if (len(args) == 21 || len(args) == 23) && args[0] == "service" && args[1] == "admin" && args[2] == "invoke" &&
+		args[4] == "--page" && args[6] == "--section" && args[8] == "--action" && args[10] == "--project" &&
+		((len(args) == 21 && args[12] == "--request-file" && args[14] == "--if-match" && args[16] == "--idempotency-key" && args[18] == "--target" && args[20] == "--confirm") ||
+			(len(args) == 23 && args[12] == "--surface-digest" && validSHA256Digest(args[13]) && args[14] == "--request-file" && args[16] == "--if-match" && args[18] == "--idempotency-key" && args[20] == "--target" && args[22] == "--confirm")) {
+		for _, identifier := range []string{args[3], args[5], args[7], args[9]} {
+			if err := validCLIIdentifier(identifier); err != nil {
+				return err
+			}
+		}
+		if err := validCLIAbsoluteProjectPath(args[11]); err != nil {
+			return ErrInvalidCLIRequest
+		}
+		requestFileIndex, ifMatchIndex, idempotencyIndex, targetIndex := 13, 15, 17, 19
+		if len(args) == 23 {
+			requestFileIndex, ifMatchIndex, idempotencyIndex, targetIndex = 15, 17, 19, 21
+		}
+		if err := validCLIAbsoluteProjectPath(args[requestFileIndex]); err != nil || strings.ContainsAny(args[ifMatchIndex]+args[idempotencyIndex], "\x00\r\n") ||
+			strings.TrimSpace(args[ifMatchIndex]) == "" || strings.TrimSpace(args[idempotencyIndex]) == "" || len(args[idempotencyIndex]) > 128 {
+			return ErrInvalidCLIRequest
+		}
+		return requireLocalTarget(args[targetIndex])
 	}
 	if (len(args) == 20 || len(args) == 22) && args[0] == "service" && args[1] == "resource" && args[2] == "publish" &&
 		args[4] == "--project" && args[6] == "--page" && args[8] == "--action" && args[10] == "--artifact-file" &&

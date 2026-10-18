@@ -174,6 +174,26 @@ func Plan(intent models.CLIIntent, projectRoot string) ([]string, error) {
 			return nil, ErrInvalidIntent
 		}
 		args = []string{"service", "resource", "list", intent.ServiceID, "--resource", intent.ResourceID, "--target", target}
+	case "service.admin.query":
+		if target != "local" || !validTarget(intent.ServiceID) || !validTarget(intent.PageID) || !validTarget(intent.SectionID) || !validSHA256(intent.Digest) ||
+			len(intent.Cursor) > 1024 || strings.ContainsAny(intent.Cursor, "\x00\r\n") {
+			return nil, ErrInvalidIntent
+		}
+		args = []string{"service", "admin", "query", intent.ServiceID, "--page", intent.PageID, "--section", intent.SectionID, "--surface-digest", intent.Digest}
+		if intent.Cursor != "" {
+			args = append(args, "--cursor", intent.Cursor)
+		}
+		args = append(args, "--target", target)
+	case "service.admin.action.invoke":
+		if target != "local" || !validTarget(intent.ServiceID) || !validTarget(intent.PageID) || !validTarget(intent.SectionID) || !validSHA256(intent.Digest) ||
+			!validTarget(intent.ActionID) || !validAbsolutePath(intent.RequestFilePath) || strings.TrimSpace(intent.IfMatch) == "" ||
+			strings.TrimSpace(intent.IdempotencyKey) == "" || len(intent.IdempotencyKey) > 128 ||
+			strings.ContainsAny(intent.IfMatch+intent.IdempotencyKey, "\x00\r\n") {
+			return nil, ErrInvalidIntent
+		}
+		args = []string{"service", "admin", "invoke", intent.ServiceID, "--page", intent.PageID, "--section", intent.SectionID,
+			"--action", intent.ActionID, "--project", root, "--surface-digest", intent.Digest, "--request-file", filepath.Clean(intent.RequestFilePath),
+			"--if-match", intent.IfMatch, "--idempotency-key", intent.IdempotencyKey, "--target", target, "--confirm"}
 	case "service.resource.publish":
 		if target != "local" || !validTarget(intent.ServiceID) || !validTarget(intent.PageID) || !validTarget(intent.ActionID) ||
 			!validRelativeResourcePath(intent.ArtifactPath) || !validRelativeResourcePath(intent.MetadataPath) ||

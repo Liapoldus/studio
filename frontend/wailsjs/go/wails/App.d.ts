@@ -46,6 +46,8 @@ export function InstalledStudioPluginManifests():Promise<string>;
 
 export function InstalledStudioPlugins():Promise<Array<models.InstalledStudioPluginState>>;
 
+export function InvokeRuntimeServiceAdminAction(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string,arg6:string,arg7:string,arg8:string):Promise<string>;
+
 export function LatestReportSummary():Promise<models.ReportSummary>;
 
 export function ListProjects():Promise<Array<models.Project>>;
@@ -71,6 +73,8 @@ export function ReadProjectSchema(arg1:string,arg2:string):Promise<Array<number>
 export function ReadProjectSettings(arg1:string,arg2:string):Promise<string>;
 
 export function ReadRuntimeServiceAdminSurface(arg1:string,arg2:string):Promise<string>;
+
+export function ReadRuntimeServiceAdminTable(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string,arg6:string):Promise<string>;
 
 export function ReadRuntimeServiceMetadata(arg1:string,arg2:string,arg3:string):Promise<string>;
 

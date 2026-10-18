@@ -90,6 +90,10 @@ export function InstalledStudioPlugins() {
   return window['go']['wails']['App']['InstalledStudioPlugins']();
 }
 
+export function InvokeRuntimeServiceAdminAction(arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8) {
+  return window['go']['wails']['App']['InvokeRuntimeServiceAdminAction'](arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8);
+}
+
 export function LatestReportSummary() {
   return window['go']['wails']['App']['LatestReportSummary']();
 }
@@ -140,6 +144,10 @@ export function ReadProjectSettings(arg1, arg2) {
 
 export function ReadRuntimeServiceAdminSurface(arg1, arg2) {
   return window['go']['wails']['App']['ReadRuntimeServiceAdminSurface'](arg1, arg2);
+}
+
+export function ReadRuntimeServiceAdminTable(arg1, arg2, arg3, arg4, arg5, arg6) {
+  return window['go']['wails']['App']['ReadRuntimeServiceAdminTable'](arg1, arg2, arg3, arg4, arg5, arg6);
 }
 
 export function ReadRuntimeServiceMetadata(arg1, arg2, arg3) {

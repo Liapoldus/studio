@@ -32,6 +32,8 @@ func TestPlanInjectsProjectContext(t *testing.T) {
 		{"service manifest", models.CLIIntent{Command: "service.manifest", ServiceID: "echo", Target: "local"}, []string{"service", "manifest", "echo", "--target", "local"}},
 		{"service schema", models.CLIIntent{Command: "service.schema", ServiceID: "echo", Target: "local"}, []string{"service", "schema", "echo", "--target", "local"}},
 		{"service admin surface", models.CLIIntent{Command: "service.admin-surface.inspect", ServiceID: "server", Target: "local"}, []string{"service", "admin-surface", "inspect", "server", "--target", "local"}},
+		{"service admin table query", models.CLIIntent{Command: "service.admin.query", ServiceID: "server", PageID: "certificates", SectionID: "issued", Cursor: "next:1", Digest: "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", Target: "local"}, []string{"service", "admin", "query", "server", "--page", "certificates", "--section", "issued", "--surface-digest", "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", "--cursor", "next:1", "--target", "local"}},
+		{"service admin action invoke", models.CLIIntent{Command: "service.admin.action.invoke", ServiceID: "server", PageID: "certificates", SectionID: "issued", ActionID: "rollback", RequestFilePath: filepath.Join(root, ".studio", "admin-action.json"), IfMatch: `"revision-1"`, IdempotencyKey: "studio-admin-0123456789abcdef0123456789abcdef", Digest: "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", Target: "local"}, []string{"service", "admin", "invoke", "server", "--page", "certificates", "--section", "issued", "--action", "rollback", "--project", root, "--surface-digest", "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", "--request-file", filepath.Join(root, ".studio", "admin-action.json"), "--if-match", `"revision-1"`, "--idempotency-key", "studio-admin-0123456789abcdef0123456789abcdef", "--target", "local", "--confirm"}},
 		{"service secret list", models.CLIIntent{Command: "service.secret.list", ServiceID: "server", Target: "local"}, []string{"service", "secret", "list", "--target", "local", "--service", "server"}},
 		{"service secret list filtered by declared purpose", models.CLIIntent{Command: "service.secret.list", ServiceID: "server", Purpose: "http.auth.bearer", Target: "local"}, []string{"service", "secret", "list", "--target", "local", "--service", "server", "--purpose", "http.auth.bearer"}},
 		{"service secret create", models.CLIIntent{Command: "service.secret.create", ServiceID: "server", Purpose: "http.auth.bearer", Label: "edge token", Target: "local"}, []string{"service", "secret", "create", "--target", "local", "--service", "server", "--purpose", "http.auth.bearer", "--label", "edge token", "--secret-stdin", "--confirm"}},
@@ -108,6 +110,23 @@ func TestPlanRejectsUnsafeServiceResourcePublishIntent(t *testing.T) {
 			mutate(&intent)
 			if _, err := Plan(intent, filepath.Join(string(filepath.Separator), "tmp", "project")); err == nil {
 				t.Fatal("unsafe service resource publish intent was accepted")
+			}
+		})
+	}
+}
+
+func TestPlanRejectsUnsafeServiceAdminIntent(t *testing.T) {
+	projectRoot := filepath.Join(string(filepath.Separator), "tmp", "project")
+	for name, intent := range map[string]models.CLIIntent{
+		"query rejects remote target":            {Command: "service.admin.query", Target: "production", ServiceID: "server", PageID: "certificates", SectionID: "issued"},
+		"query rejects malformed cursor":         {Command: "service.admin.query", Target: "local", ServiceID: "server", PageID: "certificates", SectionID: "issued", Cursor: "next\n--target"},
+		"invoke rejects relative request file":   {Command: "service.admin.action.invoke", Target: "local", ServiceID: "server", PageID: "certificates", SectionID: "issued", ActionID: "rollback", RequestFilePath: "request.json", IfMatch: "*", IdempotencyKey: "studio-admin-1"},
+		"invoke rejects missing CAS":             {Command: "service.admin.action.invoke", Target: "local", ServiceID: "server", PageID: "certificates", SectionID: "issued", ActionID: "rollback", RequestFilePath: filepath.Join(projectRoot, ".studio", "request.json"), IdempotencyKey: "studio-admin-1"},
+		"invoke rejects newline idempotency key": {Command: "service.admin.action.invoke", Target: "local", ServiceID: "server", PageID: "certificates", SectionID: "issued", ActionID: "rollback", RequestFilePath: filepath.Join(projectRoot, ".studio", "request.json"), IfMatch: "*", IdempotencyKey: "studio-admin-1\n--confirm"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if _, err := Plan(intent, projectRoot); err == nil {
+				t.Fatalf("unsafe service admin intent was accepted: %+v", intent)
 			}
 		})
 	}

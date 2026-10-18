@@ -50,6 +50,16 @@ await test('plugin bridge requests are bounded, versioned and reject unsafe scop
   assert.equal(parseStudioPluginBridgeRequest({ ...base, method: 'service.resource.list', payload: { resourceId: 'sites', endpoint: 'https://service' } }), null)
   assert.equal(parseStudioPluginBridgeRequest({ ...base, method: 'service.admin-surface.read' })?.method, 'service.admin-surface.read')
   assert.equal(parseStudioPluginBridgeRequest({ ...base, method: 'service.admin-surface.read', payload: {} }), null)
+  const adminQuery = { pageId: 'sites', sectionId: 'sites', surfaceDigest: `sha256:${'a'.repeat(64)}`, cursor: 'cursor-1' }
+  assert.equal(parseStudioPluginBridgeRequest({ ...base, method: 'service.admin.table.query', payload: adminQuery })?.method, 'service.admin.table.query')
+  assert.equal(parseStudioPluginBridgeRequest({ ...base, method: 'service.admin.table.query', payload: { ...adminQuery, resourceId: 'other' } }), null)
+  const adminAction = {
+    pageId: 'sites', sectionId: 'sites', actionId: 'rollback', surfaceDigest: `sha256:${'a'.repeat(64)}`,
+    input: { siteId: 'docs', expectedCurrentRevision: 'r-2', targetRevision: 'r-1' }, ifMatch: 'r-2',
+  }
+  assert.equal(parseStudioPluginBridgeRequest({ ...base, method: 'service.admin.action.invoke', payload: adminAction })?.method, 'service.admin.action.invoke')
+  assert.equal(parseStudioPluginBridgeRequest({ ...base, method: 'service.admin.action.invoke', payload: { ...adminAction, input: { apiToken: 'secret' } } }), null)
+  assert.equal(parseStudioPluginBridgeRequest({ ...base, method: 'service.admin.action.invoke', payload: { ...adminAction, surfaceDigest: 'stale' } }), null)
   assert.equal(parseStudioPluginBridgeRequest({ ...base, method: 'service.resource.artifact.select' })?.method, 'service.resource.artifact.select')
   const publish = { pageId: 'sites', actionId: 'publish', artifactPath: 'resources/site.tar.gz', contentType: 'application/gzip', metadata: { siteId: 'docs' }, ifMatch: 'revision-1' }
   assert.equal(parseStudioPluginBridgeRequest({ ...base, method: 'service.resource.publish', payload: publish })?.method, 'service.resource.publish')
