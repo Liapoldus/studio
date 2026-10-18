@@ -576,9 +576,11 @@ export function createStudioController(api: StudioAPI) {
     }
     const draft = store().serviceSettingsDrafts[key]
     const field = matchServiceConfigurationUIField(draft?.configurationUI, path)
-    if (!field || field.widget !== 'secret' || field.secretPurpose !== purpose ||
-        !draft?.schema || !configurationSecretReferencePathEditable(draft.schema, path, purpose, reference)) {
-      throw new Error('bridge.secret_path_not_declared')
+    if (!draft?.schema) throw new Error('bridge.secret_schema_unavailable')
+    if (!field) throw new Error('bridge.secret_path_not_declared')
+    if (field.widget !== 'secret' || field.secretPurpose !== purpose) throw new Error('bridge.secret_path_purpose_mismatch')
+    if (!configurationSecretReferencePathEditable(draft.schema, path, purpose, reference)) {
+      throw new Error('bridge.secret_schema_path_rejected')
     }
     const catalog = await pluginReadServiceSecretReferences(projectID, serviceID, purpose)
     if (!catalog.items.some((item) => item.reference === reference && item.state === 'active')) {

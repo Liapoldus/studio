@@ -6,17 +6,24 @@
   `server.http.auth.credential` reference on the isolated
   `/__server-secret-rotation-smoke` draft. Project `settings.json` still
   contains only `/echo`; no secret reference or test route was saved/applied.
-- Root cause: one incompatible field in a Service SDK `configurationUI/v1`
-  descriptor caused Studio to discard the entire descriptor. Server's
-  `features.auth.secretRef` declaration was valid, but unrelated listener and
-  route hints with unsupported schema shapes made the host treat every secret
-  path as undeclared. The parser now skips only invalid hints and retains
-  independently validated fields. Regression test verifies the secret path
-  survives an unrelated incompatible hint.
-- Focused `serviceConfigurationUI.test.mts` passes 15/15. Parsing the live
-  Server 1.1.11 manifest/schema now retains the route secret path and its
-  declared purpose. The fix is not yet included in the running Studio build or
-  verified in WebView.
+- The first source candidate addressed an invalid unrelated UI hint by retaining
+  independently validated fields. That parser change alone did not fix the
+  live error: the picker still returned `bridge.secret_path_not_declared`.
+- The first launch attempt had activated an older Studio process: it started at
+  13:58, before the approved binary at the same path was rebuilt at 15:27. The
+  old process was quit through Studio's UI, then the exact approved executable
+  was launched. The editor loaded and completed its handshake; the selection
+  error reproduced in that actual new process.
+- A read-only typed CLI capture of the live Server 1.1.11 manifest and schema
+  confirms `/config/routes/*/features/auth/secretRef` is declared. Studio's
+  parser and schema guard both match and accept that path at route index 1 in
+  an isolated probe. A new controller regression test exercises successful
+  selection and safe rejection cases. Focused `serviceSettingsController`
+  tests pass 40/40.
+- The host now reports separate safe codes for a missing UI field, a purpose
+  mismatch, an unavailable schema, and a schema-path rejection. This is a
+  diagnostic build to identify which live guard is rejecting the bridge call;
+  it has not been built or launched yet.
 - Full `GOWORK=off GOFLAGS=-p=1 make check`, `make check-race`, and
   `make desktop-build` pass. The new macOS/arm64 executable is
   `build/bin/Liapoldus Studio.app/Contents/MacOS/studio`, SHA-256
@@ -34,8 +41,10 @@
 - Fresh local HTTP check returned `200` with the expected Echo body for
   `/echo?text=goal-audit-20261018` and `404` for the isolated unsaved test path.
   Project `services/server/settings.json` still contains only `/echo`.
-- The changed digest requires an action-time confirmation before launching the
-  new app build for the pending local WebView check. Production is out of scope.
+- The exact approved Studio digest was launched only in `Server Echo Studio` /
+  `local`. The next diagnostic build has a different digest and needs its own
+  native launch approval before the WebView can report the failing guard.
+  Production is out of scope.
 - The Project's stored Server schema currently differs from live schema only
   in two health-check `path` defaults (`/healthz`), which expand through the
   route defaults and route feature schema. No settings values need migration;

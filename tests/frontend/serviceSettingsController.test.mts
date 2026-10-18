@@ -1165,6 +1165,71 @@ await test('StudioPlugin receives only active safe secret references for a manif
   assert.equal(catalogReads, 1)
 })
 
+await test('StudioPlugin can attach a declared secret reference to a schema-declared route field', async () => {
+  const projectID = 'secret-route-selection-project'
+  const projectRoot = '/tmp/secret-route-selection-project'
+  const purpose = 'server.http.auth.credential'
+  const reference = `ssr:v1:${'d'.repeat(32)}`
+  const schema = {
+    type: 'object',
+    properties: { config: { $ref: '#/$defs/config' }, schemaVersion: { type: 'integer' } },
+    $defs: {
+      config: { type: 'object', properties: { routes: { type: 'array', items: { $ref: '#/$defs/route' } } } },
+      route: { type: 'object', properties: { features: { $ref: '#/$defs/routeFeatures' } } },
+      routeFeatures: { type: 'object', properties: { auth: { $ref: '#/$defs/authFeature' } } },
+      authFeature: { type: 'object', properties: { secretRef: {
+        type: 'string', pattern: '^ssr:v1:[a-f0-9]{32}$', 'x-liapoldus-secret-reference': true,
+        'x-studio-secret-purpose': purpose,
+      } } },
+    },
+  }
+  const manifest = {
+    secretPurposes: [purpose],
+    configurationUI: {
+      version: 'service-configuration-ui/v1',
+      groups: [{ id: 'auth', title: { ru: 'Аутентификация', en: 'Authentication' }, fields: [
+        { path: '/config/routes/*/features/auth/secretRef', label: { ru: 'Секрет', en: 'Secret' }, widget: 'secret', secretPurpose: purpose },
+      ] }],
+    },
+  }
+  const workspace = {
+    project: { id: projectID, name: projectID, rootPath: projectRoot },
+    graph: { services: [service], links: [] }, files: [],
+  } as unknown as Workspace
+  useStudioStore.setState({ serviceSettingsDrafts: {}, workspace })
+  let savedPatch: Record<string, unknown> | null = null
+  const api = {
+    ...recoveryStateAPI(projectID),
+    readProjectSchema: () => Promise.resolve(bytes(schema)),
+    readProjectSettings: () => Promise.resolve({ valuesJson: JSON.stringify({ schemaVersion: 2, config: { routes: [{ features: { auth: {} } }, { features: { auth: {} } }] } }), digest: 'sha256:base' }),
+    readServiceSettingsDraft: () => Promise.resolve(null),
+    saveServiceSettingsDraft: (_projectID: string, _serviceID: string, _baseDigest: string, patchJSON: string) => {
+      savedPatch = JSON.parse(patchJSON) as Record<string, unknown>
+      return Promise.resolve()
+    },
+    deleteServiceSettingsDraft: () => Promise.resolve(),
+    readRuntimeServiceMetadata: liveMetadata(schema, manifest),
+    readLocalServiceSecretReferences: (serviceID: string) => Promise.resolve(JSON.stringify({
+      schemaVersion: 'service-secret-references/v1', target: 'local', serviceId: serviceID,
+      items: [{ reference, serviceId: serviceID, purpose, label: 'temporary test credential', state: 'active', createdAt: '2026-10-17T12:00:00Z' }],
+      pendingRotations: [], pendingRegistrations: [],
+    })),
+  } as unknown as StudioAPI
+  const controller = createStudioController(api)
+  const result = await controller.pluginSelectServiceSecretReference(projectID, 'server',
+    ['config', 'routes', '1', 'features', 'auth', 'secretRef'], purpose, reference)
+
+  assert.equal(result.status, 'dirty')
+  assert.ok(savedPatch)
+  assert.equal(JSON.stringify(savedPatch).includes(reference), true)
+  await assert.rejects(controller.pluginSelectServiceSecretReference(projectID, 'server',
+    ['config', 'routes', '1', 'features', 'auth', 'unknown'], purpose, reference), /bridge.secret_path_not_declared/u)
+  await assert.rejects(controller.pluginSelectServiceSecretReference(projectID, 'server',
+    ['config', 'routes', '1', 'features', 'auth', 'secretRef'], 'server.http.other', reference), /bridge.secret_path_purpose_mismatch/u)
+  await assert.rejects(controller.pluginSelectServiceSecretReference(projectID, 'server',
+    ['config', 'routes', '1', 'features', 'auth', 'secretRef'], purpose, 'plaintext'), /bridge.secret_schema_path_rejected/u)
+})
+
 await test('StudioPlugin recovery copy is scoped to the open service and exact canonical Project digest', async () => {
   const projectID = 'settings-recovery-project'
   const projectRoot = '/tmp/settings-recovery-project'
