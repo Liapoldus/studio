@@ -1,5 +1,28 @@
 # Liapoldus Studio — TODO
 
+## Server Editor feature patches and local secret-test checkpoint — 2026-10-18
+
+- Reproduced `bridge.patch_path_rejected` when enabling auth on a route without
+  existing `features`: the editor sent the whole newly created `features.auth`
+  object. Studio correctly rejected the parent replacement because its schema
+  contains a protected `secretRef`. Server Editor now emits leaf patches for
+  newly added nested objects; `features.auth.mode` is schema-editable for both
+  existing and appended routes.
+- Server Editor source is local at `plugins/studio-server/` and has no Git
+  remote. Version `0.3.65` validates, all 85 plugin tests pass, `make package`
+  passes the Studio installer inspection test, and the local package digest is
+  `13fc69f134f0da5c7552aac9f30f6502934b7ce2fbae25c603114dded8d8bb3c`. It has
+  not been installed: the current Studio native package picker leaves Open
+  disabled even after selecting a ZIP or ordinary JSON file, so the native
+  package review/trust step was never reached. The installed editor remains
+  `0.3.64`.
+- The approved local synthetic-secret run stopped at that rejected auth patch.
+  No test route was saved or applied. The unused test reference was revoked
+  after the secret manager confirmed it was no longer referenced; the Project
+  still contains only `/echo`, contains no secret reference, and
+  `http://127.0.0.1:19080/echo?text=secret-test-cleanup` still returns the Echo
+  response. Rotation, replica ACK and protected-route HTTP checks remain open.
+
 ## Schema `$ref` sibling reconciliation fix — 2026-10-18
 
 - The remaining Server 1.1.11 Inspector mismatch came from two different
