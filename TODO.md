@@ -24,6 +24,12 @@
   metadata catalog; there are no active references. `/echo?text=goal-recheck`
   returns HTTP 200 and the isolated path returns 404. Rotation, replica ACK and
   protected-route HTTP checks remain open.
+- Revalidated live routing on 2026-10-18: `liapoldus runtime status --target
+  local` reports Core, Echo, and Server containers running; Server publishes
+  `127.0.0.1:19080 -> 9080/tcp` and `127.0.0.1:19081 -> 9081/tcp`. Requests
+  must target `http://127.0.0.1:19080`; there is no listener on port 80. On the
+  published port `/echo?text=goal-revalidate` returns 200 and the isolated
+  route returns 404. These checks changed no Project, runtime, or secret state.
 
 ## Schema `$ref` sibling reconciliation fix — 2026-10-18
 
