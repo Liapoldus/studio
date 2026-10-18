@@ -33,14 +33,19 @@
   state while older markers restore conservatively. Regression tests cover the
   rejected request and the explicit failed-operation retry.
 - `make check` passes (185 frontend tests, Go tests, bindings, lint, vet and
-  build); `make check-race` and `make desktop-build` pass. The new desktop build
-  was not launched because its executable digest differs from the approved
-  live-test binary. Studio source, TODO and this checkpoint still need commit
-  and push.
-- Remaining acceptance: diagnose Core's revision conflict, then repeat the
-  local configuration apply, authenticated request, rotation and exact replica
-  ACK checks. Until then, editor/selection and local vault lifecycle are
-  verified, but the end-to-end runtime secret rotation is not.
+  build); `make check-race` and `make desktop-build` pass. The Studio source and
+  TODO are pushed in `f83951c`. The exact approved macOS/arm64 executable
+  `61de3ba309cc59ec2e9f6a08ee55626127986e7f9e76fa5e8aac623e3f12b081` was
+  launched. Inspector now shows confirmation for the saved Project but does
+  not offer a retry because there is no failed Core operation. The confirmation
+  action was not pressed during this launch check.
+- Current local runtime status is Core running, Echo/Server exited; Core's
+  typed service metadata returns HTTP 503. All three synthetic references are
+  revoked, the temporary route remains removed, and the Project still contains
+  only `/echo`. Core/CLI source now adds typed plan blockers, but the new Core
+  build has not been installed. Diagnose the live cause and repeat the
+  configuration apply, authenticated request, rotation and exact replica ACK
+  checks before claiming end-to-end secret rotation acceptance.
 
 ## Earlier local secret rotation smoke checkpoint (superseded) — 2026-10-18
 
