@@ -1,5 +1,37 @@
 # Liapoldus Studio — TODO
 
+## Server Editor secret picker failure — 2026-10-18
+
+- Reproduced `bridge.secret_path_not_declared` when selecting the active
+  `server.http.auth.credential` reference on the isolated
+  `/__server-secret-rotation-smoke` draft. Project `settings.json` still
+  contains only `/echo`; no secret reference or test route was saved/applied.
+- Root cause: one incompatible field in a Service SDK `configurationUI/v1`
+  descriptor caused Studio to discard the entire descriptor. Server's
+  `features.auth.secretRef` declaration was valid, but unrelated listener and
+  route hints with unsupported schema shapes made the host treat every secret
+  path as undeclared. The parser now skips only invalid hints and retains
+  independently validated fields. Regression test verifies the secret path
+  survives an unrelated incompatible hint.
+- Focused `serviceConfigurationUI.test.mts` passes 15/15. Parsing the live
+  Server 1.1.11 manifest/schema now retains the route secret path and its
+  declared purpose. The fix is not yet included in the running Studio build or
+  verified in WebView.
+- Full `GOWORK=off GOFLAGS=-p=1 make check`, `make check-race`, and
+  `make desktop-build` pass. The new macOS/arm64 executable is
+  `build/bin/Liapoldus Studio.app/Contents/MacOS/studio`, SHA-256
+  `3571989c733abc9556c672842e688b271db3a2d72c0af2f8cdd34e39a57f0e21`.
+- The changed digest requires an action-time confirmation before launching the
+  new app build for the pending local WebView check. Production is out of scope.
+- The Project's stored Server schema currently differs from live schema only
+  in two health-check `path` defaults (`/healthz`), which expand through the
+  route defaults and route feature schema. No settings values need migration;
+  host schema preview must be shown before updating the Project schema pin.
+- A synthetic secret with the Server auth purpose was created in the local OS
+  vault via secure stdin, but remains unselected and unreferenced by Project or
+  runtime. Finish the local-only route/rotation/ACK test, then remove its test
+  route and revoke both temporary references. Production is out of scope.
+
 ## Server Editor feature patches and local secret-test checkpoint — 2026-10-18
 
 - Reproduced `bridge.patch_path_rejected` when enabling auth on a route without

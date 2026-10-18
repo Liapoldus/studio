@@ -249,26 +249,32 @@ export function parseServiceConfigurationUI(manifestJSON: string, schema: Record
     if (!source || source.version !== 'service-configuration-ui/v1' || !Array.isArray(source.groups) || source.groups.length === 0 || source.groups.length > maxGroups) return null
     const resources: ServiceConfigurationResource[] = []
     const resourceById = new Map<string, ServiceConfigurationResource>()
-    if (manifest?.resources !== undefined && !Array.isArray(manifest.resources)) return null
-    const rawResources = Array.isArray(manifest?.resources) ? manifest.resources : []
-    if (rawResources.length > 256) return null
+    const rawResources = Array.isArray(manifest?.resources) && manifest.resources.length <= 256 ? manifest.resources : []
+    const invalidResourceIDs = new Set<string>()
     for (const rawResource of rawResources) {
       const resource = objectValue(rawResource)
-      if (!resource || typeof resource.id !== 'string' || !identifier.test(resource.id) || resourceById.has(resource.id) ||
+      if (!resource || typeof resource.id !== 'string' || !identifier.test(resource.id) || invalidResourceIDs.has(resource.id) ||
           typeof resource.kind !== 'string' || !resourceKinds.has(resource.kind) ||
-          (resource.provider !== 'project' && resource.provider !== 'service-admin')) return null
+          (resource.provider !== 'project' && resource.provider !== 'service-admin')) continue
+      if (resourceById.has(resource.id)) {
+        resourceById.delete(resource.id)
+        invalidResourceIDs.add(resource.id)
+        const duplicateIndex = resources.findIndex((candidate) => candidate.id === resource.id)
+        if (duplicateIndex >= 0) resources.splice(duplicateIndex, 1)
+        continue
+      }
       const parsed: ServiceConfigurationResource = {
         id: resource.id,
         kind: resource.kind as ServiceConfigurationResource['kind'],
         provider: resource.provider,
       }
       if (resource.provider === 'project') {
-        if (resource.pageId !== undefined || resource.queryResource !== undefined || resource.valuePointer !== undefined || resource.labelPointer !== undefined) return null
+        if (resource.pageId !== undefined || resource.queryResource !== undefined || resource.valuePointer !== undefined || resource.labelPointer !== undefined) continue
       } else {
         if (typeof resource.pageId !== 'string' || !identifier.test(resource.pageId) ||
             typeof resource.queryResource !== 'string' || !identifier.test(resource.queryResource) ||
             typeof resource.valuePointer !== 'string' || !safeResourcePointer(resource.valuePointer) ||
-            typeof resource.labelPointer !== 'string' || !safeResourcePointer(resource.labelPointer)) return null
+            typeof resource.labelPointer !== 'string' || !safeResourcePointer(resource.labelPointer)) continue
         parsed.pageId = resource.pageId
         parsed.queryResource = resource.queryResource
         parsed.valuePointer = resource.valuePointer
@@ -279,9 +285,10 @@ export function parseServiceConfigurationUI(manifestJSON: string, schema: Record
     }
     const peerContracts = new Set<string>()
     const secretPurposes = new Set<string>()
-    if (manifest?.secretPurposes !== undefined) {
-      if (!Array.isArray(manifest.secretPurposes) || manifest.secretPurposes.length > 128 || manifest.secretPurposes.some((purpose) => typeof purpose !== 'string' || purpose.length > 192 || !secretPurposePattern.test(purpose))) return null
-      for (const purpose of manifest.secretPurposes) secretPurposes.add(purpose as string)
+    if (Array.isArray(manifest?.secretPurposes) && manifest.secretPurposes.length <= 128) {
+      for (const purpose of manifest.secretPurposes) {
+        if (typeof purpose === 'string' && purpose.length <= 192 && secretPurposePattern.test(purpose)) secretPurposes.add(purpose)
+      }
     }
     if (Array.isArray(manifest?.peerContracts)) {
       for (const value of manifest.peerContracts) {
@@ -295,42 +302,44 @@ export function parseServiceConfigurationUI(manifestJSON: string, schema: Record
     const groups: ServiceConfigurationUIGroup[] = []
     for (const rawGroup of source.groups) {
       const group = objectValue(rawGroup)
-      if (!group || typeof group.id !== 'string' || !identifier.test(group.id) || groupIDs.has(group.id) || !localized(group.title) || !Array.isArray(group.fields) || group.fields.length === 0) return null
-      groupIDs.add(group.id)
+      if (!group || typeof group.id !== 'string' || !identifier.test(group.id) || groupIDs.has(group.id) || !localized(group.title) || !Array.isArray(group.fields) || group.fields.length === 0) continue
       const groupOrder = orderValue(group.order)
-      if (groupOrder === null) return null
+      if (groupOrder === null) continue
+      const description = group.description === undefined ? undefined : localized(group.description)
+      if (group.description !== undefined && !description) continue
       const fields: ServiceConfigurationUIField[] = []
       for (const rawField of group.fields) {
         fieldCount++
         const field = objectValue(rawField)
-        if (fieldCount > maxFields || !field || typeof field.path !== 'string' || !localized(field.label) || typeof field.widget !== 'string' || !widgets.has(field.widget as ServiceConfigurationUIField['widget'])) return null
+        if (fieldCount > maxFields) return null
+        if (!field || typeof field.path !== 'string' || !localized(field.label) || typeof field.widget !== 'string' || !widgets.has(field.widget as ServiceConfigurationUIField['widget'])) continue
         const fieldOrder = orderValue(field.order)
-        if (fieldOrder === null) return null
+        if (fieldOrder === null) continue
         const segments = pointerSegments(field.path)
-        if (!segments || paths.has(field.path)) return null
-        paths.add(field.path)
+        if (!segments || paths.has(field.path)) continue
         const resolved = schemaAtPointer(schema, segments)
         const view = resolved ? effectiveConfigurationSchema(schema, resolved, {}) : null
         const secretPurpose = field.secretPurpose
         const isSecretReference = field.widget === 'secret'
         if (isSecretReference) {
           if (typeof secretPurpose !== 'string' || !secretPurposePattern.test(secretPurpose) || !secretPurposes.has(secretPurpose) ||
-              !resolved || resolved.type !== 'string' || resolved.pattern !== '^ssr:v1:[a-f0-9]{32}$' || !isSensitiveConfigurationFieldName(segments.at(-1) ?? '')) return null
-        } else if (secretPurpose !== undefined || !resolved || sensitiveSchemaNode(resolved, segments.at(-1)) || !widgetMatches(field.widget, view ?? resolved)) return null
+              !resolved || resolved.type !== 'string' || resolved.pattern !== '^ssr:v1:[a-f0-9]{32}$' || !isSensitiveConfigurationFieldName(segments.at(-1) ?? '')) continue
+        } else if (secretPurpose !== undefined || !resolved || sensitiveSchemaNode(resolved, segments.at(-1)) || !widgetMatches(field.widget, view ?? resolved)) continue
         const help = field.help === undefined ? undefined : localized(field.help)
         const unit = field.unit === undefined ? undefined : localized(field.unit)
-        if ((field.help !== undefined && !help) || (field.unit !== undefined && !unit)) return null
+        if ((field.help !== undefined && !help) || (field.unit !== undefined && !unit)) continue
         const resourceKind = field.resourceKind
         const resourceId = field.resourceId
         const peerContractId = field.peerContractId
         if (field.widget === 'resource') {
           const resource = typeof resourceId === 'string' ? resourceById.get(resourceId) : undefined
-          if (typeof resourceKind !== 'string' || !resourceKinds.has(resourceKind) || !resource || resource.kind !== resourceKind || peerContractId !== undefined) return null
+          if (typeof resourceKind !== 'string' || !resourceKinds.has(resourceKind) || !resource || resource.kind !== resourceKind || peerContractId !== undefined) continue
         } else if (field.widget === 'peer') {
-          if (typeof peerContractId !== 'string' || !identifier.test(peerContractId) || !peerContracts.has(peerContractId) || resourceKind !== undefined || resourceId !== undefined) return null
+          if (typeof peerContractId !== 'string' || !identifier.test(peerContractId) || !peerContracts.has(peerContractId) || resourceKind !== undefined || resourceId !== undefined) continue
         } else if (field.widget === 'secret') {
-          if (resourceKind !== undefined || resourceId !== undefined || peerContractId !== undefined) return null
-        } else if (resourceKind !== undefined || resourceId !== undefined || peerContractId !== undefined) return null
+          if (resourceKind !== undefined || resourceId !== undefined || peerContractId !== undefined) continue
+        } else if (resourceKind !== undefined || resourceId !== undefined || peerContractId !== undefined) continue
+        paths.add(field.path)
         fields.push({
           path: field.path,
           segments,
@@ -345,8 +354,8 @@ export function parseServiceConfigurationUI(manifestJSON: string, schema: Record
           order: fieldOrder,
         })
       }
-      const description = group.description === undefined ? undefined : localized(group.description)
-      if (group.description !== undefined && !description) return null
+      if (fields.length === 0) continue
+      groupIDs.add(group.id)
       groups.push({
         id: group.id,
         title: localized(group.title) as LocalizedConfigurationText,
@@ -355,6 +364,7 @@ export function parseServiceConfigurationUI(manifestJSON: string, schema: Record
         fields,
       })
     }
+    if (groups.length === 0) return null
     groups.sort((left, right) => left.order - right.order || left.id.localeCompare(right.id))
     for (const group of groups) group.fields.sort((left, right) => left.order - right.order || left.path.localeCompare(right.path))
     return { version: 'service-configuration-ui/v1', groups, resources }

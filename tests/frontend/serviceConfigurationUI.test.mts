@@ -41,6 +41,30 @@ await test('accepts SDK configuration UI metadata only when paths and widgets ma
   assert.deepEqual(group.fields[1]?.segments, ['port'])
 })
 
+await test('keeps valid secret paths when an unrelated UI hint is incompatible', () => {
+  const purpose = 'server.http.auth.credential'
+  const secretReference = {
+    type: 'string', pattern: '^ssr:v1:[a-f0-9]{32}$',
+    'x-liapoldus-secret-reference': true, 'x-studio-secret-purpose': purpose,
+  }
+  const secretSchema = {
+    type: 'object',
+    properties: { auth: { type: 'object', properties: { secretRef: secretReference } }, port: { type: 'integer' } },
+  }
+  const document = JSON.parse(manifest({ version: 'service-configuration-ui/v1', groups: [{
+    id: 'auth', title: { ru: 'Аутентификация', en: 'Authentication' }, order: 1,
+    fields: [
+      { path: '/auth/secretRef', label: { ru: 'Секрет', en: 'Secret' }, widget: 'secret', secretPurpose: purpose, order: 1 },
+      { path: '/port', label: { ru: 'Порт', en: 'Port' }, widget: 'text', order: 2 },
+    ],
+  }] })) as Record<string, unknown>
+  document.secretPurposes = [purpose]
+
+  const parsed = parseServiceConfigurationUI(JSON.stringify(document), secretSchema)
+  assert.deepEqual(parsed?.groups[0]?.fields.map((field) => field.path), ['/auth/secretRef'])
+  assert.equal(matchServiceConfigurationUIField(parsed, ['auth', 'secretRef'])?.secretPurpose, purpose)
+})
+
 await test('fails closed on bad versions, unknown paths, sensitive fields and incompatible widgets', () => {
   const group = (path: string, widget = 'text') => ({ version: 'service-configuration-ui/v1', groups: [{ id: 'g', title: { ru: 'Параметры', en: 'Settings' }, fields: [{ path, label: { ru: 'Поле', en: 'Field' }, widget }] }] })
   assert.equal(parseServiceConfigurationUI(manifest({ version: 'future/v9', groups: [] }), schema), null)
