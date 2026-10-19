@@ -219,6 +219,8 @@ await test('Wails preparation accepts only the complete current model schema', (
   export class RuntimeService {`)
     .replace('    configured: boolean;\n    constructor(source: any = {}) {}\n  }', '    configured: boolean;\n    artifact?: ServiceArtifactReference;\n    constructor(source: any = {}) {}\n  }')
   assert.equal(prepareModels(current), modelModule)
+  assert.equal(prepareModels(current.replace(/\n/gu, '\r\n')), modelModule,
+    'Windows CRLF output must match the same canonical Wails model schema')
   assert.throws(() => prepareModels(current.replace('importedAt: string;', 'importedAt: number;')))
   assert.throws(() => prepareModels(current.replace('schema?: string;', 'schema?: number;')))
 })
