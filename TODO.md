@@ -2923,3 +2923,6 @@ content.
   на generation 99; временная запись 1.1.13 удалена из локального каталога.
   Core остался на ранее одобренном бинарнике. Smoke не закрывает отдельный
   action-time gate для нового Core candidate или Server 1.1.14.
+- Повторный UI/controller suite прошёл 8/8: из `studio/frontend` выполнен
+  `/Users/docup/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node
+  ./node_modules/tsx/dist/cli.mjs --test ../tests/frontend/serviceSecrets.test.mts`.
