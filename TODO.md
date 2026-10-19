@@ -1,14 +1,14 @@
 # Liapoldus Studio — TODO
 
-## Local secret rotation smoke — current checkpoint — 2026-10-19
+## Server Editor and local secret flow — current checkpoint — 2026-10-19
 
 - Current Project is `/Users/docup/Projects/Liapoldus Engine/server-echo-studio`,
   target `local`. Core remains on the approved digest
   `df625da7910770c082db1364c0f9f0d149a15d487383af4a43e8aa8fb7607420`;
   Project pins Server 1.1.12
   (`sha256:0847f0cbf5348e2ce9083d6952c1e56628861ffa189f7e4d7b2a54f52179c91d`).
-  Server is ready and acknowledged at generation 99. Project settings contain
-  only `/echo`; the read-only plan is valid at digest
+  Server 1.1.12 and Echo 1.2.2 are ready and acknowledged at generation 105.
+  Project settings contain only `/echo`; the read-only plan is valid at digest
   `87b525b36aa9abf77a4b81623ec614dabbe6a97b472b38dee8d1f1b5ecdcdc02`.
 - In the installed/trusted Server Editor 0.3.65 WebView, the agent completed
   the host-owned secret create/select/rotate flow. Studio showed the redacted
@@ -16,7 +16,7 @@
   configuration was acknowledged at generation 98; valid Bearer returned 200,
   missing/invalid Bearer returned 401. The route was removed, generation 99
   acknowledged, `/echo?text=final-check` returned 200, and the temporary path
-  returned 404. Secret catalog now has 0 active, 7 revoked, 0 pending
+  returned 404. Secret catalog now has 0 active, 11 revoked, 0 pending
   registrations and 0 pending rotations. No secret value entered the plugin,
   Project, Core SQLite, output or logs.
 - macOS inspection of 0.3.65 found that the Defaults section displayed
@@ -34,19 +34,25 @@
   disclosure does not patch Project data. Focused endpoint-editor tests pass,
   including static-route cache/compression defaults and value preservation;
   `make package` passes all 87 plugin tests and Studio package inspection.
-  Package digest is `b23d57d32f888a8cca35c4017c039ca49c30cbd30e04ee01f33f5b1ed3646345`;
-  it is not installed/trusted, so this UI has not yet been checked in the
-  actual Studio WebView.
+  Package digest is `b23d57d32f888a8cca35c4017c039ca49c30cbd30e04ee01f33f5b1ed3646345`.
+  After the user's exact-digest approval, Studio Settings confirmed this package
+  is installed and trusted with its declared scoped permissions. Package tests
+  and installer inspection pass; a full service-editor WebView review of the
+  0.3.67 disclosures remains open.
 - The temporary Server 1.1.13 was used only for this diagnostic smoke and then
   removed from the CLI artifact registry; the 1.1.12 pin/runtime was restored.
   This demonstrates one local replica on the existing Core, not acceptance of
-  the new Core 43b7acc / Server 1.1.14 candidates. Exact action-time approval
-  remains pending for their digests. Existing `.studio` recovery files and
-  unrelated Project WIP remain untouched; production is out of scope.
-- Studio Editor 0.3.65 is installed/trusted. The newer Studio host executable
+  the new Core 43b7acc / Server 1.1.14 candidates. Server 1.1.14's exact
+  Linux/arm64 digest `c94d2104b766228b683313b533fdc52ffa9bec1b3b8c3edca0e1bd7ae48e5ba4`
+  is awaiting separate local action-time approval. The current 1.1.12 Admin
+  Surface descriptor loads, but table/catalog responses fail validation; the
+  empty-catalog fix in 1.1.14 remains unverified in live Studio. Existing
+  `.studio` recovery files and unrelated Project WIP remain untouched;
+  production is out of scope.
+- The earlier 0.3.65 WebView smoke remains valid evidence for the secret flow;
+  0.3.67 is the installed/trusted package. The newer Studio host executable
   `d7d5f39488ae26f03ae907f82801e51c3857491226bbf0cc760fe82f3fd5f58e` passes
-  source gates but has not been launched; it is not needed to describe the
-  successful 0.3.65 WebView smoke.
+  source gates but has not been launched.
 - Source gates for the candidate-generation validation changes in SDK, Core,
   Server and consumers are published. Cross-replica timeout/restart recovery,
   hosted cross-platform gates, and acceptance on the latest Core/Server exact

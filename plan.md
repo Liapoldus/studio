@@ -349,9 +349,20 @@ confirmed apply. The one local replica acknowledged generation 98, valid
 Bearer returned 200, and missing/invalid credentials returned 401. After the
 route was removed, generation 99 was acknowledged; the existing `/echo` route
 remained healthy. The temporary references were revoked only after removal and
-ACK. Current Project/runtime is restored to Server 1.1.12 at generation 99,
-with only `/echo`, zero active synthetic references and seven revoked ones.
-No secret value entered the plugin, Project, Core SQLite, output or logs.
+ACK. Current Project still contains only `/echo`; Server and Echo are ready at
+generation 105 on Server 1.1.12, with zero active and eleven revoked synthetic
+references. No secret value entered the plugin, Project, Core SQLite, output or
+logs.
+
+Server Editor 0.3.67 is installed and trusted in Studio at the explicitly
+approved package digest `b23d57d32f888a8cca35c4017c039ca49c30cbd30e04ee01f33f5b1ed3646345`.
+Its package tests and installer inspection pass; full WebView review of the new
+feature disclosures remains open. The live Server 1.1.12 Admin Surface
+descriptor loads, but its table and resource-catalog responses fail validation.
+Server 1.1.14 contains the empty-catalog serialization fix, but its exact
+Linux/arm64 binary digest `c94d2104b766228b683313b533fdc52ffa9bec1b3b8c3edca0e1bd7ae48e5ba4`
+has not been installed pending separate local action approval. Existing
+`.studio` recovery files and unrelated Project WIP remain untouched.
 
 This live result covers one replica on the existing local Core. Multi-replica
 ACK/timeout/restart recovery, hosted cross-platform acceptance, and acceptance
