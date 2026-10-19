@@ -11,7 +11,7 @@
     "bindings:check": "tsx ../scripts/bindings/check.mts",
     "desktop:build": "tsx ../scripts/desktop/build.mts",
     "test": "tsx --test ../tests/**/*.test.mts",
-    "lint": "cd .. && frontend/node_modules/.bin/eslint --config frontend/eslint.config.mjs \"frontend/**/*.ts\" \"frontend/**/*.tsx\" \"frontend/*.mjs\" \"scripts/**/*.{js,mjs,ts,mts}\" \"tests/**/*.{js,mjs,ts,mts}\" --max-warnings 0",
+    "lint": "cd .. && eslint --config frontend/eslint.config.mjs \"frontend/**/*.ts\" \"frontend/**/*.tsx\" \"frontend/*.mjs\" \"scripts/**/*.{js,mjs,ts,mts}\" \"tests/**/*.{js,mjs,ts,mts}\" --max-warnings 0",
     "dev": "vite",
     "dev:wails": "npm run bindings:prepare && npm run dev",
     "build": "tsc && vite build",

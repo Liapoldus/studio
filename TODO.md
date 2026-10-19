@@ -2956,4 +2956,7 @@ content.
   generation then exposed byte-wise comparison of bindings with platform line
   endings. Snapshot hashing now normalizes CRLF and CR to LF, with regression
   coverage for mixed endings. The local full check, race suite and Windows
-  cross-build pass; hosted verification after this fix is pending.
+  cross-build pass. Hosted Windows then found the lint script hard-coded a
+  Unix `.bin/eslint` path; it now resolves `eslint` through npm's PATH. The
+  local full check, race suite and Windows cross-build pass after this change;
+  hosted verification is pending.
