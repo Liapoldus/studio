@@ -37,8 +37,15 @@
   Package digest is `b23d57d32f888a8cca35c4017c039ca49c30cbd30e04ee01f33f5b1ed3646345`.
   After the user's exact-digest approval, Studio Settings confirmed this package
   is installed and trusted with its declared scoped permissions. Package tests
-  and installer inspection pass; a full service-editor WebView review of the
-  0.3.67 disclosures remains open.
+  and installer inspection pass. Its live WebView renders the route list and
+  route detail; opening a feature disclosure leaves Save disabled. Inspection
+  found the Defaults page displayed every route-type form together with
+  repeated headings, making their scope unclear.
+- Server Editor 0.3.68 adds a route-type picker to Defaults and renders only the
+  selected type. Switching types does not patch Project. Its package passes
+  87/87 tests, Studio installer inspection and ZIP integrity; SHA-256 is
+  `a56a26d4ca5144526e7546974de27e973fa0693e20012d06716afe2f8d33f929`.
+  Installation and live WebView verification await exact-digest approval.
 - The temporary Server 1.1.13 was used only for this diagnostic smoke and then
   removed from the CLI artifact registry; the 1.1.12 pin/runtime was restored.
   This demonstrates one local replica on the existing Core, not acceptance of

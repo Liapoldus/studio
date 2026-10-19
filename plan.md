@@ -356,8 +356,14 @@ logs.
 
 Server Editor 0.3.67 is installed and trusted in Studio at the explicitly
 approved package digest `b23d57d32f888a8cca35c4017c039ca49c30cbd30e04ee01f33f5b1ed3646345`.
-Its package tests and installer inspection pass; full WebView review of the new
-feature disclosures remains open. The live Server 1.1.12 Admin Surface
+Its package tests and installer inspection pass. Live WebView inspection
+confirmed the route list, route detail, and a feature disclosure that opens
+without dirtying Project. It also exposed that the Defaults section displayed
+all route-type forms together with repeated headings. Server Editor 0.3.68
+introduces a route-type picker and renders one type at a time. Its package
+passes 87/87 tests, Studio installer inspection and ZIP integrity; digest
+`a56a26d4ca5144526e7546974de27e973fa0693e20012d06716afe2f8d33f929` awaits
+exact-digest installation approval and WebView validation. The live Server 1.1.12 Admin Surface
 descriptor loads, but its table and resource-catalog responses fail validation.
 Server 1.1.14 contains the empty-catalog serialization fix, but its exact
 Linux/arm64 binary digest `c94d2104b766228b683313b533fdc52ffa9bec1b3b8c3edca0e1bd7ae48e5ba4`
