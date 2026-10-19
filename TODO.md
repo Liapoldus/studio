@@ -26,7 +26,7 @@
   Advanced settings. `make package` passes 86 tests and Studio installer
   inspection. Its package digest is
   `e496e8650e9439bbbb86218290b484206b8b5eff071dbfafc59cb0caaae157f0`;
-  it is not installed or trusted pending exact native Studio confirmation.
+  it is not installed or trusted and is superseded by the 0.3.67 UI candidate.
 - Review of the route detail showed all HTTP feature options expanded at once.
   Server Editor 0.3.67 packages a compact disclosure for each feature while
   keeping its enable/inherit control visible; enabled features open their
