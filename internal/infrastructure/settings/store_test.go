@@ -425,6 +425,104 @@ func TestOpaqueSecretReferenceCanBePatchedThroughConditionalProtectedArray(t *te
 	}
 }
 
+func TestOpaqueSecretReferenceSurvivesRefsInProtectedRouteArrayUnion(t *testing.T) {
+	root := t.TempDir()
+	files := projectfiles.FileSystem{}
+	write := func(path, content string) {
+		t.Helper()
+		if err := files.WriteFile(context.Background(), root, path, []byte(content)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("settings.json", `{"config":{"routes":[]}}`)
+	write("schema.json", `{
+	  "$defs": {
+	    "secretReference": {
+	      "type": "string",
+	      "pattern": "^ssr:v1:[a-f0-9]{32}$",
+	      "x-liapoldus-secret-reference": true,
+	      "x-studio-secret-purpose": "server.http.auth.credential"
+	    },
+	    "authEnabled": {
+	      "type": "object",
+	      "additionalProperties": false,
+	      "properties": {
+	        "mode": {"const": "enabled", "type": "string"},
+	        "scheme": {"const": "bearer", "type": "string"},
+	        "secretRef": {"oneOf": [{"$ref": "#/$defs/secretReference"}]}
+	      },
+	      "required": ["mode", "scheme", "secretRef"]
+	    },
+	    "authDisabled": {
+	      "type": "object",
+	      "additionalProperties": false,
+	      "properties": {"mode": {"const": "disabled", "type": "string"}},
+	      "required": ["mode"]
+	    },
+	    "auth": {"oneOf": [{"$ref": "#/$defs/authDisabled"}, {"$ref": "#/$defs/authEnabled"}]},
+	    "routeFeatures": {
+	      "type": "object",
+	      "additionalProperties": false,
+	      "properties": {"auth": {"$ref": "#/$defs/auth"}}
+	    },
+	    "route": {
+	      "type": "object",
+	      "additionalProperties": false,
+	      "properties": {
+	        "id": {"type": "string"},
+	        "features": {"$ref": "#/$defs/routeFeatures"},
+	        "handler": {"oneOf": [
+	          {"type": "object", "additionalProperties": false, "properties": {"type": {"const": "service"}, "instanceId": {"type": "string"}}},
+	          {"type": "object", "additionalProperties": false, "properties": {"type": {"const": "static"}, "siteId": {"type": "string"}}}
+	        ]}
+	      }
+	    }
+	  },
+	  "type": "object",
+	  "properties": {"config": {"type": "object", "properties": {"routes": {"type": "array", "items": {"$ref": "#/$defs/route"}}}}}
+	}`)
+	store := Store{Files: files}
+	const reference = "ssr:v1:00112233445566778899aabbccddeeff"
+	patch := []byte(`{"config":{"routes":{"$studioArrayOps/v1":[` +
+		`{"op":"insert","index":0,"value":{"id":"test-route","handler":{"type":"service","instanceId":"echo"},"features":{"auth":{"mode":"enabled","scheme":"bearer"}}}},` +
+		`{"op":"set","index":0,"patch":{"features":{"auth":{"mode":"enabled","scheme":"bearer","secretRef":"` + reference + `"}}}}]}}}`)
+	if err := store.ValidatePatch(context.Background(), root, "settings.json", "schema.json", patch); err != nil {
+		t.Fatalf("declared opaque reference should survive $ref/oneOf validation in a protected route array: %v", err)
+	}
+	snapshot, err := store.Snapshot(context.Background(), root, "settings.json", "schema.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = store.UpdateProjectCandidateIfDigest(context.Background(), root, "settings.json", "schema.json", snapshot.Digest, patch)
+	if err != nil {
+		t.Fatalf("declared opaque reference should survive mergeSafe in a protected route array: %v", err)
+	}
+	saved, err := files.ReadFile(context.Background(), root, "settings.json")
+	if err != nil || !strings.Contains(string(saved), reference) {
+		t.Fatalf("schema-approved opaque reference was not persisted in the candidate: %s err=%v", saved, err)
+	}
+	unsafe := []byte(`{"config":{"routes":{"$studioArrayOps/v1":[{"op":"set","index":0,"patch":{"features":{"auth":{"mode":"enabled","scheme":"bearer","secretRef":"plaintext"}}}}]}}}`)
+	if err := store.ValidatePatch(context.Background(), root, "settings.json", "schema.json", unsafe); !errors.Is(err, ErrSensitiveField) {
+		t.Fatalf("plaintext secret in a protected-array union should be rejected, got %v", err)
+	}
+}
+
+func TestSecretReferenceCompositionRequiresTrustedAlternativeSchemas(t *testing.T) {
+	var secure map[string]any
+	if err := json.Unmarshal([]byte(`{"type":"string","pattern":"^ssr:v1:[a-f0-9]{32}$","x-liapoldus-secret-reference":true,"x-studio-secret-purpose":"server.http.auth"}`), &secure); err != nil {
+		t.Fatal(err)
+	}
+	if !validSecretReferenceSchema(map[string]any{"oneOf": []any{secure}}, "secretRef") {
+		t.Fatal("a oneOf wrapper around an explicitly declared opaque reference should remain trusted")
+	}
+	if !validSecretReferenceSchema(map[string]any{"allOf": []any{secure, map[string]any{"minLength": float64(39)}}}, "secretRef") {
+		t.Fatal("allOf constraints should preserve an explicitly declared opaque reference")
+	}
+	if validSecretReferenceSchema(map[string]any{"oneOf": []any{secure, map[string]any{"type": "string"}}}, "secretRef") {
+		t.Fatal("an unmarked alternative must not inherit the opaque-reference trust annotation")
+	}
+}
+
 func TestSnapshotConfigurationDigestMatchesCLIEncodingWithoutExposingSecrets(t *testing.T) {
 	root := t.TempDir()
 	files := projectfiles.FileSystem{}

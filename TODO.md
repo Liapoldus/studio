@@ -3008,3 +3008,31 @@ content.
   is prepared as the next diagnostic step; it has not been installed or run
   because exact action-time approval for this digest is still outstanding.
   Project configuration, runtime pins and secret values were not changed.
+
+### Protected route secret references through schema composition — 2026-10-19
+
+- Reproduced the rejection with a protected `config.routes` array: the route
+  item, auth variant and secret-reference schema use nested local `$ref`s, with
+  `secretRef` wrapped in `oneOf`. `$ref` resolution was working; composition
+  wrappers remain by design. `validSecretReferenceSchema` only inspected the
+  wrapper's top-level fields, so the `secretRef` name heuristic marked the value
+  sensitive while its valid reference annotation appeared below `oneOf`.
+- The first rejection was `validatePatchSafety`'s property guard, before
+  `mergeSafe`; `mergeSafe` used the same top-level-only reference check. The
+  common schema-aware reference check now traverses `allOf`/`anyOf`/`oneOf`,
+  requires the trusted marker, canonical reference pattern and valid purpose,
+  and validates the value against the complete composed schema. Plaintext,
+  malformed references and unmarked alternatives still fail closed.
+- Added a regression that validates and persists an opaque reference through a
+  route-array insert/set sequence, plus checks for plaintext rejection and
+  untrusted union alternatives. `make check`, `make check-race`, and
+  `make desktop-build` pass. Homebrew Node on this machine is missing its
+  linked `libllhttp.9.4.dylib`; checks passed using the bundled Node 24 runtime.
+- Built the macOS/arm64 Studio candidate from the working tree based on
+  source commit `a9cbbe0`; executable
+  SHA-256 is `15e62dae28ae0fadc8af89d956d87db972ab8dadcd2670234f6888b637ac49cf`.
+  Launch is pending exact-digest approval. A consistent SQLite backup is at
+  `~/Library/Application Support/Liapoldus/Studio/client.sqlite.before-secretref-oneof-20261019.sqlite`.
+  The existing unsaved temporary route remains without `secretRef`; no
+  Project/runtime configuration or secret references were changed in this
+  stage.

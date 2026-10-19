@@ -1763,18 +1763,91 @@ func validOpaqueSecretReference(value any, schema any, propertyName string) bool
 			return false
 		}
 	}
-	return true
+	return validateValue(value, schema, "$secretRef") == nil
 }
 
 func validSecretReferenceSchema(schema any, propertyName string) bool {
-	object, ok := schema.(map[string]any)
-	if !ok || propertyName == "" || !isSensitive(nil, propertyName) {
+	if propertyName == "" || !isSensitive(nil, propertyName) {
 		return false
 	}
-	pattern, patternOK := object["pattern"].(string)
-	purpose, purposeOK := object["x-studio-secret-purpose"].(string)
-	return object["type"] == "string" && patternOK && pattern == `^ssr:v1:[a-f0-9]{32}$` &&
-		object["x-liapoldus-secret-reference"] == true && purposeOK && validSecretPurposeMetadata(purpose)
+	_, found, valid := inspectSecretReferenceSchema(schema, 0)
+	return found && valid
+}
+
+// inspectSecretReferenceSchema carries the trusted secret-reference marker
+// through schema composition. Local $ref values have already been expanded by
+// schemaResolver, while oneOf/anyOf/allOf wrappers intentionally remain.
+// Alternatives must each declare the same opaque-reference policy unless an
+// enclosing schema already applies that policy to the whole value. allOf
+// siblings may add ordinary constraints because they intersect with the
+// marked reference schema; validateOpaqueSecretReference separately validates
+// the value against the complete schema.
+func inspectSecretReferenceSchema(schema any, depth int) (string, bool, bool) {
+	if depth > 64 {
+		return "", false, false
+	}
+	object, ok := schema.(map[string]any)
+	if !ok {
+		return "", false, false
+	}
+
+	purpose := ""
+	found := false
+	marker, markerExists := object["x-liapoldus-secret-reference"]
+	if markerExists {
+		pattern, patternOK := object["pattern"].(string)
+		purposeValue, purposeOK := object["x-studio-secret-purpose"].(string)
+		if marker != true || object["type"] != "string" || !patternOK || pattern != `^ssr:v1:[a-f0-9]{32}$` ||
+			!purposeOK || !validSecretPurposeMetadata(purposeValue) {
+			return "", false, false
+		}
+		purpose, found = purposeValue, true
+	}
+
+	allOfBranches, exists := object["allOf"]
+	if exists {
+		branches, err := schemaBranches(allOfBranches)
+		if err != nil {
+			return "", false, false
+		}
+		for _, branch := range branches {
+			branchPurpose, branchFound, branchValid := inspectSecretReferenceSchema(branch, depth+1)
+			if !branchValid || (branchFound && found && branchPurpose != purpose) {
+				return "", false, false
+			}
+			if branchFound && !found {
+				purpose, found = branchPurpose, true
+			}
+		}
+	}
+
+	for _, keyword := range []string{"anyOf", "oneOf"} {
+		branchesValue, exists := object[keyword]
+		if !exists {
+			continue
+		}
+		branches, err := schemaBranches(branchesValue)
+		if err != nil {
+			return "", false, false
+		}
+		branchPurpose := ""
+		for _, branch := range branches {
+			candidatePurpose, candidateFound, candidateValid := inspectSecretReferenceSchema(branch, depth+1)
+			if !candidateValid || (!found && !candidateFound) || (candidateFound && branchPurpose != "" && candidatePurpose != branchPurpose) {
+				return "", false, false
+			}
+			if candidateFound {
+				branchPurpose = candidatePurpose
+			}
+		}
+		if branchPurpose != "" {
+			if found && purpose != branchPurpose {
+				return "", false, false
+			}
+			purpose, found = branchPurpose, true
+		}
+	}
+	return purpose, found, true
 }
 
 func validSecretPurposeMetadata(value string) bool {
