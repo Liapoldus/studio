@@ -2,51 +2,37 @@
 
 ## Local secret rotation smoke — current checkpoint — 2026-10-19
 
-- The current project is `/Users/docup/Projects/Liapoldus Engine/server-echo-studio`.
-  Read-only typed `dev plan` is valid at Echo/Server revision 96; the local
-  runtime reports Core, Echo and Server running, and Server 1.1.12 ready at
-  generation 96. Core is still on the previously installed digest
-  `df625da7910770c082db1364c0f9f0d149a15d487383af4a43e8aa8fb7607420`.
-- Project settings contain the existing `/echo` route plus the temporary
-  `/__codex_auth_smoke_20261019` route, which references one active opaque
-  Server secret. Core lists two active and three revoked synthetic references;
-  there are no pending registrations or rotations. The reference is active,
-  and no secret value or opaque reference was printed.
-- The open Studio window shows Server Editor 0.3.65. It lists both routes, and
-  the auth editor loads and selects the active opaque reference after its
-  asynchronous catalog read completes. The earlier one-route view was stale;
-  a fresh Project open displays the saved test route. The Secrets settings
-  helper incorrectly said rotation was already staged when the catalog had no
-  pending rotations; its copy now describes the safe rotation process without
-  claiming a staged operation.
-- A fresh read-only check still shows `/echo` returning HTTP 200 and the
-  temporary auth route returning HTTP 404; the saved Project candidate is not
-  active. The earlier apply returned a generic Core HTTP 409, and a safe log
-  filter found `grantDenied`, so scoped secret delivery and runtime auth remain
-  unverified. No raw log lines or secret values were emitted.
-- The misleading rotation helper copy is corrected. `make check`,
-  `make check-race` and `make desktop-build` pass using the bundled Node
-  runtime; the new macOS/arm64 Studio executable is
-  `d7d5f39488ae26f03ae907f82801e51c3857491226bbf0cc760fe82f3fd5f58e`.
-  It has not been launched because its digest is new and the next live runtime
-  acceptance still depends on the pending Core/Server local artifact gate.
-- Server source now fixes empty Admin Surface inventory arrays and all-site
-  release pagination. Candidate-generation scoped validation fixes are
-  published in SDK, Core, Server and service consumers. The latest Core
-  candidate is `43b7acc` / SHA-256
-  `5ccf6e176dd9784b4deccb5c033653646b253f66a716ebf0032b27c9c2ee7af8`; the
-  Server 1.1.14 candidate is SHA-256
-  `be991dab5b250461963ef46ad713fdbb3b1f2322915376c0ec0519623998a74e`.
-  Exact action-time approval for these digests is pending. The earlier approved
-  Server 1.1.13 candidate is superseded and won't be used for acceptance.
-  Production is out of scope. Existing `.studio` recovery files remain
-  untouched.
-- SDK, Core, Server and mechanical service consumers now implement
-  candidate-generation scoped validation. Their owner checks and commits are
-  published. New Core/Server binaries are built and verified, but their exact
-  digests still need local action approval before install or run. Production is
-  out of scope. Existing Project WIP and `.studio` recovery files remain
-  untouched.
+- Current Project is `/Users/docup/Projects/Liapoldus Engine/server-echo-studio`,
+  target `local`. Core remains on the approved digest
+  `df625da7910770c082db1364c0f9f0d149a15d487383af4a43e8aa8fb7607420`;
+  Project pins Server 1.1.12
+  (`sha256:0847f0cbf5348e2ce9083d6952c1e56628861ffa189f7e4d7b2a54f52179c91d`).
+  Server is ready and acknowledged at generation 99. Project settings contain
+  only `/echo`; the read-only plan is valid at digest
+  `87b525b36aa9abf77a4b81623ec614dabbe6a97b472b38dee8d1f1b5ecdcdc02`.
+- In the installed/trusted Server Editor 0.3.65 WebView, the agent completed
+  the host-owned secret create/select/rotate flow. Studio showed the redacted
+  security-sensitive Project diff and confirmed apply. The diagnostic auth
+  configuration was acknowledged at generation 98; valid Bearer returned 200,
+  missing/invalid Bearer returned 401. The route was removed, generation 99
+  acknowledged, `/echo?text=final-check` returned 200, and the temporary path
+  returned 404. Secret catalog now has 0 active, 7 revoked, 0 pending
+  registrations and 0 pending rotations. No secret value entered the plugin,
+  Project, Core SQLite, output or logs.
+- The temporary Server 1.1.13 was used only for this diagnostic smoke and then
+  removed from the CLI artifact registry; the 1.1.12 pin/runtime was restored.
+  This demonstrates one local replica on the existing Core, not acceptance of
+  the new Core 43b7acc / Server 1.1.14 candidates. Exact action-time approval
+  remains pending for their digests. Existing `.studio` recovery files and
+  unrelated Project WIP remain untouched; production is out of scope.
+- Studio Editor 0.3.65 is installed/trusted. The newer Studio host executable
+  `d7d5f39488ae26f03ae907f82801e51c3857491226bbf0cc760fe82f3fd5f58e` passes
+  source gates but has not been launched; it is not needed to describe the
+  successful 0.3.65 WebView smoke.
+- Source gates for the candidate-generation validation changes in SDK, Core,
+  Server and consumers are published. Cross-replica timeout/restart recovery,
+  hosted cross-platform gates, and acceptance on the latest Core/Server exact
+  artifacts remain open.
 
 ## Local secret rotation smoke — superseded checkpoint — 2026-10-18 (updated)
 

@@ -340,22 +340,28 @@ references and Project resources. The owner contract is:
   Core keeps the previous reference active and the replacement available for
   retry; automatic expiry or revocation is never inferred.
 
-As of the 2026-10-18 implementation checkpoint, the local path now includes
-Core's metadata-only catalog and scoped grants, SDK-declared purposes, CLI OS
-vault and project-scoped runtime materialization, Studio's host-owned local
-manager, and the Server Editor's contextual opaque-reference picker. The value
-is entered in Studio's host view, sent only through the typed CLI secret-input
-channel, and cleared from the host input after the operation. The sandboxed
-plugin receives only its declared service/purpose-filtered reference metadata
-and selected opaque reference. Remote targets and unattended rotation remain
-unavailable.
-These source-level flows are covered by owner tests; live macOS WebView,
-multi-replica Core/Server rotation recovery and hosted cross-platform checks
-remain release gates. Do not infer a catalog from filesystem paths, enumerate
-secret directories, expose grant handles through an Admin Surface, put secret
-material in Project, or pass secret bytes through the renderer. Server
-`certificateRef`, `privateKeyRef`, upstream CA and HTTP-auth references are
-opaque Core service-secret IDs, not Project file resources.
+The 2026-10-19 local acceptance completed the secret path through Studio's
+host-owned WebView input, CLI's typed secure channel and OS vault, Core's
+metadata-only catalog and scoped grants, SDK generation-scoped validation, and
+Server's candidate apply. Server Editor 0.3.65 selected an opaque reference for
+a temporary auth route; Studio showed the redacted security-sensitive diff and
+confirmed apply. The one local replica acknowledged generation 98, valid
+Bearer returned 200, and missing/invalid credentials returned 401. After the
+route was removed, generation 99 was acknowledged; the existing `/echo` route
+remained healthy. The temporary references were revoked only after removal and
+ACK. Current Project/runtime is restored to Server 1.1.12 at generation 99,
+with only `/echo`, zero active synthetic references and seven revoked ones.
+No secret value entered the plugin, Project, Core SQLite, output or logs.
+
+This live result covers one replica on the existing local Core. Multi-replica
+ACK/timeout/restart recovery, hosted cross-platform acceptance, and acceptance
+on the newer Core 43b7acc / Server 1.1.14 exact artifacts remain open. Remote
+targets and unattended rotation remain unavailable. Do not infer a catalog
+from filesystem paths, enumerate secret directories, expose grant handles
+through an Admin Surface, put secret material in Project, or pass secret bytes
+through the renderer. Server `certificateRef`, `privateKeyRef`, upstream CA
+and HTTP-auth references are opaque Core service-secret IDs, not Project file
+resources.
 
 `environments/<target>.yaml` — только non-secret target profile: target ID,
 тип/locality, безопасные CLI-owned references и display metadata. Это не файл
