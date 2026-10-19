@@ -3036,3 +3036,41 @@ content.
   The existing unsaved temporary route remains without `secretRef`; no
   Project/runtime configuration or secret references were changed in this
   stage.
+
+### Local secret-ref smoke completion — 2026-10-19
+
+- Launched the approved Studio build from source commit `75d1cf6` at executable
+  SHA-256 `15e62dae28ae0fadc8af89d956d87db972ab8dadcd2670234f6888b637ac49cf`.
+  Selecting the staged replacement reference in Server Editor succeeded, the
+  Project save retained the opaque value, and Inspector displayed the redacted
+  security-sensitive diff before local apply.
+- The first apply was blocked by a persisted failed-operation recovery marker.
+  Its prior Core report contained only `service_config_invalid`; active config
+  remained generation 109. After inspecting that report and explicitly clearing
+  the failed recovery through `--retry-failed`, the approved candidate applied
+  successfully and Echo plus Server acknowledged generation 110. `/echo` was
+  HTTP 200; the protected smoke route returned 401 without a credential and
+  with the previous reference, and 200 with the replacement reference.
+- Removed only the temporary route, saved the Project, and applied its removal.
+  Echo and Server acknowledged generation 111; `/echo` remained HTTP 200 and
+  the temporary route returned 404. Only then were both synthetic rotation
+  references revoked through typed CLI. The catalog reports both revoked and
+  zero pending rotations or registrations; secret values were not printed.
+- Restored the exact pre-smoke Project pin `Server 1.1.12`, digest
+  `sha256:0847f0cbf5348e2ce9083d6952c1e56628861ffa189f7e4d7b2a54f52179c91d`.
+  Runtime start required stopping only the local Server container first; the
+  approved trusted artifact was then installed and readiness confirmed at
+  generation 112. Core, Echo and Server are running, `/echo` is HTTP 200, and
+  the temporary path remains 404. The prior Project settings and pin are backed
+  up under `/tmp/liapoldus-studio-smoke/project-backups/`; no
+  `.studio/workspace-recovery-*` files were removed or edited.
+- `make test` passed (Go tests, TypeScript check, and 189 frontend tests),
+  `make check-race`, `go vet . ./internal/...`, and `go build . ./internal/...`
+  passed. The current `make check` frontend build and Wails binding
+  reproducibility check passed, then frontend lint stopped on 13 errors in
+  pre-existing uncommitted theme/UI work (`App.tsx`, `themeCatalog.ts`,
+  `ThemeSettings.tsx`, `StudioViews.tsx`); those files were left untouched.
+  The previously built and approved executable hash remains unchanged.
+- No production target was used. Studio source fix `75d1cf6` remains pushed;
+  this checkpoint records the completed local acceptance and the remaining
+  worktree-only lint limitation.
