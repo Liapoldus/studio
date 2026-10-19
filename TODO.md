@@ -32,7 +32,8 @@
   keeping its enable/inherit control visible; enabled features open their
   options by default, disabled features start collapsed, and changing the
   disclosure does not patch Project data. Focused endpoint-editor tests pass,
-  and `make package` passes all 86 plugin tests and Studio package inspection.
+  including static-route cache/compression defaults and value preservation;
+  `make package` passes all 87 plugin tests and Studio package inspection.
   Package digest is `b23d57d32f888a8cca35c4017c039ca49c30cbd30e04ee01f33f5b1ed3646345`;
   it is not installed/trusted, so this UI has not yet been checked in the
   actual Studio WebView.
