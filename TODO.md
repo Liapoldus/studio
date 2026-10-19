@@ -27,6 +27,15 @@
   inspection. Its package digest is
   `e496e8650e9439bbbb86218290b484206b8b5eff071dbfafc59cb0caaae157f0`;
   it is not installed or trusted pending exact native Studio confirmation.
+- Review of the route detail showed all HTTP feature options expanded at once.
+  Server Editor 0.3.67 packages a compact disclosure for each feature while
+  keeping its enable/inherit control visible; enabled features open their
+  options by default, disabled features start collapsed, and changing the
+  disclosure does not patch Project data. Focused endpoint-editor tests pass,
+  and `make package` passes all 86 plugin tests and Studio package inspection.
+  Package digest is `b23d57d32f888a8cca35c4017c039ca49c30cbd30e04ee01f33f5b1ed3646345`;
+  it is not installed/trusted, so this UI has not yet been checked in the
+  actual Studio WebView.
 - The temporary Server 1.1.13 was used only for this diagnostic smoke and then
   removed from the CLI artifact registry; the 1.1.12 pin/runtime was restored.
   This demonstrates one local replica on the existing Core, not acceptance of
