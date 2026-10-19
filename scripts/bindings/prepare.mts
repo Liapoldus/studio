@@ -5,8 +5,12 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 export const modelModule = "// Prepared by scripts/bindings/prepare.mts.\nexport { ArtifactReference, Diagnostic, InstalledStudioPluginState, ServiceLink, ServiceArtifactReference, RuntimeService, ServiceGraph, ServiceLinkInput, ServiceSettingsSchemaPreview, ProductInfo, Project, ProjectFile, ProjectSettingsRecoveryCopy, RuntimeServiceInput, ToolchainStatus, TrafficRecordView, Workspace, WorkspaceState, models } from '../../src/api/info'\nexport type { ReportSummary } from '../../src/api/info'\n"
 
 // Fail closed when the canonical Go model changes.
+export function normalizeLineEndings(source: string): string {
+  return source.replace(/\r\n?/gu, '\n')
+}
+
 export function prepareModels(source: string): string {
-  source = source.replace(/^\uFEFF/u, '').replace(/\r\n?/gu, '\n')
+  source = normalizeLineEndings(source.replace(/^\uFEFF/u, ''))
   if (source === modelModule) return source
   const classes = [...source.matchAll(/export class (\w+)/gu)].map(match => match[1])
   const fields = [...source.matchAll(/^\s+(\w+\??): ([^;\n]+);$/gmu)]

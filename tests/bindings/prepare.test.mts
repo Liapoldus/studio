@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { test } from 'node:test'
-import { modelModule, prepareModels, prepareAppTypes, prepareRuntimeTypes, transformations } from '../../scripts/bindings/prepare.mts'
+import { modelModule, normalizeLineEndings, prepareModels, prepareAppTypes, prepareRuntimeTypes, transformations } from '../../scripts/bindings/prepare.mts'
 
 const generated = `export namespace models {
   export class Diagnostic {
@@ -171,6 +171,10 @@ const generated = `export namespace models {
     constructor(source: any = {}) {}
   }
 }`
+
+await test('Wails artifact snapshots ignore platform-specific line endings', () => {
+  assert.equal(normalizeLineEndings('one\r\ntwo\rthree\n'), 'one\ntwo\nthree\n')
+})
 
 await test('Wails preparation is idempotent and rejects schema drift', () => {
   assert.throws(() => prepareModels(generated), /Unsupported Wails model schema/u)

@@ -2953,4 +2953,7 @@ content.
   bindings generation. `sqliteDSN` now emits a correct `file:///C:/...` URI;
   regression coverage checks Windows and POSIX paths. `make check`,
   `make check-race` and the Windows cross-package build pass locally; hosted
-  verification after this fix is pending.
+  generation then exposed byte-wise comparison of bindings with platform line
+  endings. Snapshot hashing now normalizes CRLF and CR to LF, with regression
+  coverage for mixed endings. The local full check, race suite and Windows
+  cross-build pass; hosted verification after this fix is pending.

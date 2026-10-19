@@ -5,7 +5,7 @@ import { cp, mkdtemp, readFile, readdir, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { prepareBindings } from './prepare.mts'
+import { normalizeLineEndings, prepareBindings } from './prepare.mts'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 
@@ -18,7 +18,8 @@ async function snapshot(path: string): Promise<Record<string, string>> {
         files[`${entry.name}/${name}`] = value
       }
     } else {
-      files[entry.name] = createHash('sha256').update(await readFile(target)).digest('hex')
+      const source = await readFile(target, 'utf8')
+      files[entry.name] = createHash('sha256').update(normalizeLineEndings(source)).digest('hex')
     }
   }
   return files
