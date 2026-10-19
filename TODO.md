@@ -2967,4 +2967,23 @@ content.
   removes the `--` separator, while the launcher incorrectly expected it in
   parsed arguments. The launcher now validates the raw argument list and a
   platform-independent regression test covers the separator and command
-  suffix. Local checks and Windows cross-packaging pass; hosted rerun is pending.
+  suffix. `make check`, `make check-race` and Windows cross-packaging pass
+  locally. Hosted verification on `d49b5dd` passed on Linux, macOS and Windows,
+  including the AppContainer smoke-test.
+
+### Server Editor 0.3.67 local verification — 2026-10-19
+
+- Studio confirms `Liapoldus Server Editor 0.3.67` is installed and trusted at
+  the approved digest `sha256:b23d57d32f888a8cca35c4017c039ca49c30cbd30e04ee01f33f5b1ed3646345`;
+  the service editor assignment is active with the approved permissions.
+- In `Server Echo Studio` / `local`, Echo 1.2.2 and Server 1.1.12 are ready at
+  generation 105 and `/echo?text=codex-check` returns HTTP 200. The secret
+  catalog has 11 revoked references, 0 active references and no pending
+  registrations or rotations.
+- Server's live Admin Surface descriptor is available, but all four resource
+  tables return `bridge.admin_table_unavailable`; typed `service resource list`
+  reports that the resource catalog is unavailable. Refresh reproduces the
+  failure. Server 1.1.14 candidate `sha256:c94d2104b766228b683313b533fdc52ffa9bec1b3b8c3edca0e1bd7ae48e5ba4`
+  is prepared as the next diagnostic step; it has not been installed or run
+  because exact action-time approval for this digest is still outstanding.
+  Project configuration, runtime pins and secret values were not changed.
