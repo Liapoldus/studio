@@ -16,6 +16,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/Liapoldus/studio/internal/infrastructure/sandboxargs"
 	"golang.org/x/sys/windows"
 )
 
@@ -60,15 +61,12 @@ func main() {
 	writeProject := flag.Bool("write-project", false, "allow project writes")
 	network := flag.Bool("network", false, "allow outbound network")
 	flag.Parse()
-	if *packageRoot == "" || *projectRoot == "" || flag.NArg() < 1 {
+	command, err := sandboxargs.AfterSeparator(os.Args[1:], "--")
+	if err != nil {
+		fatal(err)
+	}
+	if *packageRoot == "" || *projectRoot == "" || len(command) == 0 {
 		fatal(errors.New("sandbox launcher requires package/project roots and a command"))
-	}
-	if flag.Arg(0) != "--" {
-		fatal(errors.New("sandbox launcher command must follow --"))
-	}
-	command := flag.Args()[1:]
-	if len(command) == 0 {
-		fatal(errors.New("sandbox launcher command is empty"))
 	}
 
 	if err := run(*packageRoot, *projectRoot, *writeProject, *network, command); err != nil {

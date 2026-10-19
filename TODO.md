@@ -2963,4 +2963,8 @@ content.
   frontend was already built, which intermittently fails with `EPERM` while
   unlinking `esbuild.exe`. Windows CI now passes Wails `-s` to reuse the
   existing `frontend/dist`; other platforms keep the normal Wails frontend
-  build. Hosted verification of this change is pending.
+  build. That exposed a Windows AppContainer smoke failure: Go's `flag.Parse`
+  removes the `--` separator, while the launcher incorrectly expected it in
+  parsed arguments. The launcher now validates the raw argument list and a
+  platform-independent regression test covers the separator and command
+  suffix. Local checks and Windows cross-packaging pass; hosted rerun is pending.
