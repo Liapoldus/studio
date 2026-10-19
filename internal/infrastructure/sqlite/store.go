@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/Liapoldus/studio/internal/domain/interfaces"
@@ -40,7 +41,7 @@ func Open(path string) (*Store, error) {
 	if err = os.Chmod(path, 0600); err != nil {
 		return nil, ErrStorage
 	}
-	dsn := (&url.URL{Scheme: "file", Path: path, RawQuery: "_foreign_keys=on&_busy_timeout=5000&_journal_mode=DELETE"}).String()
+	dsn := sqliteDSN(path, runtime.GOOS == "windows")
 	db, err := sql.Open("sqlite3", dsn)
 	if err != nil {
 		return nil, ErrStorage
@@ -54,6 +55,21 @@ func Open(path string) (*Store, error) {
 		return nil, ErrStorage
 	}
 	return store, nil
+}
+
+func sqliteDSN(path string, windows bool) string {
+	uriPath := filepath.ToSlash(filepath.Clean(path))
+	if windows {
+		uriPath = strings.ReplaceAll(uriPath, `\`, "/")
+		if len(uriPath) >= 2 && uriPath[1] == ':' && !strings.HasPrefix(uriPath, "/") {
+			uriPath = "/" + uriPath
+		}
+	}
+	return (&url.URL{
+		Scheme:   "file",
+		Path:     uriPath,
+		RawQuery: "_foreign_keys=on&_busy_timeout=5000&_journal_mode=DELETE",
+	}).String()
 }
 
 func (s *Store) initialize() (initErr error) {

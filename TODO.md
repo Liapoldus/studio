@@ -2948,4 +2948,9 @@ content.
   native tests that assume POSIX paths, file permissions and helper binaries.
   Verification and release Windows jobs now compile those test packages
   without running the POSIX-specific cases; Linux and macOS continue to run
-  the full suite.
+  the full suite. The next Windows package run then exposed the SQLite URI for
+  drive-letter paths: Wails could not initialize desktop storage during
+  bindings generation. `sqliteDSN` now emits a correct `file:///C:/...` URI;
+  regression coverage checks Windows and POSIX paths. `make check`,
+  `make check-race` and the Windows cross-package build pass locally; hosted
+  verification after this fix is pending.
