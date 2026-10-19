@@ -5,11 +5,13 @@
 - The current project is `/Users/docup/Projects/Liapoldus Engine/server-echo-studio`.
   Read-only typed `dev plan` is valid at Echo/Server revision 96; the local
   runtime reports Core, Echo and Server running, and Server 1.1.12 ready at
-  generation 96.
+  generation 96. Core is still on the previously installed digest
+  `df625da7910770c082db1364c0f9f0d149a15d487383af4a43e8aa8fb7607420`.
 - Project settings contain the existing `/echo` route plus the temporary
   `/__codex_auth_smoke_20261019` route, which references one active opaque
-  Server secret. Core lists two active synthetic references and no pending
-  rotation. No secret value was read or logged.
+  Server secret. Core lists two active and three revoked synthetic references;
+  there are no pending registrations or rotations. The reference is active,
+  and no secret value or opaque reference was printed.
 - The open Studio window shows Server Editor 0.3.65. It lists both routes, and
   the auth editor loads and selects the active opaque reference after its
   asynchronous catalog read completes. The earlier one-route view was stale;
@@ -17,17 +19,11 @@
   helper incorrectly said rotation was already staged when the catalog had no
   pending rotations; its copy now describes the safe rotation process without
   claiming a staged operation.
-- Re-running the already authorized local apply returned Core HTTP 409
-  `bundle_apply_failed: service configuration revision conflict`. Server
-  remains ready at generation 96. The temporary route returns HTTP 404 while
-  `/echo` returns HTTP 200, so the saved Project candidate is not active.
-  `dev plan` and `service status` remain valid. A local filter that emitted
-  only whitelisted safe outcome tokens found the latest Server-log event
-  `grantDenied` at `2026-10-18T23:17:52.423698534Z`, consistent with this
-  attempt. This confirms the scoped secret grant was denied; the Core response
-  still mislabels that as a revision conflict. Raw log lines and secret values
-  were not emitted. Do not claim runtime auth or secret delivery/ACK acceptance
-  from this state.
+- A fresh read-only check still shows `/echo` returning HTTP 200 and the
+  temporary auth route returning HTTP 404; the saved Project candidate is not
+  active. The earlier apply returned a generic Core HTTP 409, and a safe log
+  filter found `grantDenied`, so scoped secret delivery and runtime auth remain
+  unverified. No raw log lines or secret values were emitted.
 - The misleading rotation helper copy is corrected. `make check`,
   `make check-race` and `make desktop-build` pass using the bundled Node
   runtime; the new macOS/arm64 Studio executable is
@@ -35,11 +31,14 @@
   It has not been launched because its digest is new and the next live runtime
   acceptance still depends on the pending Core/Server local artifact gate.
 - Server source now fixes empty Admin Surface inventory arrays and all-site
-  release pagination, with focused tests; those source fixes still need the new
-  Server binary and exact local action approval. Candidate-generation scoped
-  validation fixes are published in SDK, Core, Server and service consumers.
-  The built Core `aecc186` and Server `1.1.14` candidates are ready, but their
-  exact digests still need local action approval before install or run.
+  release pagination. Candidate-generation scoped validation fixes are
+  published in SDK, Core, Server and service consumers. The latest Core
+  candidate is `43b7acc` / SHA-256
+  `5ccf6e176dd9784b4deccb5c033653646b253f66a716ebf0032b27c9c2ee7af8`; the
+  Server 1.1.14 candidate is SHA-256
+  `be991dab5b250461963ef46ad713fdbb3b1f2322915376c0ec0519623998a74e`.
+  Exact action-time approval for these digests is pending. The earlier approved
+  Server 1.1.13 candidate is superseded and won't be used for acceptance.
   Production is out of scope. Existing `.studio` recovery files remain
   untouched.
 - SDK, Core, Server and mechanical service consumers now implement
