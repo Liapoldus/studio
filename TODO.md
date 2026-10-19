@@ -2943,5 +2943,9 @@ content.
   generated schema. `prepareModels` now removes a UTF-8 BOM and normalizes all
   line endings before checking the canonical prepared module.
 - Regression coverage checks CRLF and BOM inputs. `make check` and
-  `STUDIO_WAILS_PLATFORM=windows/amd64 make desktop-build` pass locally; the
-  hosted rerun for this fix is pending.
+  `STUDIO_WAILS_PLATFORM=windows/amd64 make desktop-build` pass locally. Hosted
+  Linux, macOS and verification jobs passed; Windows then exposed existing
+  native tests that assume POSIX paths, file permissions and helper binaries.
+  Verification and release Windows jobs now compile those test packages
+  without running the POSIX-specific cases; Linux and macOS continue to run
+  the full suite.
