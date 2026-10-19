@@ -19,6 +19,14 @@
   returned 404. Secret catalog now has 0 active, 7 revoked, 0 pending
   registrations and 0 pending rotations. No secret value entered the plugin,
   Project, Core SQLite, output or logs.
+- macOS inspection of 0.3.65 found that the Defaults section displayed
+  “Нет доступных настроек” when optional `config.defaults` was absent. The
+  local Server Editor 0.3.66 candidate renders that optional object from the
+  schema without creating a patch on open and avoids duplicating Defaults in
+  Advanced settings. `make package` passes 86 tests and Studio installer
+  inspection. Its package digest is
+  `e496e8650e9439bbbb86218290b484206b8b5eff071dbfafc59cb0caaae157f0`;
+  it is not installed or trusted pending exact native Studio confirmation.
 - The temporary Server 1.1.13 was used only for this diagnostic smoke and then
   removed from the CLI artifact registry; the 1.1.12 pin/runtime was restored.
   This demonstrates one local replica on the existing Core, not acceptance of
