@@ -75,6 +75,7 @@ jobs:
           STUDIO_WAILS_PLATFORM: ${{ matrix.wails_platform }}
           STUDIO_WAILS_NSIS: ${{ runner.os == 'Windows' && 'true' || 'false' }}
           STUDIO_RELEASE_BUILD: ${{ inputs.sign && 'true' || 'false' }}
+          STUDIO_WAILS_SKIP_FRONTEND: ${{ runner.os == 'Windows' && 'true' || 'false' }}
         run: |
           npm run desktop:build --prefix frontend
       - name: Build Linux AppImage

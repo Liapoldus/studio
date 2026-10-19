@@ -11,10 +11,12 @@ export type DesktopBuildOptions = {
   wailsPlatform?: string
   nsis?: boolean
   release?: boolean
+  skipFrontend?: boolean
 }
 
 export function desktopBuildArgs(options: DesktopBuildOptions): string[] {
   const args = ['build', '-m', '-nosyncgomod']
+  if (options.skipFrontend) args.push('-s')
   if (options.wailsPlatform) args.push('-platform', options.wailsPlatform)
   if (options.platform === 'linux') args.push('-tags', 'webkit2_41')
   if (options.nsis) args.push('-nsis')
@@ -31,6 +33,7 @@ async function buildDesktop(): Promise<void> {
       wailsPlatform: process.env.STUDIO_WAILS_PLATFORM,
       nsis: process.env.STUDIO_WAILS_NSIS === 'true',
       release: process.env.STUDIO_RELEASE_BUILD === 'true',
+      skipFrontend: process.env.STUDIO_WAILS_SKIP_FRONTEND === 'true',
     })
     if (platform === 'win32') {
       const helperPath = join(root, 'build/sandbox/studio-sandbox-launcher.exe')

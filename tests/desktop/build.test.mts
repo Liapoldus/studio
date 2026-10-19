@@ -14,3 +14,8 @@ await test('non-Linux desktop builds do not receive Linux WebKit tags', () => {
     '-ldflags', '-X github.com/Liapoldus/studio/internal/infrastructure/config.ReleaseBuild=true',
   ])
 })
+
+await test('desktop builds can reuse an already-built frontend', () => {
+  const args = desktopBuildArgs({ platform: 'win32', skipFrontend: true })
+  assert.deepEqual(args, ['build', '-m', '-nosyncgomod', '-s'])
+})

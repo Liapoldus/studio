@@ -2959,4 +2959,8 @@ content.
   cross-build pass. Hosted Windows then found the lint script hard-coded a
   Unix `.bin/eslint` path; it now resolves `eslint` through npm's PATH. The
   local full check, race suite and Windows cross-build pass after this change;
-  hosted verification is pending.
+  hosted Windows packaging then exposed Wails retrying `npm install` after the
+  frontend was already built, which intermittently fails with `EPERM` while
+  unlinking `esbuild.exe`. Windows CI now passes Wails `-s` to reuse the
+  existing `frontend/dist`; other platforms keep the normal Wails frontend
+  build. Hosted verification of this change is pending.
