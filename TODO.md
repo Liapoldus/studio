@@ -2930,3 +2930,18 @@ content.
 - Повторный UI/controller suite прошёл 8/8: из `studio/frontend` выполнен
   `/Users/docup/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node
   ./node_modules/tsx/dist/cli.mjs --test ../tests/frontend/serviceSecrets.test.mts`.
+
+### Cross-platform desktop embed CI — 2026-10-19
+
+- Hosted package jobs ran `go test ./...` before generating the embedded
+  frontend `dist` directory, causing `go:embed all:dist` to fail on Linux,
+  Windows and macOS runners. Both verification and release workflows now run
+  `npm run build:wails --prefix frontend` before Go tests.
+- Local frontend build and `GOWORK=off go test ./...` pass. Hosted rerun after
+  commit `532a08a` exposed a Windows-only failure: Git checked out the prepared
+  Wails model with CRLF, so the idempotency check treated it as an unsupported
+  generated schema. `prepareModels` now removes a UTF-8 BOM and normalizes all
+  line endings before checking the canonical prepared module.
+- Regression coverage checks CRLF and BOM inputs. `make check` and
+  `STUDIO_WAILS_PLATFORM=windows/amd64 make desktop-build` pass locally; the
+  hosted rerun for this fix is pending.

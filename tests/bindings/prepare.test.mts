@@ -175,6 +175,10 @@ const generated = `export namespace models {
 await test('Wails preparation is idempotent and rejects schema drift', () => {
   assert.throws(() => prepareModels(generated), /Unsupported Wails model schema/u)
   assert.equal(prepareModels(modelModule), modelModule)
+  assert.equal(prepareModels(modelModule.replace(/\n/gu, '\r\n')), modelModule,
+    'a Windows CRLF checkout of the already-prepared model module must stay idempotent')
+  assert.equal(prepareModels(`\uFEFF${modelModule}`), modelModule,
+    'a UTF-8 BOM must not make the canonical prepared module look like an unsupported schema')
   assert.throws(() => prepareModels(generated.replace('name: string;', 'name: number;')))
   assert.throws(() => prepareModels(generated.replace('constructor', 'extra: string;\nconstructor')))
   assert.throws(() => prepareModels(generated.replace('constructor', 'extra: number;\nconstructor')))

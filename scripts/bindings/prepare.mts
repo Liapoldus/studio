@@ -6,8 +6,8 @@ export const modelModule = "// Prepared by scripts/bindings/prepare.mts.\nexport
 
 // Fail closed when the canonical Go model changes.
 export function prepareModels(source: string): string {
+  source = source.replace(/^\uFEFF/u, '').replace(/\r\n?/gu, '\n')
   if (source === modelModule) return source
-  source = source.replace(/\r\n/gu, '\n')
   const classes = [...source.matchAll(/export class (\w+)/gu)].map(match => match[1])
   const fields = [...source.matchAll(/^\s+(\w+\??): ([^;\n]+);$/gmu)]
     .map(match => `${match[1]}:${match[2]}`)
