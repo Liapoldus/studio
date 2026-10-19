@@ -2903,3 +2903,23 @@ content.
   Live retry is pending Studio's action-time approval for this exact digest. No
   production target, Project settings, runtime config, or secret values were
   changed.
+
+### Local secret rotation smoke — 2026-10-19
+
+- В `Server Echo Studio` / `local` установленный Server Editor `0.3.65`
+  (`sha256:13fc69f134f0da5c7552aac9f30f6502934b7ce2fbae25c603114dded8d8bb3c`)
+  выбрал staged opaque reference из host-owned Secret Manager. Тестовый route
+  сохранился в Project; Studio показала redacted security-sensitive diff,
+  применение было подтверждено штатным действием Inspector, Core/Server
+  подтвердили generation 98. Bearer-запрос прошёл с HTTP 200; отсутствующий и
+  неверный Bearer получили HTTP 401.
+- Тестовый route удалён через редактор и Canvas apply; generation 99 подтверждён
+  Server. `/echo?text=final-check` вернул 200, временный auth path — 404.
+  Typed secret catalog после cleanup и отзыва показывает 0 active, 7 revoked,
+  0 pending registrations и 0 pending rotations. Предыдущее ожидание ручного
+  ввода секрета из записи 2026-10-18 закрыто этим агентским local smoke;
+  значение не раскрывалось в Studio log, Project или выводе CLI.
+- Project pin восстановлен на Server 1.1.12 (`sha256:0847f0cb…`), сервис ready
+  на generation 99; временная запись 1.1.13 удалена из локального каталога.
+  Core остался на ранее одобренном бинарнике. Smoke не закрывает отдельный
+  action-time gate для нового Core candidate или Server 1.1.14.
