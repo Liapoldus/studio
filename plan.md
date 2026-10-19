@@ -354,31 +354,35 @@ generation 105 on Server 1.1.12, with zero active and eleven revoked synthetic
 references. No secret value entered the plugin, Project, Core SQLite, output or
 logs.
 
-Server Editor 0.3.67 is installed and trusted in Studio at the explicitly
-approved package digest `b23d57d32f888a8cca35c4017c039ca49c30cbd30e04ee01f33f5b1ed3646345`.
-Its package tests and installer inspection pass. Live WebView inspection
-confirmed the route list, route detail, and a feature disclosure that opens
-without dirtying Project. It also exposed that the Defaults section displayed
-all route-type forms together with repeated headings. Server Editor 0.3.68
-introduces a route-type picker and renders one type at a time. Its package
-passes 87/87 tests, Studio installer inspection and ZIP integrity; digest
-`a56a26d4ca5144526e7546974de27e973fa0693e20012d06716afe2f8d33f929` awaits
-exact-digest installation approval and WebView validation. The live Server 1.1.12 Admin Surface
-descriptor loads, but its table and resource-catalog responses fail validation.
-Server 1.1.14 contains the empty-catalog serialization fix, but its exact
-Linux/arm64 binary digest `c94d2104b766228b683313b533fdc52ffa9bec1b3b8c3edca0e1bd7ae48e5ba4`
-has not been installed pending separate local action approval. Existing
-`.studio` recovery files and unrelated Project WIP remain untouched.
+Server Editor 0.3.68 is installed and trusted at the approved package digest
+`a56a26d4ca5144526e7546974de27e973fa0693e20012d06716afe2f8d33f929` with its
+declared permissions. Its 87/87 package tests, Studio installer inspection and
+ZIP integrity pass. The live WebView loads the 0.3.68 route list/editor and
+renders one selected route-type form at a time in Defaults. Switching to
+static-site defaults leaves “Сохранить в Project” disabled.
 
-This live result covers one replica on the existing local Core. Multi-replica
-ACK/timeout/restart recovery, hosted cross-platform acceptance, and acceptance
-on the newer Core 43b7acc / Server 1.1.14 exact artifacts remain open. Remote
-targets and unattended rotation remain unavailable. Do not infer a catalog
-from filesystem paths, enumerate secret directories, expose grant handles
-through an Admin Surface, put secret material in Project, or pass secret bytes
-through the renderer. Server `certificateRef`, `privateKeyRef`, upstream CA
-and HTTP-auth references are opaque Core service-secret IDs, not Project file
-resources.
+For an approved local diagnostic, Server 1.1.14 Linux/arm64
+`sha256:c94d2104b766228b683313b533fdc52ffa9bec1b3b8c3edca0e1bd7ae48e5ba4`
+was registered, trusted and run temporarily. It reached ready generation 105
+and `/echo` returned HTTP 200. The Admin Surface rendered the sites, releases,
+operations and certificate tables as “Нет записей”; the typed CLI queries
+returned valid empty item lists. The generic `service resource list` path still
+reports an invalid or unavailable catalog and is distinct from these Admin
+Surface table queries.
+
+The Server 1.1.12 Project pin was restored byte-for-byte from backup; 1.1.12 is
+ready at generation 105 and `/echo` returns HTTP 200. The temporary 1.1.14
+artifact registry entry was removed. Project settings still contain only
+`/echo`, and the secret catalog was not changed. This verifies empty catalogs
+on one replica with the existing approved Core. Non-empty catalog operations,
+publish/rollback, Server 1.1.14 candidate secret validation, the newer Core
+43b7acc, cross-replica timeout/restart recovery and hosted cross-platform gates
+remain open. Remote targets and unattended rotation remain unavailable. Do not
+infer a catalog from filesystem paths, enumerate secret directories, expose
+grant handles through an Admin Surface, put secret material in Project, or pass
+secret bytes through the renderer. Server `certificateRef`, `privateKeyRef`,
+upstream CA and HTTP-auth references are opaque Core service-secret IDs, not
+Project file resources.
 
 `environments/<target>.yaml` — только non-secret target profile: target ID,
 тип/locality, безопасные CLI-owned references и display metadata. Это не файл

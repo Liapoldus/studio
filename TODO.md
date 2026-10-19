@@ -41,25 +41,33 @@
   route detail; opening a feature disclosure leaves Save disabled. Inspection
   found the Defaults page displayed every route-type form together with
   repeated headings, making their scope unclear.
-- Server Editor 0.3.68 adds a route-type picker to Defaults and renders only the
-  selected type. Switching types does not patch Project. Its package passes
-  87/87 tests, Studio installer inspection and ZIP integrity; SHA-256 is
-  `a56a26d4ca5144526e7546974de27e973fa0693e20012d06716afe2f8d33f929`.
-  Installation and live WebView verification await exact-digest approval.
-- The temporary Server 1.1.13 was used only for this diagnostic smoke and then
-  removed from the CLI artifact registry; the 1.1.12 pin/runtime was restored.
-  This demonstrates one local replica on the existing Core, not acceptance of
-  the new Core 43b7acc / Server 1.1.14 candidates. Server 1.1.14's exact
-  Linux/arm64 digest `c94d2104b766228b683313b533fdc52ffa9bec1b3b8c3edca0e1bd7ae48e5ba4`
-  is awaiting separate local action-time approval. The current 1.1.12 Admin
-  Surface descriptor loads, but table/catalog responses fail validation; the
-  empty-catalog fix in 1.1.14 remains unverified in live Studio. Existing
-  `.studio` recovery files and unrelated Project WIP remain untouched;
+- Server Editor 0.3.68 is installed and trusted in Studio at the approved
+  digest `a56a26d4ca5144526e7546974de27e973fa0693e20012d06716afe2f8d33f929`
+  with its declared permissions. The package passes 87/87 tests, Studio
+  installer inspection and ZIP integrity. Its live WebView shows one selected
+  route-type form at a time; switching to static sites leaves “Сохранить в
+  Project” disabled. The route list and editor load from the 0.3.68 asset.
+- For the approved local diagnostic, Server 1.1.14 Linux/arm64 digest
+  `c94d2104b766228b683313b533fdc52ffa9bec1b3b8c3edca0e1bd7ae48e5ba4` was
+  registered, trusted and run temporarily. It became ready at generation 105;
+  `/echo` returned HTTP 200. Studio’s Admin Surface rendered all four tables
+  (sites, releases, operations and certificates) as “Нет записей.” Typed
+  `service admin query` returned valid empty item lists for each section. The
+  older generic `service resource list` path still reports an invalid or
+  unavailable catalog; it is separate from the Admin Surface table path.
+- The original Server 1.1.12 Project pin was restored byte-for-byte from a
+  backup, Server 1.1.12 is ready at generation 105, and `/echo` again returns
+  HTTP 200. The temporary 1.1.14 CLI artifact registration was removed. Project
+  settings still contain only `/echo`; secret catalog state was not changed.
+  This verifies empty catalogs on one replica with the existing approved Core,
+  not non-empty site/certificate data, publish/rollback actions, candidate
+  secret validation, the newer Core 43b7acc, or multi-replica recovery.
+  Existing `.studio` recovery files and unrelated Project WIP remain untouched;
   production is out of scope.
 - The earlier 0.3.65 WebView smoke remains valid evidence for the secret flow;
-  0.3.67 is the installed/trusted package. The newer Studio host executable
-  `d7d5f39488ae26f03ae907f82801e51c3857491226bbf0cc760fe82f3fd5f58e` passes
-  source gates but has not been launched.
+  0.3.68 is the installed/trusted package and supersedes 0.3.67. The newer
+  Studio host executable `d7d5f39488ae26f03ae907f82801e51c3857491226bbf0cc760fe82f3fd5f58e`
+  passes source gates but has not been launched.
 - Source gates for the candidate-generation validation changes in SDK, Core,
   Server and consumers are published. Cross-replica timeout/restart recovery,
   hosted cross-platform gates, and acceptance on the latest Core/Server exact
